@@ -373,7 +373,6 @@ class bot(object):
         
         if command_type=="start":
             report("w","Bot start requested.")
-            pass
         elif command_type=="stopbot":
             response="Bot stopped."
             self.listen_flag.clear()
