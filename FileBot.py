@@ -1,4 +1,5 @@
-VERSION_NUMBER=1.00
+VERSION_NUMBER=1.01
+
 
 """
 INIT
@@ -23,7 +24,7 @@ ALLOWED_ROOT=""
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
-    zipkey=_winreg.OpenKey(reg_conn,r"SOFTWARE\7-Zip")
+    zipkey=_winreg.OpenKey(reg_conn,"SOFTWARE\\7-Zip")
 except:
     pass
 
@@ -37,6 +38,8 @@ while PATH_7ZIP=="":
             PATH_7ZIP+="\\"
         break
 
+LOG_LOCK=threading.Lock()
+
 
 """
 DEFS
@@ -44,6 +47,8 @@ DEFS
 
 
 def report(source,input_data=""):
+    global LOG_LOCK
+
     if input_data!="":
         source_literal=str(source)
         input_literal=str(input_data)
@@ -68,6 +73,18 @@ def report(source,input_data=""):
     msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal
     sys.stdout.write(msg+"\n")
     sys.stdout.flush()
+
+    LOG_LOCK.acquire()
+
+    try:
+        log_handle=open("log.txt","a")
+        log_handle.write(msg+"\n")
+        log_handle.close()
+    except:
+        pass
+    
+    LOG_LOCK.release()
+
 
 def allowed_path(input_path):
     global ALLOWED_ROOT
@@ -571,6 +588,7 @@ class bot(object):
             response+="/unlock <password>: unlock the bot\n"
             response+="/stopbot: deactivate bot listening permanently\n"
             response+="\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
+            report("w","Help requested.")
         else:
             self.sendmsg(sid,"Command unknown. Type \"/help\" for a list of commands.")
 
