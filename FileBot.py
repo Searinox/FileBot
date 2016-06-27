@@ -85,7 +85,6 @@ def report(source,input_data=""):
     
     LOG_LOCK.release()
 
-
 def allowed_path(input_path):
     global ALLOWED_ROOT
     if input_path.lower().find(ALLOWED_ROOT.lower())==0 or ALLOWED_ROOT=="*":
@@ -706,9 +705,8 @@ if len(ALLOWED_SENDERS)==0:
     report("m","No allowed users have been specified. Please make sure the intended users are in \"allowed_users.txt\".")
     fatal_error=True
 
-report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\".")
-
 if fatal_error==False:
+    report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\".")
     FileBotObject=bot(API_TOKEN)
     Console=user_console(FileBotObject)
 
