@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.02
+VERSION_NUMBER=1.03
 
 
 """
@@ -17,10 +17,7 @@ import _winreg
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=50*1024*1024
 MAX_IM_SIZE_BYTES=4096
-PATH_7ZIP=""
-API_TOKEN=""
 ALLOWED_SENDERS=[]
-ALLOWED_ROOT=""
 LOG_LOCK=threading.Lock()
 
 
@@ -65,7 +62,7 @@ def report(source,input_data=""):
         log_handle.close()
     except:
         pass
-    
+
     LOG_LOCK.release()
 
 def allowed_path(input_path):
@@ -138,8 +135,8 @@ def folder_list_string(input_folder,search_in,folders_only=False):
 
     return response
 
-class bot(object):
-    def __init__(self,input_token):
+class fbot(object):
+    def __init__(self,input_token="",input_root="",input_senders=[],input_write=False):
         self.name=""
         self.bot_thread=threading.Thread(target=self.bot_thread_work)
         self.bot_thread.daemon=True
@@ -151,11 +148,14 @@ class bot(object):
         self.last_ID_checked=-1
         self.start_time=0
         self.last_folder=""
+        self.writemode=input_write
         self.listen_flag=threading.Event()
         self.listen_flag.clear()
         self.last_send_time=0
+        self.allowed_senders=input_senders
         self.lastsent_timers=[]
         self.bot_lock_pass=""
+        self.allowed_root=input_root
         self.pending_lockclear=threading.Event()
         self.pending_lockclear.clear()
         return
@@ -259,17 +259,16 @@ class bot(object):
         self.keep_running.set()
         self.bot_thread.start()
         return
-        
+
     def LISTEN(self,new_state):
-        global ALLOWED_ROOT
         if new_state==True:
             report("b","Listen started.")
-            if ALLOWED_ROOT=="*":
+            if self.allowed_root=="*":
                 self.last_folder="C:\\"
             else:
-                self.last_folder=ALLOWED_ROOT
-                self.catch_up_IDs()
-                self.listen_flag.set()
+                self.last_folder=self.allowed_root
+            self.catch_up_IDs()
+            self.listen_flag.set()
         else:
             report("b","Listen stopped.")
             self.listen_flag.clear()
@@ -286,7 +285,6 @@ class bot(object):
         return self.bot_has_exited.is_set()==False
 
     def process_messages(self,input_msglist):
-        global ALLOWED_SENDERS
         collect_new_messages=[]
         newest_ID=self.last_ID_checked
         for i in reversed(range(len(input_msglist))):
@@ -300,7 +298,7 @@ class bot(object):
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
                     if time.time()-msg_send_time<=60:
-                        if input_msglist[i][u"message"][u"from"][u"username"] in ALLOWED_SENDERS:
+                        if input_msglist[i][u"message"][u"from"][u"username"] in self.allowed_senders:
                             if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
                                 collect_new_messages.insert(0,input_msglist[i][u"message"])
             else:
@@ -351,6 +349,9 @@ class bot(object):
         if self.bot_lock_pass!="":
             return
 
+        if self.writemode==False:
+            return
+
         self.sendmsg(sid,"Putting file \""+filename+"\" at \""+self.last_folder+"\"...")
         if os.path.exists(self.last_folder+filename)==False or (os.path.exists(self.last_folder+filename)==True and os.path.isfile(self.last_folder+filename)==False):
             try:
@@ -388,14 +389,10 @@ class bot(object):
         
         if command_type=="start":
             report("w","Bot start requested.")
-        elif command_type=="stopbot":
-            response="Bot stopped."
-            self.listen_flag.clear()
-            report("w","Bot stopped listening on user command.")
         elif command_type=="dir":
 
             extra_search=""
-            
+
             if command_args.lower().find("?f:")!=-1:
                 start=command_args.lower().find("?f:")
                 end=command_args[start:].find(" ")
@@ -478,7 +475,7 @@ class bot(object):
                     report("w","File send error.")
             else:
                 response="File not found."
-        elif command_type=="eat":
+        elif command_type=="eat" and self.writemode==True:
             newpath=self.rel_to_abs(command_args,True)
             if os.path.exists(newpath)==True and allowed_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
@@ -507,7 +504,7 @@ class bot(object):
                         report("w","File delete error.")
             else:
                 response="File not found."
-        elif command_type=="del":
+        elif command_type=="del" and self.writemode==True:
             newpath=self.rel_to_abs(command_args,True)
             if os.path.exists(newpath)==True and allowed_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
@@ -532,7 +529,7 @@ class bot(object):
                     response="Already at top folder."
             else:
                 response="Already at top folder."
-        elif command_type=="zip":
+        elif command_type=="zip" and self.write_mode==True:
             if PATH_7ZIP!="":
                 newpath=self.rel_to_abs(command_args)
             else:
@@ -575,16 +572,17 @@ class bot(object):
         elif command_type=="help":
             response="AVAILABLE COMMANDS:\n\n"
             response+="/help: display this help screen\n"
-            response+="/cd [PATH]: change path(eg: /cd c:\windows); leave blank to check current\n"
-            response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders, filter optional(/dir c:\windows ?f:.exe), use ?d for directories only\n"
-            response+="/zip [PATH]: make a 7ZIP archive, extension will be .7z.TMP until finished\n"
+            response+="/cd <PATH>: change path(eg: /cd c:\windows); leave blank to check current\n"
+            response+="/dir <PATH> [?f:<filter>] [?d]: list files/folders, filter optional(/dir c:\windows ?f:.exe), use ?d for directories only\n"
+            if self.writemode==True:
+                response+="/zip <PATH[FILE]>: make a 7ZIP archive, extension will be .7z.TMP until finished\n"
             response+="/up: move up one folder from current path\n"
-            response+="/get [[PATH]FILE]: retrieve the file at the location to Telegram\n"
-            response+="/eat [[PATH]FILE]: upload the file at the location to Telegram, then delete it from its original location\n"
-            response+="/del [[PATH]FILE]: delete the file at the location\n"
-            response+="/lock <password>: lock the bot from responding to messages\n"
-            response+="/unlock <password>: unlock the bot\n"
-            response+="/stopbot: deactivate bot listening permanently\n"
+            response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram\n"
+            if self.writemode==True:
+                response+="/eat <[PATH]FILE>: upload the file at the location to Telegram, then delete it from its original location\n"
+                response+="/del <[PATH]FILE>: delete the file at the location\n"
+            response+="/lock <PASSWORD>: lock the bot from responding to messages\n"
+            response+="/unlock <PASSWORD>: unlock the bot\n"
             response+="\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
             report("w","Help requested.")
         else:
@@ -593,7 +591,7 @@ class bot(object):
         if response!="":
             self.sendmsg(sid,response)
         return
-                
+
 class user_console(object):
     def __init__(self,bot_object):
         self.working_thread=threading.Thread(target=self.process_input)
@@ -603,10 +601,10 @@ class user_console(object):
         self.finished_work.clear()
         self.working_thread.start()
         return
-        
+
     def IS_DONE(self):
         return self.finished_work.is_set()==True
-    
+
     def process_command(self,input_command):
         if input_command.lower().strip()=="start":
             self.bot_object.LISTEN(True)
@@ -621,6 +619,7 @@ class user_console(object):
             report("c","unlock: unlock the bot")
             report("c","help: display help\n")
             report("c","Use \"*\" as a home path to allow access to all drives.")
+            report("c","Begin home path with \">\" to allow file writing.")
 
     def process_input(self):
         loop_input=True
@@ -648,10 +647,14 @@ report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
-report("\n\nStore:\n-allowed users in allowed_users.txt\n-root directory in home.txt\n-bot token in token.txt in the same folder\n\n7-Zip x64 must be installed for /zip functionality.\n")
+report("\n\nRequirements:\n-allowed users in allowed_users.txt\n-root directory in home.txt\n-bot token in token.txt in the same folder\n\n7-Zip x64 will be needed for /zip functionality.\n")
 
 fatal_error=False
 users_array=[]
+PATH_7ZIP=""
+API_TOKEN=""
+ALLOWED_ROOT=""
+ALLOW_WRITE=False
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
@@ -676,11 +679,11 @@ try:
     API_TOKEN=file_handle.readline()
     file_handle.close()
 except:
-    report("m","Token error. Make sure the file \"token.txt\" exists in the same folder and contains the bot token.")
+    report("m","ERROR: Make sure the file \"token.txt\" exists in the same folder and contains the bot token.")
     fatal_error=True
 
-if len(API_TOKEN)==0:
-    report("m","Token missing. Make sure the token is correctly written in \"token.txt\".")
+if len(API_TOKEN)==0 and fatal_error==False:
+    report("m","ERROR: Make sure the token is correctly written in \"token.txt\".")
     fatal_error=True
 
 if fatal_error==False:
@@ -689,7 +692,7 @@ if fatal_error==False:
         users_array=file_handle.readlines()
         file_handle.close()
     except:
-        report("m","Users error. Make sure the file \"allowed_users.txt\" exists in the same folder and contains one allowed user per each line.")
+        report("m","ERROR: Make sure the file \"allowed_users.txt\" exists in the same folder and contains one allowed user per each line.")
         fatal_error=True
 
 for i in users_array:
@@ -704,24 +707,28 @@ try:
     ALLOWED_ROOT=ALLOWED_ROOT.replace("/","\\")
     file_handle.close()
 except:
-    report("m","The file \"home.txt\" could not be found. No root path can be set.")
+    report("m","ERROR: The file \"home.txt\" could not be found. No root path can be set.")
     fatal_error=True
 
-if len(ALLOWED_ROOT)==0:
-    report("m","No home folder specified. Please make sure one is specified in \"home.txt\".")
+if len(ALLOWED_ROOT)==0 and fatal_error==False:
+    report("m","ERROR: No home folder specified. Please make sure one is specified in \"home.txt\".")
     fatal_error=True
 else:
+    if ALLOWED_ROOT[0]==">":
+        ALLOW_WRITE=True
+        ALLOWED_ROOT=ALLOWED_ROOT[1:]
+
     if ALLOWED_ROOT[-1]!="\\" and ALLOWED_ROOT.find("*")==-1:
         ALLOWED_ROOT+="\\"
     ALLOWED_ROOT=ALLOWED_ROOT[0].upper()+ALLOWED_ROOT[1:]
 
-if len(ALLOWED_SENDERS)==0:
-    report("m","No allowed users have been specified. Please make sure the intended users are in \"allowed_users.txt\".")
+if len(ALLOWED_SENDERS)==0 and fatal_error==False:
+    report("m","ERROR: No allowed users have been specified. Please make sure the intended users are in \"allowed_users.txt\".")
     fatal_error=True
 
 if fatal_error==False:
-    report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\".")
-    FileBotObject=bot(API_TOKEN)
+    report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\", write mode is "+str(ALLOW_WRITE).lower()+".")
+    FileBotObject=fbot(API_TOKEN,ALLOWED_ROOT,ALLOWED_SENDERS,ALLOW_WRITE)
     Console=user_console(FileBotObject)
 
     while Console.IS_DONE()==False:
