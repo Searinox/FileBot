@@ -647,7 +647,7 @@ report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
-report("\n\nRequirements:\n-allowed users in allowed_users.txt\n-root directory in home.txt\n-bot token in token.txt in the same folder\n\n7-Zip x64 will be needed for /zip functionality.\n")
+report("\n\nRequirements:\n-allowed users in \"allowed_users.txt\"\n-root directory in \"home.txt\"\n-bot token in \"token.txt\"\n\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n\n")
 
 fatal_error=False
 users_array=[]
@@ -710,15 +710,16 @@ except:
     report("m","ERROR: The file \"home.txt\" could not be found. No root path can be set.")
     fatal_error=True
 
-if len(ALLOWED_ROOT)==0 and fatal_error==False:
-    report("m","ERROR: No home folder specified. Please make sure one is specified in \"home.txt\".")
-    fatal_error=True
-else:
+if len(ALLOWED_ROOT)>0 and fatal_error==False:
     if ALLOWED_ROOT[0]==">":
         ALLOW_WRITE=True
         ALLOWED_ROOT=ALLOWED_ROOT[1:]
 
-    if ALLOWED_ROOT[-1]!="\\" and ALLOWED_ROOT.find("*")==-1:
+if len(ALLOWED_ROOT)==0 and fatal_error==False:
+    report("m","ERROR: No home folder specified. Please make sure one is specified in \"home.txt\".")
+    fatal_error=True
+else:
+    if ALLOWED_ROOT[-1]!="\\" and ALLOWED_ROOT!="*":
         ALLOWED_ROOT+="\\"
     ALLOWED_ROOT=ALLOWED_ROOT[0].upper()+ALLOWED_ROOT[1:]
 
@@ -727,7 +728,7 @@ if len(ALLOWED_SENDERS)==0 and fatal_error==False:
     fatal_error=True
 
 if fatal_error==False:
-    report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\", write mode is "+str(ALLOW_WRITE).lower()+".")
+    report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\", write mode:"+str(ALLOW_WRITE).upper()+".")
     FileBotObject=fbot(API_TOKEN,ALLOWED_ROOT,ALLOWED_SENDERS,ALLOW_WRITE)
     Console=user_console(FileBotObject)
 
