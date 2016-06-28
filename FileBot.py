@@ -238,16 +238,18 @@ class bot(object):
 
     def catch_up_IDs(self):
         retrieved=False
+        responses=[]
         while retrieved==False:
             try:
-                response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
                 retrieved=True
                 report("w","Caught up with messages.")
             except:
                 report("w","Failed to catch up with messages.")
                 time.sleep(1)
-        if len(response)>0:
-            self.last_ID_checked=self.response[-1][u"update_id"]
+        if len(responses)>0:
+            self.last_ID_checked=responses[-1][u"update_id"]
+        responses=[]
         self.start_time=time.time()
         return
 
