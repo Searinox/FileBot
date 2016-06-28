@@ -21,23 +21,6 @@ PATH_7ZIP=""
 API_TOKEN=""
 ALLOWED_SENDERS=[]
 ALLOWED_ROOT=""
-
-try:
-    reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
-    zipkey=_winreg.OpenKey(reg_conn,"SOFTWARE\\7-Zip")
-except:
-    pass
-
-enumvals=-1
-while PATH_7ZIP=="":
-    enumvals+=1
-    result=_winreg.EnumValue(zipkey,enumvals)
-    if result[0].lower()=="path":
-        PATH_7ZIP=result[1]
-        if PATH_7ZIP[-1]!="\\":
-            PATH_7ZIP+="\\"
-        break
-
 LOG_LOCK=threading.Lock()
 
 
@@ -667,6 +650,21 @@ report("\n\nStore:\n-allowed users in allowed_users.txt\n-root directory in home
 
 fatal_error=False
 users_array=[]
+
+try:
+    reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
+    zipkey=_winreg.OpenKey(reg_conn,"SOFTWARE\\7-Zip")
+    enumvals=-1
+    while PATH_7ZIP=="":
+        enumvals+=1
+        result=_winreg.EnumValue(zipkey,enumvals)
+        if result[0].lower()=="path":
+            PATH_7ZIP=result[1]
+            if PATH_7ZIP[-1]!="\\":
+                PATH_7ZIP+="\\"
+            break
+except:
+    pass
 
 if PATH_7ZIP=="":
     report("m","WARNING: 7ZIP path not found in registry. /zip functionality will not be available.")
