@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.02
+VERSION_NUMBER=1.01
 
 
 """
@@ -21,7 +21,23 @@ PATH_7ZIP=""
 API_TOKEN=""
 ALLOWED_SENDERS=[]
 ALLOWED_ROOT=""
-PATH_7ZIP=""
+
+try:
+    reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
+    zipkey=_winreg.OpenKey(reg_conn,"SOFTWARE\\7-Zip")
+except:
+    pass
+
+enumvals=-1
+while PATH_7ZIP=="":
+    enumvals+=1
+    result=_winreg.EnumValue(zipkey,enumvals)
+    if result[0].lower()=="path":
+        PATH_7ZIP=result[1]
+        if PATH_7ZIP[-1]!="\\":
+            PATH_7ZIP+="\\"
+        break
+
 LOG_LOCK=threading.Lock()
 
 
@@ -135,7 +151,7 @@ def folder_list_string(input_folder,search_in,folders_only=False):
         for i in filelist:
             response+="\n"+i
     except:
-        response="<Bad path.>"
+        response="<Bad dir path.>"
 
     return response
 
@@ -149,7 +165,7 @@ class bot(object):
         self.keep_running.clear()
         self.bot_has_exited=threading.Event()
         self.bot_has_exited.set()
-        self.last_ID_checked=0
+        self.last_ID_checked=-1
         self.start_time=0
         self.last_folder=""
         self.listen_flag=threading.Event()
@@ -188,7 +204,6 @@ class bot(object):
             report("w","Bot was unable to respond.")
             return False
 
-
     def rel_to_abs(self,raw_command_args,isfile=False):
         command_args=raw_command_args.replace("/","\\")
         if command_args.find(":")!=-1:
@@ -219,6 +234,7 @@ class bot(object):
                 time.sleep(1)
 
         report("w","Bot \""+self.name+"\" is now online.")
+        self.catch_up_IDs()
         report("w","Contact the bot from an allowed user and type \"/help\" for usage information.")
 
         while self.keep_running.is_set()==True:
@@ -227,7 +243,7 @@ class bot(object):
             if self.listen_flag.is_set()==True:
                 response=[]
                 try:
-                    response=self.bot_handle.getUpdates(offset=self.last_ID_checked)
+                    response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
                 except:
                     report("w","Error retrieving messages.")
                 if len(response)>0:
@@ -235,6 +251,21 @@ class bot(object):
 
         report("w","Bot exited.")
         self.bot_has_exited.set()
+        return
+
+    def catch_up_IDs(self):
+        retrieved=False
+        while retrieved==False:
+            try:
+                response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                retrieved=True
+                report("w","Caught up with messages.")
+            except:
+                report("w","Failed to catch up with messages.")
+                time.sleep(1)
+        if len(response)>0:
+            self.last_ID_checked=self.response[-1][u"update_id"]
+        self.start_time=time.time()
         return
 
     def START(self):
@@ -252,9 +283,8 @@ class bot(object):
                 self.last_folder="C:\\"
             else:
                 self.last_folder=ALLOWED_ROOT
-            self.last_ID_checked=0
-            self.start_time=time.time()
-            self.listen_flag.set()
+                self.catch_up_IDs()
+                self.listen_flag.set()
         else:
             report("b","Listen stopped.")
             self.listen_flag.clear()
@@ -415,7 +445,7 @@ class bot(object):
             if allowed_path(use_folder)==True:
                 dirlist=folder_list_string(use_folder,extra_search,folders_only)
             else:
-                dirlist="<Bad path.>"
+                dirlist="<Bad dir path.>"
             for chunk in chunkalize(dirlist,MAX_IM_SIZE_BYTES):
                 if self.sendmsg(sid,chunk)==False:
                     response="<Listing interrupted.>"
@@ -637,23 +667,6 @@ report("\n\nStore:\n-allowed users in allowed_users.txt\n-root directory in home
 
 fatal_error=False
 users_array=[]
-
-try:
-    reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
-    zipkey=_winreg.OpenKey(reg_conn,"SOFTWARE\\7-Zip")
-
-    enumvals=-1
-
-    while PATH_7ZIP=="":
-        enumvals+=1
-        result=_winreg.EnumValue(zipkey,enumvals)
-        if result[0].lower()=="path":
-            PATH_7ZIP=result[1]
-            if PATH_7ZIP[-1]!="\\":
-                PATH_7ZIP+="\\"
-            break
-except:
-    pass
 
 if PATH_7ZIP=="":
     report("m","WARNING: 7ZIP path not found in registry. /zip functionality will not be available.")
