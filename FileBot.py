@@ -309,7 +309,7 @@ class fbot(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if time.time()-msg_send_time<=60:
+                    if time.time()-msg_send_time<=30:
                         if input_msglist[i][u"message"][u"from"][u"username"] in self.allowed_senders:
                             if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
                                 collect_new_messages.insert(0,input_msglist[i][u"message"])
@@ -318,7 +318,7 @@ class fbot(object):
         self.last_ID_checked=newest_ID
 
         for m in collect_new_messages:
-            if time.time()-m[u"date"]<=60:
+            if time.time()-m[u"date"]<=30:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
