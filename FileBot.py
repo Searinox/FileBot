@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.03
+VERSION_NUMBER=1.04
 
 
 """
@@ -12,13 +12,14 @@ import time
 import datetime
 import threading
 import telepot
+import subprocess
 import win32api
 import _winreg
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=50*1024*1024
 MAX_IM_SIZE_BYTES=4096
-ALLOWED_SENDERS=[]
 LOG_LOCK=threading.Lock()
+PATH_7ZIP=""
 
 
 """
@@ -563,10 +564,12 @@ class fbot(object):
                     folder_command="cd /d \""+folder_path+"\""
                     rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
                     prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-                    run_commands="start cmd /c \""+prompt_commands+"\""
-                    os.system(run_commands)
-                    response="Issued zip command."
-                    report("w","Zip command issued on \""+folder_path+archive_filename+"\".")
+                    if os.path.exists(folder_path+archive_filename+".7z")==False:
+                        subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
+                        response="Issued zip command."
+                        report("w","Zip command issued on \""+folder_path+archive_filename+"\".")
+                    else:
+                        response="The archive \""+archive_filename+".7z\" already exists at the location."
                 except:
                     response="Problem getting file."
                     report("w","Zip \""+command_args+"\" failed.")
@@ -662,12 +665,12 @@ report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
 report("\n\nRequirements:\n-allowed users in \"allowed_users.txt\"\n-root directory in \"home.txt\"\n-bot token in \"token.txt\"\n\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n\n")
 
-fatal_error=False
+collect_api_token=""
 users_array=[]
-PATH_7ZIP=""
-API_TOKEN=""
-ALLOWED_ROOT=""
-ALLOW_WRITE=False
+collect_allowed_root=""
+collect_allow_write=False
+collect_allowed_senders=[]
+fatal_error=False
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
@@ -685,17 +688,17 @@ except:
     pass
 
 if PATH_7ZIP=="":
-    report("m","WARNING: 7ZIP path not found in registry. /zip functionality will not be available.")
+    report("m","WARNING: 7ZIP path not found in registry. \"/zip\" functionality will not be available.")
 
 try:
     file_handle=open("token.txt","r")
-    API_TOKEN=file_handle.readline()
+    collect_api_token=file_handle.readline()
     file_handle.close()
 except:
-    report("m","ERROR: Make sure the file \"token.txt\" exists in the same folder and contains the bot token.")
+    report("m","ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
     fatal_error=True
 
-if len(API_TOKEN)==0 and fatal_error==False:
+if len(collect_api_token)==0 and fatal_error==False:
     report("m","ERROR: Make sure the token is correctly written in \"token.txt\".")
     fatal_error=True
 
@@ -709,40 +712,42 @@ if fatal_error==False:
         fatal_error=True
 
 for i in users_array:
-    ALLOWED_SENDERS.append(i.strip())
+    newusr=i.strip()
+    if newusr!="":
+        collect_allowed_senders.append(newusr)
 
 users_array=[]
 
 try:
     file_handle=open("home.txt","r")
-    ALLOWED_ROOT=file_handle.readline()
-    ALLOWED_ROOT=ALLOWED_ROOT.strip()
-    ALLOWED_ROOT=ALLOWED_ROOT.replace("/","\\")
+    collect_allowed_root=file_handle.readline()
+    collect_allowed_root=collect_allowed_root.strip()
+    collect_allowed_root=collect_allowed_root.replace("/","\\")
     file_handle.close()
 except:
     report("m","ERROR: The file \"home.txt\" could not be found. No root path can be set.")
     fatal_error=True
 
-if len(ALLOWED_ROOT)>0 and fatal_error==False:
-    if ALLOWED_ROOT[0]==">":
-        ALLOW_WRITE=True
-        ALLOWED_ROOT=ALLOWED_ROOT[1:]
+if len(collect_allowed_root)>0 and fatal_error==False:
+    if collect_allowed_root[0]==">":
+        collect_allow_write=True
+        collect_allowed_root=collect_allowed_root[1:]
 
-if len(ALLOWED_ROOT)==0 and fatal_error==False:
+if len(collect_allowed_root)==0 and fatal_error==False:
     report("m","ERROR: No home folder specified. Please make sure one is specified in \"home.txt\".")
     fatal_error=True
 else:
-    if ALLOWED_ROOT[-1]!="\\" and ALLOWED_ROOT!="*":
-        ALLOWED_ROOT+="\\"
-    ALLOWED_ROOT=ALLOWED_ROOT[0].upper()+ALLOWED_ROOT[1:]
+    if collect_allowed_root[-1]!="\\" and collect_allowed_root!="*":
+        collect_allowed_root+="\\"
+    collect_allowed_root=collect_allowed_root[0].upper()+collect_allowed_root[1:]
 
-if len(ALLOWED_SENDERS)==0 and fatal_error==False:
+if len(collect_allowed_senders)==0 and fatal_error==False:
     report("m","ERROR: No allowed users have been specified. Please make sure the intended users are in \"allowed_users.txt\".")
     fatal_error=True
 
 if fatal_error==False:
-    report("m","Program starting. Home folder is \""+ALLOWED_ROOT+"\", write mode:"+str(ALLOW_WRITE).upper()+".")
-    FileBotObject=fbot(API_TOKEN,ALLOWED_ROOT,ALLOWED_SENDERS,ALLOW_WRITE)
+    report("m","Program starting. Home folder is \""+collect_allowed_root+"\", write mode="+str(collect_allow_write).upper()+".")
+    FileBotObject=fbot(collect_api_token,collect_allowed_root,collect_allowed_senders,collect_allow_write)
     Console=user_console(FileBotObject)
 
     while Console.IS_DONE()==False:
