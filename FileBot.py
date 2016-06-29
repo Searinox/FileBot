@@ -39,13 +39,13 @@ def report(source,input_data=""):
     if len(source_literal)>0:
         source_literal=source_literal[0]
     if source_literal=="w":
-        source_literal="BOTWRK"
+        source_literal="BOT_WRK"
     elif source_literal=="b":
-        source_literal="BOTOBJ"
+        source_literal="BOT_OBJ"
     elif source_literal=="c":
-        source_literal="CONSOL"
+        source_literal="CONSOLE"
     elif source_literal=="m":
-        source_literal="MAINTD"
+        source_literal="MAINTRD"
     if source_literal!="":
         source_literal=" ["+source_literal+"] "
     else:
@@ -64,13 +64,6 @@ def report(source,input_data=""):
         pass
 
     LOG_LOCK.release()
-
-def allowed_path(input_path):
-    global ALLOWED_ROOT
-    if input_path.lower().find(ALLOWED_ROOT.lower())==0 or ALLOWED_ROOT=="*":
-        return True
-    else:
-        return False
 
 def chunkalize(input_string,chunksize):
     retval=[]
@@ -170,10 +163,10 @@ class fbot(object):
         else:
             second_delay=0
         if len(self.lastsent_timers)>0:
-            extra_sleep=(len(self.lastsent_timers)**1.5)/12.0
+            extra_sleep=(len(self.lastsent_timers)**1.52)/12.5
         else:
             extra_sleep=0
-        throttle_time=second_delay+extra_sleep
+        throttle_time=second_delay+max(extra_sleep-second_delay,0)
         time.sleep(throttle_time)
         try:
             self.bot_handle.sendMessage(sid,msg)
@@ -186,6 +179,24 @@ class fbot(object):
         except:
             report("w","Bot was unable to respond.")
             return False
+
+    def allowed_path(self,input_path):
+        if input_path.lower().find(self.allowed_root.lower())==0 or self.allowed_root=="*":
+            return True
+        else:
+            return False
+
+    def usable_dir(self,newpath):
+        if self.allowed_path(newpath)==True:
+            if os.path.exists(newpath)==True:
+                return True
+        return False
+
+    def usable_path(self,newpath):
+        if self.allowed_path(newpath)==True:
+            if os.path.exists(newpath)==True:
+                return True
+        return False
 
     def rel_to_abs(self,raw_command_args,isfile=False):
         command_args=raw_command_args.replace("/","\\")
@@ -424,7 +435,7 @@ class fbot(object):
             else:
                 use_folder=command_args
             use_folder=self.rel_to_abs(command_args)
-            if allowed_path(use_folder)==True:
+            if self.allowed_path(use_folder)==True:
                 dirlist=folder_list_string(use_folder,extra_search,folders_only)
             else:
                 dirlist="<Bad dir path.>"
@@ -438,7 +449,7 @@ class fbot(object):
         elif command_type=="cd":
             if command_args.strip()!="":
                 newpath=self.rel_to_abs(command_args)
-                if os.path.isdir(newpath)==True and allowed_path(newpath)==True:
+                if self.usable_dir(newpath)==True:
                     if os.path.exists(newpath)==True:
                         try:
                             newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
@@ -457,7 +468,7 @@ class fbot(object):
                 response="Current folder is \""+self.last_folder+"\"."
         elif command_type=="get":
             newpath=self.rel_to_abs(command_args,True)
-            if os.path.exists(newpath)==True and allowed_path(newpath)==True:
+            if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
                 report("w","Requested get file \""+newpath+"\".")
                 self.sendmsg(sid,"Getting file, please wait...")
@@ -477,7 +488,7 @@ class fbot(object):
                 response="File not found."
         elif command_type=="eat" and self.writemode==True:
             newpath=self.rel_to_abs(command_args,True)
-            if os.path.exists(newpath)==True and allowed_path(newpath)==True:
+            if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
                 report("w","Requested eat file \""+newpath+"\".")
                 self.sendmsg(sid,"Eating file, please wait...")
@@ -506,7 +517,7 @@ class fbot(object):
                 response="File not found."
         elif command_type=="del" and self.writemode==True:
             newpath=self.rel_to_abs(command_args,True)
-            if os.path.exists(newpath)==True and allowed_path(newpath)==True:
+            if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
                 report("w","Requested delete file \""+newpath+"\".")
                 try:
@@ -521,7 +532,7 @@ class fbot(object):
             if self.last_folder.count("\\")>1:
                 newpath=self.last_folder[:-1]
                 newpath=newpath[:newpath.rfind("\\")+1]
-                if allowed_path(newpath)==True:
+                if self.allowed_path(newpath)==True:
                     self.last_folder=newpath
                     response="Current folder is now \""+self.last_folder+"\"."
                     report("w","Current folder changed to \""+self.last_folder+"\".")
@@ -529,7 +540,7 @@ class fbot(object):
                     response="Already at top folder."
             else:
                 response="Already at top folder."
-        elif command_type=="zip" and self.write_mode==True:
+        elif command_type=="zip" and self.writemode==True:
             if PATH_7ZIP!="":
                 newpath=self.rel_to_abs(command_args)
             else:
@@ -537,7 +548,7 @@ class fbot(object):
                 report("w","Attempted to call 7ZIP but install is missing.")
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
-            if os.path.exists(newpath)==True and PATH_7ZIP!="" and allowed_path(newpath)==True:
+            if self.usable_path(newpath)==True and PATH_7ZIP!="":
                 try:
                     if os.path.isfile(newpath):
                         folder_path=newpath[:newpath.rfind("\\")+1]
@@ -569,6 +580,8 @@ class fbot(object):
                 report("w","Bot was locked down with password.")
             else:
                 response="Bad password for locking."
+        elif command_type=="unlock":
+            response="The bot is already unlocked."
         elif command_type=="help":
             response="AVAILABLE COMMANDS:\n\n"
             response+="/help: display this help screen\n"
