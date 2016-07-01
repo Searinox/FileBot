@@ -588,8 +588,8 @@ class fbot(object):
         elif command_type=="help":
             response="AVAILABLE COMMANDS:\n\n"
             response+="/help: display this help screen\n"
-            response+="/cd <PATH>: change path(eg: /cd c:\windows); leave blank to check current\n"
-            response+="/dir <PATH> [?f:<filter>] [?d]: list files/folders, filter optional(/dir c:\windows ?f:.exe), use ?d for directories only\n"
+            response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
+            response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.writemode==True:
                 response+="/zip <PATH[FILE]>: make a 7ZIP archive, extension will be .7z.TMP until finished\n"
             response+="/up: move up one folder from current path\n"
