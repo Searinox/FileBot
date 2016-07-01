@@ -164,7 +164,7 @@ class fbot(object):
         else:
             second_delay=0
         if len(self.lastsent_timers)>0:
-            extra_sleep=(len(self.lastsent_timers)**1.52)/12.5
+            extra_sleep=(len(self.lastsent_timers)**1.8)/25.5
         else:
             extra_sleep=0
         throttle_time=second_delay+max(extra_sleep-second_delay,0)
