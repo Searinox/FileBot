@@ -156,7 +156,7 @@ class fbot(object):
 
     def sendmsg(self,sid,msg):
         for i in reversed(range(len(self.lastsent_timers))):
-            if time.time()-self.lastsent_timers[i]>=30:
+            if time.time()-self.lastsent_timers[i]>=60:
                 del self.lastsent_timers[i]
         second_delay=time.time()-self.last_send_time
         if second_delay<1:
@@ -170,10 +170,10 @@ class fbot(object):
         throttle_time=second_delay+max(extra_sleep-second_delay,0)
         time.sleep(throttle_time)
         try:
-            self.bot_handle.sendMessage(sid,msg)
             self.last_send_time=time.time()
+            self.bot_handle.sendMessage(sid,msg)
             self.lastsent_timers.append(self.last_send_time)
-            excess_entries=max(0,len(self.lastsent_timers)-30)
+            excess_entries=max(0,len(self.lastsent_timers)-40)
             for i in range(excess_entries):
                 del self.lastsent_timers[0]
             return True
