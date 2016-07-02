@@ -702,7 +702,6 @@ MAIN
 """
 
 
-
 report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
