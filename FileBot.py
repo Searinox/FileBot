@@ -783,8 +783,8 @@ if fatal_error==False:
         time.sleep(0.2)
         sys.stdout.flush()
 
-for i in reversed(range(len(FileBotList))):
-    del FileBotList[i]
+while len(FileBotList)>0:
+    del FileBotList[0]
 
 report("m","Program finished. Press ENTER to exit.")
 raw_input()
