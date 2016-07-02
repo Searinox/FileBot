@@ -291,8 +291,6 @@ class user_fbot(object):
         report("b","<"+self.allowed_user+"> "+"Bot instance stop issued.")
         self.listen_flag.clear()
         self.keep_running.clear()
-        while self.bot_has_exited.is_set()==False:
-            time.sleep(0.2)
         return
 
     def IS_RUNNING(self):
@@ -670,6 +668,8 @@ class user_console(object):
                 loop_input=False
                 for i in self.bot_list:
                     i.STOP()
+                while self.bots_running()>0:
+                    time.sleep(0.2)
                 self.finished_work.set()
             else:
                 self.process_command(command)
@@ -785,7 +785,7 @@ if fatal_error==False:
             process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
             try:
                 if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
-                    win32process.SetPriorityClass(process_handle,win32process.IDLE_PRIORITY_CLASS)
+                    win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
                     report("m","Idle process priority set.")
             except:
                 report("m","Error setting process priority.")
