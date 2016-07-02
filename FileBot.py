@@ -25,7 +25,6 @@ MAX_IM_SIZE_BYTES=4096
 LOG_LOCK=threading.Lock()
 PATH_7ZIP=""
 
-
 """
 DEFS
 """
@@ -69,6 +68,7 @@ def report(source,input_data=""):
         pass
 
     LOG_LOCK.release()
+    return
 
 def chunkalize(input_string,chunksize):
     retval=[]
@@ -220,6 +220,7 @@ class user_fbot(object):
             self.pending_lockclear.clear()
             self.bot_lock_pass=""
             report("w","<"+self.allowed_user+"> "+"Bot unlocked by console.")
+        return
 
     def bot_thread_work(self):
         self.bot_handle=telepot.Bot(self.token)
@@ -655,6 +656,7 @@ class user_console(object):
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","help: display help\n")
+        return
 
     def process_input(self):
         loop_input=True
@@ -696,6 +698,7 @@ class user_entry(object):
             self.username=""
             self.home=""
             self.allow_write=False
+        return
 
 
 """
