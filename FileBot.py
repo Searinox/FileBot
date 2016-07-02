@@ -714,7 +714,7 @@ report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
-report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n")
+report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n7-Zip x64 will be needed for /zip functionality.\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n")
 
 CURRENT_PROCESS_ID=win32api.GetCurrentProcessId()
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,CURRENT_PROCESS_ID)
