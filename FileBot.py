@@ -627,24 +627,31 @@ class user_console(object):
                 total+=1
         return total
 
-    def process_command(self,input_command):
-        if input_command.lower().strip()=="start":
+    def process_command(self,user_input):
+        user_data=user_input.strip().split(" ")
+        input_command=user_data[0].lower().strip()
+        if len(user_data)>1:
+            input_argument=user_data[1].strip()
+        else:
+            input_argument=""
+        if input_command=="start":
             for i in self.bot_list:
-                i.LISTEN(True)
-        if input_command.lower().strip()=="stop":
+                if i.allowed_user.lower()==input_argument or input_argument=="*":
+                    i.LISTEN(True)
+        if input_command=="stop":
             for i in self.bot_list:
-                i.LISTEN(False)
-        if input_command.lower().strip()=="unlock":
+                if i.allowed_user.lower()==input_argument or input_argument=="*":
+                    i.LISTEN(False)
+        if input_command=="unlock":
             for i in self.bot_list:
-                i.pending_lockclear.set()
-        if input_command.lower().strip()=="help":
+                if i.allowed_user.lower()==input_argument or input_argument=="*":
+                    i.pending_lockclear.set()
+        if input_command=="help":
             report("c","AVAILABLE COMMANDS:\n")
-            report("c","start: start listening to messages")
-            report("c","stop: stop the bot from listening")
-            report("c","unlock: unlock the bot")
+            report("c","start <USER>: start listening to messages for user; use \"*\" to apply to all instances")
+            report("c","stop <USER>: stop listening to messages for user; use \"*\" to apply to all instances")
+            report("c","unlock <USER>: unlock the bot for user; use \"*\" to apply to all instances")
             report("c","help: display help\n")
-            report("c","Use \"*\" as a home path to allow access to all drives.")
-            report("c","Begin home path with \">\" to allow file writing.")
 
     def process_input(self):
         loop_input=True
