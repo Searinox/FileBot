@@ -14,6 +14,8 @@ import threading
 import telepot
 import subprocess
 import win32api
+import win32con
+import win32process
 import _winreg
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=50*1024*1024
@@ -703,6 +705,14 @@ report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
 report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n\n")
+
+try:
+    current_pid=win32api.GetCurrentProcessId()
+    process_handle=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,current_pid)
+    win32process.SetPriorityClass(process_handle,win32process.IDLE_PRIORITY_CLASS)
+    report("Idle process priority set.")
+except:
+    report("Error setting process priority.")
 
 fatal_error=False
 
