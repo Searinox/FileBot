@@ -585,7 +585,7 @@ class user_fbot(object):
         elif command_type=="unlock":
             response="The bot is already unlocked."
         elif command_type=="help":
-            response="AVAILABLE COMMANDS:\n\n"
+            response="AVAILABLE BOT COMMANDS:\n\n"
             response+="/help: display this help screen\n"
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
@@ -636,21 +636,21 @@ class user_console(object):
             input_argument=""
         if input_command=="start":
             for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="*":
+                if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.LISTEN(True)
         if input_command=="stop":
             for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="*":
+                if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.LISTEN(False)
         if input_command=="unlock":
             for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="*":
+                if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.pending_lockclear.set()
         if input_command=="help":
-            report("c","AVAILABLE COMMANDS:\n")
-            report("c","start <USER>: start listening to messages for user; use \"*\" to apply to all instances")
-            report("c","stop <USER>: stop listening to messages for user; use \"*\" to apply to all instances")
-            report("c","unlock <USER>: unlock the bot for user; use \"*\" to apply to all instances")
+            report("c","AVAILABLE CONSOLE COMMANDS:\n")
+            report("c","start [USER]: start listening to messages for user; leave blank to apply to all instances")
+            report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
+            report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","help: display help\n")
 
     def process_input(self):
