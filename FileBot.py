@@ -18,12 +18,13 @@ import win32con
 import win32process
 import _winreg
 
-MAINTHREAD_HEARTBEAT_SECONDS=0.2
+MAINTHREAD_HEARTBEAT_SECONDS=1
 PRIORITY_RECHECK_INTERVAL_SECONDS=60
+BOT_WORKTHREAD_HEARTBEAT_SECONDS=1
+PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
+
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=50*1024*1024
 MAX_IM_SIZE_BYTES=4096
-LOG_LOCK=threading.Lock()
-PATH_7ZIP=""
 
 
 """
@@ -232,13 +233,13 @@ class user_fbot(object):
                 bot_get_ok=True
             except:
                 report("w","<"+self.allowed_user+"> "+"Bot activation error.")
-                time.sleep(1)
+                time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
 
         report("w","<"+self.allowed_user+"> "+"Bot instance for \""+self.allowed_user+"\" is now online.")
         self.catch_up_IDs()
 
         while self.keep_running.is_set()==True:
-            time.sleep(1)
+            time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
             self.check_tasks()
             if self.listen_flag.is_set()==True:
                 response=[]
@@ -263,7 +264,7 @@ class user_fbot(object):
                 report("w","<"+self.allowed_user+"> "+"Caught up with messages.")
             except:
                 report("w","<"+self.allowed_user+"> "+"Failed to catch up with messages.")
-                time.sleep(1)
+                time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
         responses=[]
@@ -673,7 +674,7 @@ class user_console(object):
                 for i in self.bot_list:
                     i.STOP()
                 while self.bots_running()>0:
-                    time.sleep(0.2)
+                    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
                 self.finished_work.set()
             else:
                 self.process_command(command)
@@ -707,6 +708,8 @@ MAIN
 """
 
 
+LOG_LOCK=threading.Lock()
+
 report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
@@ -715,6 +718,8 @@ report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlis
 
 CURRENT_PROCESS_ID=win32api.GetCurrentProcessId()
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,CURRENT_PROCESS_ID)
+
+PATH_7ZIP=""
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
@@ -792,7 +797,7 @@ if fatal_error==False:
                     win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
                     report("m","Idle process priority set.")
             except:
-                report("m","Error setting process priority.")
+                report("m","Error managing process priority.")
 
 while len(FileBotList)>0:
     del FileBotList[0]
