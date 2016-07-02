@@ -733,10 +733,10 @@ if len(collect_api_token)==0 and fatal_error==False:
 
 collect_allowed_senders=[]
 
+file_entries=[]
 if fatal_error==False:
     try:
         file_handle=open("userlist.txt","r")
-        file_entries=[]
         file_entries=file_handle.readlines()
     except:
         report("m","ERROR: Could not read entries from \"userlist.txt\".")
@@ -745,13 +745,7 @@ if fatal_error==False:
 if fatal_error==False:
     for i in file_entries:
         collect_allowed_senders.append(user_entry(i.strip()))
-    file_entries=[]
-
-if len(collect_allowed_senders)==0 and fatal_error==False:
-    report("m","ERROR: No allowed users have been specified. Please make sure the intended users are in \"allowed_users.txt\".")
-    fatal_error=True
-
-FileBotList=[]
+file_entries=[]
 
 for i in reversed(range(len(collect_allowed_senders))):
     if collect_allowed_senders[i].username=="":
@@ -760,6 +754,8 @@ for i in reversed(range(len(collect_allowed_senders))):
 if fatal_error==False and len(collect_allowed_senders)==0:
     report("m","ERROR: There were no valid user lists to add.")
     fatal_error=True
+
+FileBotList=[]
 
 if fatal_error==False:
     report("m","Bot instances starting.")
@@ -770,6 +766,9 @@ if fatal_error==False:
     while Console.IS_DONE()==False:
         time.sleep(0.2)
         sys.stdout.flush()
+
+for i in reversed(range(len(FileBotList))):
+    del FileBotList[i]
 
 report("m","Program finished. Press ENTER to exit.")
 raw_input()
