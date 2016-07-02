@@ -777,13 +777,13 @@ if fatal_error==False and len(collect_allowed_senders)==0:
     report("m","ERROR: There were no valid user lists to add.")
     fatal_error=True
 
-FileBotList=[]
+BotInstances=[]
 
 if fatal_error==False:
     report("m","Bot instances starting.")
     for i in collect_allowed_senders:
-        FileBotList.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
-    Console=user_console(FileBotList)
+        BotInstances.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
+    Console=user_console(BotInstances)
 
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
     while Console.IS_DONE()==False:
@@ -799,8 +799,8 @@ if fatal_error==False:
             except:
                 report("m","Error managing process priority.")
 
-while len(FileBotList)>0:
-    del FileBotList[0]
+while len(BotInstances)>0:
+    del BotInstances[0]
 
 report("m","Program finished. Press ENTER to exit.")
 raw_input()
