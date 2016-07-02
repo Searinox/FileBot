@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.04
+VERSION_NUMBER=1.1
 
 
 """
@@ -129,8 +129,8 @@ def folder_list_string(input_folder,search_in,folders_only=False):
 
     return response
 
-class fbot(object):
-    def __init__(self,input_token="",input_root="",input_senders=[],input_write=False):
+class user_fbot(object):
+    def __init__(self,input_token,input_root,input_user,input_write):
         self.name=""
         self.bot_thread=threading.Thread(target=self.bot_thread_work)
         self.bot_thread.daemon=True
@@ -142,11 +142,11 @@ class fbot(object):
         self.last_ID_checked=-1
         self.start_time=0
         self.last_folder=""
-        self.writemode=input_write
+        self.allow_writing=input_write
         self.listen_flag=threading.Event()
         self.listen_flag.clear()
         self.last_send_time=0
-        self.allowed_senders=input_senders
+        self.allowed_user=input_user
         self.lastsent_timers=[]
         self.bot_lock_pass=""
         self.allowed_root=input_root
@@ -178,7 +178,7 @@ class fbot(object):
                 del self.lastsent_timers[0]
             return True
         except:
-            report("w","Bot was unable to respond.")
+            report("w","<"+self.allowed_user+"> "+"Bot was unable to respond.")
             return False
 
     def allowed_path(self,input_path):
@@ -215,7 +215,7 @@ class fbot(object):
         if self.pending_lockclear.is_set()==True:
             self.pending_lockclear.clear()
             self.bot_lock_pass=""
-            report("w","Bot unlocked by console.")
+            report("w","<"+self.allowed_user+"> "+"Bot unlocked by console.")
 
     def bot_thread_work(self):
         self.bot_handle=telepot.Bot(self.token)
@@ -225,12 +225,11 @@ class fbot(object):
                 self.name=self.bot_handle.getMe()[u"username"]
                 bot_get_ok=True
             except:
-                report("w","Bot activation error.")
+                report("w","<"+self.allowed_user+"> "+"Bot activation error.")
                 time.sleep(1)
 
-        report("w","Bot \""+self.name+"\" is now online.")
+        report("w","<"+self.allowed_user+"> "+"Bot instance for \""+self.allowed_user+"\" is now online.")
         self.catch_up_IDs()
-        report("w","Contact the bot from an allowed user and type \"/help\" for usage information.")
 
         while self.keep_running.is_set()==True:
             time.sleep(1)
@@ -240,11 +239,11 @@ class fbot(object):
                 try:
                     response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
                 except:
-                    report("w","Error retrieving messages.")
+                    report("w","<"+self.allowed_user+"> "+"Error retrieving messages.")
                 if len(response)>0:
                     self.process_messages(response)
 
-        report("w","Bot exited.")
+        report("w","<"+self.allowed_user+"> "+"Bot instance exited.")
         self.bot_has_exited.set()
         return
 
@@ -255,9 +254,9 @@ class fbot(object):
             try:
                 responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
                 retrieved=True
-                report("w","Caught up with messages.")
+                report("w","<"+self.allowed_user+"> "+"Caught up with messages.")
             except:
-                report("w","Failed to catch up with messages.")
+                report("w","<"+self.allowed_user+"> "+"Failed to catch up with messages.")
                 time.sleep(1)
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
@@ -266,7 +265,7 @@ class fbot(object):
         return
 
     def START(self):
-        report("b","Bot start issued.")
+        report("b","<"+self.allowed_user+"> "+"Bot instance start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
         self.bot_has_exited.clear()
         self.keep_running.set()
         self.bot_thread.start()
@@ -274,7 +273,7 @@ class fbot(object):
 
     def LISTEN(self,new_state):
         if new_state==True:
-            report("b","Listen started.")
+            report("b","<"+self.allowed_user+"> "+"Listen started.")
             if self.allowed_root=="*":
                 self.last_folder="C:\\"
             else:
@@ -282,11 +281,11 @@ class fbot(object):
             self.catch_up_IDs()
             self.listen_flag.set()
         else:
-            report("b","Listen stopped.")
+            report("b","<"+self.allowed_user+"> "+"Listen stopped.")
             self.listen_flag.clear()
 
     def STOP(self):
-        report("b","Bot stop issued.")
+        report("b","<"+self.allowed_user+"> "+"Bot instance stop issued.")
         self.listen_flag.clear()
         self.keep_running.clear()
         while self.bot_has_exited.is_set()==False:
@@ -310,7 +309,7 @@ class fbot(object):
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
                     if time.time()-msg_send_time<=30:
-                        if input_msglist[i][u"message"][u"from"][u"username"] in self.allowed_senders:
+                        if input_msglist[i][u"message"][u"from"][u"username"]==self.allowed_user:
                             if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
                                 collect_new_messages.insert(0,input_msglist[i][u"message"])
             else:
@@ -361,7 +360,7 @@ class fbot(object):
         if self.bot_lock_pass!="":
             return
 
-        if self.writemode==False:
+        if self.allow_writing==False:
             return
 
         self.sendmsg(sid,"Putting file \""+filename+"\" at \""+self.last_folder+"\"...")
@@ -382,14 +381,14 @@ class fbot(object):
                 if msg[len("/unlock "):].strip()==self.bot_lock_pass:
                     self.bot_lock_pass=""
                     self.sendmsg(sid,"Bot unlocked.")
-                    report("w","Bot unlocked by user.")
+                    report("w","<"+self.allowed_user+"> "+"Bot unlocked by user.")
                     return
                 else:
                     return
             else:
                 return
 
-        report("w","New message processed.")
+        report("w","<"+self.allowed_user+"> "+"New message processed.")
         if msg[0]!="/":
             return
         cmd_end=msg.find(" ")
@@ -400,7 +399,7 @@ class fbot(object):
         response=""
         
         if command_type=="start":
-            report("w","Bot start requested.")
+            report("w","<"+self.allowed_user+"> "+"Bot start requested.")
         elif command_type=="dir":
 
             extra_search=""
@@ -429,7 +428,7 @@ class fbot(object):
             else:
                 folders_only=False
 
-            report("w","Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only)+".")
+            report("w","<"+self.allowed_user+"> "+"Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only)+".")
 
             if command_args=="":
                 use_folder=self.last_folder
@@ -462,7 +461,7 @@ class fbot(object):
                         if len(self.last_folder)>0:
                             self.last_folder=self.last_folder[0].upper()+self.last_folder[1:]
                         response="Current folder changed to \""+self.last_folder+"\"."
-                        report("w","Current folder changed to \""+self.last_folder+"\".")
+                        report("w","<"+self.allowed_user+"> "+"Current folder changed to \""+self.last_folder+"\".")
                 else:
                     response="Bad path."
             else:
@@ -471,7 +470,7 @@ class fbot(object):
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                report("w","Requested get file \""+newpath+"\".")
+                report("w","<"+self.allowed_user+"> "+"Requested get file \""+newpath+"\".")
                 self.sendmsg(sid,"Getting file, please wait...")
                 try:
                     fsize=os.path.getsize(newpath)
@@ -484,14 +483,14 @@ class fbot(object):
                             response="File is empty."
                 except:
                     response="Problem getting file."
-                    report("w","File send error.")
+                    report("w","<"+self.allowed_user+"> "+"File send error.")
             else:
                 response="File not found."
-        elif command_type=="eat" and self.writemode==True:
+        elif command_type=="eat" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                report("w","Requested eat file \""+newpath+"\".")
+                report("w","<"+self.allowed_user+"> "+"Requested eat file \""+newpath+"\".")
                 self.sendmsg(sid,"Eating file, please wait...")
                 success=False
                 try:
@@ -506,27 +505,27 @@ class fbot(object):
                             response="File is empty."
                 except:
                     response="Problem getting file."
-                    report("w","File send error.")
+                    report("w","<"+self.allowed_user+"> "+"File send error.")
                 if success==True:
                     try:
                         os.remove(newpath)
                         self.sendmsg(sid,"File deleted.")
                     except:
                         response="Problem deleting file."
-                        report("w","File delete error.")
+                        report("w","<"+self.allowed_user+"> "+"File delete error.")
             else:
                 response="File not found."
-        elif command_type=="del" and self.writemode==True:
+        elif command_type=="del" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                report("w","Requested delete file \""+newpath+"\".")
+                report("w","<"+self.allowed_user+"> "+"Requested delete file \""+newpath+"\".")
                 try:
                     os.remove(newpath)
                     self.sendmsg(sid,"File deleted.")
                 except:
                     response="Problem deleting file."
-                    report("w","File delete error.")
+                    report("w","<"+self.allowed_user+"> "+"File delete error.")
             else:
                 response="File not found."
         elif command_type=="up":
@@ -536,17 +535,17 @@ class fbot(object):
                 if self.allowed_path(newpath)==True:
                     self.last_folder=newpath
                     response="Current folder is now \""+self.last_folder+"\"."
-                    report("w","Current folder changed to \""+self.last_folder+"\".")
+                    report("w","<"+self.allowed_user+"> "+"Current folder changed to \""+self.last_folder+"\".")
                 else:
                     response="Already at top folder."
             else:
                 response="Already at top folder."
-        elif command_type=="zip" and self.writemode==True:
+        elif command_type=="zip" and self.allow_writing==True:
             if PATH_7ZIP!="":
                 newpath=self.rel_to_abs(command_args)
             else:
                 response="7ZIP install was not found."
-                report("w","Attempted to call 7ZIP but install is missing.")
+                report("w","<"+self.allowed_user+"> "+"Attempted to call 7ZIP but install is missing.")
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True and PATH_7ZIP!="":
@@ -567,20 +566,20 @@ class fbot(object):
                     if os.path.exists(folder_path+archive_filename+".7z")==False:
                         subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
                         response="Issued zip command."
-                        report("w","Zip command issued on \""+folder_path+archive_filename+"\".")
+                        report("w","<"+self.allowed_user+"> "+"Zip command issued on \""+folder_path+archive_filename+"\".")
                     else:
                         response="The archive \""+archive_filename+".7z\" already exists at the location."
                 except:
                     response="Problem getting file."
-                    report("w","Zip \""+command_args+"\" failed.")
+                    report("w","<"+self.allowed_user+"> "+"Zip \""+command_args+"\" failed.")
             else:
                 response="File not found."
-                report("w","[BOTWRK] Zip \""+command_args+"\" file not found.")
+                report("w","<"+self.allowed_user+"> "+"[BOTWRK] Zip \""+command_args+"\" file not found.")
         elif command_type=="lock":
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
                 response="Bot locked."
-                report("w","Bot was locked down with password.")
+                report("w","<"+self.allowed_user+"> "+"Bot was locked down with password.")
             else:
                 response="Bad password for locking."
         elif command_type=="unlock":
@@ -590,17 +589,17 @@ class fbot(object):
             response+="/help: display this help screen\n"
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
-            if self.writemode==True:
+            if self.allow_writing==True:
                 response+="/zip <PATH[FILE]>: make a 7ZIP archive, extension will be .7z.TMP until finished\n"
             response+="/up: move up one folder from current path\n"
             response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram\n"
-            if self.writemode==True:
+            if self.allow_writing==True:
                 response+="/eat <[PATH]FILE>: upload the file at the location to Telegram, then delete it from its original location\n"
                 response+="/del <[PATH]FILE>: delete the file at the location\n"
             response+="/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+="/unlock <PASSWORD>: unlock the bot\n"
             response+="\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
-            report("w","Help requested.")
+            report("w","<"+self.allowed_user+"> "+"Help requested.")
         else:
             self.sendmsg(sid,"Command unknown. Type \"/help\" for a list of commands.")
 
@@ -609,10 +608,10 @@ class fbot(object):
         return
 
 class user_console(object):
-    def __init__(self,bot_object):
+    def __init__(self,bot_list):
         self.working_thread=threading.Thread(target=self.process_input)
         self.working_thread.daemon=True
-        self.bot_object=bot_object
+        self.bot_list=bot_list
         self.finished_work=threading.Event()
         self.finished_work.clear()
         self.working_thread.start()
@@ -621,13 +620,23 @@ class user_console(object):
     def IS_DONE(self):
         return self.finished_work.is_set()==True
 
+    def bots_running(self):
+        total=0
+        for i in self.bot_list:
+            if i.IS_RUNNING()==True:
+                total+=1
+        return total
+
     def process_command(self,input_command):
         if input_command.lower().strip()=="start":
-            self.bot_object.LISTEN(True)
+            for i in self.bot_list:
+                i.LISTEN(True)
         if input_command.lower().strip()=="stop":
-            self.bot_object.LISTEN(False)
+            for i in self.bot_list:
+                i.LISTEN(False)
         if input_command.lower().strip()=="unlock":
-            self.bot_object.pending_lockclear.set()
+            for i in self.bot_list:
+                i.pending_lockclear.set()
         if input_command.lower().strip()=="help":
             report("c","AVAILABLE COMMANDS:\n")
             report("c","start: start listening to messages")
@@ -639,19 +648,42 @@ class user_console(object):
 
     def process_input(self):
         loop_input=True
-        self.bot_object.START()
-        self.bot_object.LISTEN(True)
+        for i in self.bot_list:
+            i.START()
+            i.LISTEN(True)
         report("c","User console activated.")
         report("c","Type \"help\" in the console for available commands.")
         while loop_input==True:
             command=raw_input("[CONSOL] Input Commands: ")
-            if command.lower().strip()=="exit" or self.bot_object.IS_RUNNING()==False:
+            if command.lower().strip()=="exit" or self.bots_running()==0:
                 loop_input=False
-                self.bot_object.STOP()
+                for i in self.bot_list:
+                    i.STOP()
                 self.finished_work.set()
             else:
                 self.process_command(command)
         return
+
+class user_entry(object):
+    def __init__(self,from_string):
+        try:
+            segments=from_string.split("|")
+            for i in range(len(segments)):
+                segments[i]=segments[i].strip()
+        
+            self.username=segments[0]
+            self.home=segments[1]
+            self.allow_write=False
+
+            if len(self.home)>0:
+                if self.home[0]==">":
+                    self.allow_write=True
+                    self.home=self.home[1:]
+        except:
+            report("m","WARNING: User list \""+from_string+"\" was not validly formatted.")
+            self.username=""
+            self.home=""
+            self.allow_write=False
 
 
 """
@@ -663,14 +695,11 @@ report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
-report("\n\nRequirements:\n-allowed users in \"allowed_users.txt\"\n-root directory in \"home.txt\"\n-bot token in \"token.txt\"\n\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n\n")
+report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" formatted as such: <USERNAME>|<HOME PATH>\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n\n")
+
+fatal_error=False
 
 collect_api_token=""
-users_array=[]
-collect_allowed_root=""
-collect_allow_write=False
-collect_allowed_senders=[]
-fatal_error=False
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
@@ -702,53 +731,41 @@ if len(collect_api_token)==0 and fatal_error==False:
     report("m","ERROR: Make sure the token is correctly written in \"token.txt\".")
     fatal_error=True
 
+collect_allowed_senders=[]
+
 if fatal_error==False:
     try:
-        file_handle=open("allowed_users.txt","r")
-        users_array=file_handle.readlines()
-        file_handle.close()
+        file_handle=open("userlist.txt","r")
+        file_entries=[]
+        file_entries=file_handle.readlines()
     except:
-        report("m","ERROR: Make sure the file \"allowed_users.txt\" exists in the same folder and contains one allowed user per each line.")
+        report("m","ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
 
-for i in users_array:
-    newusr=i.strip()
-    if newusr!="":
-        collect_allowed_senders.append(newusr)
-
-users_array=[]
-
-try:
-    file_handle=open("home.txt","r")
-    collect_allowed_root=file_handle.readline()
-    collect_allowed_root=collect_allowed_root.strip()
-    collect_allowed_root=collect_allowed_root.replace("/","\\")
-    file_handle.close()
-except:
-    report("m","ERROR: The file \"home.txt\" could not be found. No root path can be set.")
-    fatal_error=True
-
-if len(collect_allowed_root)>0 and fatal_error==False:
-    if collect_allowed_root[0]==">":
-        collect_allow_write=True
-        collect_allowed_root=collect_allowed_root[1:]
-
-if len(collect_allowed_root)==0 and fatal_error==False:
-    report("m","ERROR: No home folder specified. Please make sure one is specified in \"home.txt\".")
-    fatal_error=True
-else:
-    if collect_allowed_root[-1]!="\\" and collect_allowed_root!="*":
-        collect_allowed_root+="\\"
-    collect_allowed_root=collect_allowed_root[0].upper()+collect_allowed_root[1:]
+if fatal_error==False:
+    for i in file_entries:
+        collect_allowed_senders.append(user_entry(i.strip()))
+    file_entries=[]
 
 if len(collect_allowed_senders)==0 and fatal_error==False:
     report("m","ERROR: No allowed users have been specified. Please make sure the intended users are in \"allowed_users.txt\".")
     fatal_error=True
 
+FileBotList=[]
+
+for i in reversed(range(len(collect_allowed_senders))):
+    if collect_allowed_senders[i].username=="":
+        del collect_allowed_senders[i]
+
+if fatal_error==False and len(collect_allowed_senders)==0:
+    report("m","ERROR: There were no valid user lists to add.")
+    fatal_error=True
+
 if fatal_error==False:
-    report("m","Program starting. Home folder is \""+collect_allowed_root+"\", write mode="+str(collect_allow_write).upper()+".")
-    FileBotObject=fbot(collect_api_token,collect_allowed_root,collect_allowed_senders,collect_allow_write)
-    Console=user_console(FileBotObject)
+    report("m","Bot instances starting.")
+    for i in collect_allowed_senders:
+        FileBotList.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
+    Console=user_console(FileBotList)
 
     while Console.IS_DONE()==False:
         time.sleep(0.2)
