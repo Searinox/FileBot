@@ -468,6 +468,7 @@ class user_fbot(object):
                     response="Bad path."
             else:
                 response="Current folder is \""+self.last_folder+"\"."
+                report("w","<"+self.allowed_user+"> "+"Queried current folder, which is \""+self.last_folder+"\"."")
         elif command_type=="get":
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
