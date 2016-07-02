@@ -750,19 +750,18 @@ if len(collect_api_token)==0 and fatal_error==False:
 
 collect_allowed_senders=[]
 
-file_entries=[]
 if fatal_error==False:
+    file_entries=[]
     try:
         file_handle=open("userlist.txt","r")
         file_entries=file_handle.readlines()
+        for i in file_entries:
+            if i.strip()!="":
+                collect_allowed_senders.append(user_entry(i.strip()))
     except:
         report("m","ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
-
-if fatal_error==False:
-    for i in file_entries:
-        collect_allowed_senders.append(user_entry(i.strip()))
-file_entries=[]
+    file_entries=[]
 
 for i in reversed(range(len(collect_allowed_senders))):
     if collect_allowed_senders[i].username=="":
