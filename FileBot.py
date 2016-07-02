@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.1
+VERSION_NUMBER=1.11
 
 
 """
@@ -18,11 +18,12 @@ import win32con
 import win32process
 import _winreg
 
+MAINTHREAD_HEARTBEAT_SECONDS=0.2
+PRIORITY_RECHECK_INTERVAL_SECONDS=60
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=50*1024*1024
 MAX_IM_SIZE_BYTES=4096
 LOG_LOCK=threading.Lock()
 PATH_7ZIP=""
-
 
 """
 DEFS
@@ -701,23 +702,15 @@ MAIN
 """
 
 
+
 report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
 report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n7-Zip x64 will be needed for /zip functionality.\n\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n")
 
-try:
-    current_pid=win32api.GetCurrentProcessId()
-    process_handle=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,current_pid)
-    win32process.SetPriorityClass(process_handle,win32process.IDLE_PRIORITY_CLASS)
-    report("Idle process priority set.")
-except:
-    report("Error setting process priority.")
-
-fatal_error=False
-
-collect_api_token=""
+CURRENT_PROCESS_ID=win32api.GetCurrentProcessId()
+CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,CURRENT_PROCESS_ID)
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
@@ -736,6 +729,9 @@ except:
 
 if PATH_7ZIP=="":
     report("m","WARNING: 7ZIP path not found in registry. \"/zip\" functionality will not be available.")
+
+fatal_error=False
+collect_api_token=""
 
 try:
     file_handle=open("token.txt","r")
@@ -780,9 +776,19 @@ if fatal_error==False:
         FileBotList.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
     Console=user_console(FileBotList)
 
+    process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
     while Console.IS_DONE()==False:
-        time.sleep(0.2)
+        time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
         sys.stdout.flush()
+        process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
+        if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
+            process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
+            try:
+                if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
+                    win32process.SetPriorityClass(process_handle,win32process.IDLE_PRIORITY_CLASS)
+                    report("m","Idle process priority set.")
+            except:
+                report("m","Error setting process priority.")
 
 while len(FileBotList)>0:
     del FileBotList[0]
