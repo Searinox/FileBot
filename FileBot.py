@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.11
+VERSION_NUMBER=1.12
 
 
 """
@@ -226,6 +226,7 @@ class user_fbot(object):
 
     def bot_thread_work(self):
         self.bot_handle=telepot.Bot(self.token)
+        last_check_status=False
         bot_get_ok=False
         while bot_get_ok==False:
             try:
@@ -243,10 +244,20 @@ class user_fbot(object):
             self.check_tasks()
             if self.listen_flag.is_set()==True:
                 response=[]
+
                 try:
                     response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                    check_status=True
                 except:
-                    report("w","<"+self.allowed_user+"> "+"Error retrieving messages.")
+                    check_status=False
+
+                if check_status!=last_check_status:
+                    last_check_status=check_status
+                    if check_status==True:
+                        report("w","<"+self.allowed_user+"> "+"Message retrieval is now online.")
+                    else:
+                        report("w","<"+self.allowed_user+"> "+"Stopped being able to retrieve messages.")
+
                 if len(response)>0:
                     self.process_messages(response)
 
