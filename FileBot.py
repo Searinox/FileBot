@@ -184,7 +184,7 @@ class user_fbot(object):
                 del self.lastsent_timers[0]
             return True
         except:
-            report("w","<"+self.allowed_user+"> "+"Bot was unable to respond.")
+            report("w","<"+self.allowed_user+"> "+"Bot instance was unable to respond.")
             return False
 
     def allowed_path(self,input_path):
@@ -221,19 +221,22 @@ class user_fbot(object):
         if self.pending_lockclear.is_set()==True:
             self.pending_lockclear.clear()
             self.bot_lock_pass=""
-            report("w","<"+self.allowed_user+"> "+"Bot unlocked by console.")
+            report("w","<"+self.allowed_user+"> "+"Bot instance unlocked by console.")
         return
 
     def bot_thread_work(self):
         self.bot_handle=telepot.Bot(self.token)
         last_check_status=False
         bot_get_ok=False
+        activation_fail_announced=False
         while bot_get_ok==False:
             try:
                 self.name=self.bot_handle.getMe()[u"username"]
                 bot_get_ok=True
             except:
-                report("w","<"+self.allowed_user+"> "+"Bot activation error.")
+                if activation_fail_announced==False:
+                    report("w","<"+self.allowed_user+"> "+"Bot instance activation error. Will continue trying...")
+                    activation_fail_announce=True
                 time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
 
         report("w","<"+self.allowed_user+"> "+"Bot instance for \""+self.allowed_user+"\" is now online.")
@@ -268,13 +271,16 @@ class user_fbot(object):
     def catch_up_IDs(self):
         retrieved=False
         responses=[]
+        announced_fail=False
         while retrieved==False:
             try:
                 responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
                 retrieved=True
                 report("w","<"+self.allowed_user+"> "+"Caught up with messages.")
             except:
-                report("w","<"+self.allowed_user+"> "+"Failed to catch up with messages.")
+                if announced_fail==False:
+                    report("w","<"+self.allowed_user+"> "+"Failed to catch up with messages. Will keep trying...")
+                    announced_fail=True
                 time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
@@ -397,7 +403,7 @@ class user_fbot(object):
                 if msg[len("/unlock "):].strip()==self.bot_lock_pass:
                     self.bot_lock_pass=""
                     self.sendmsg(sid,"Bot unlocked.")
-                    report("w","<"+self.allowed_user+"> "+"Bot unlocked by user.")
+                    report("w","<"+self.allowed_user+"> "+"Bot instance unlocked by user.")
                     return
                 else:
                     return
@@ -415,7 +421,7 @@ class user_fbot(object):
         response=""
         
         if command_type=="start":
-            report("w","<"+self.allowed_user+"> "+"Bot start requested.")
+            report("w","<"+self.allowed_user+"> "+"Bot instance start requested.")
         elif command_type=="dir":
 
             extra_search=""
@@ -444,7 +450,7 @@ class user_fbot(object):
             else:
                 folders_only=False
 
-            report("w","<"+self.allowed_user+"> "+"Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only)+".")
+            report("w","<"+self.allowed_user+"> "+"Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
 
             if command_args=="":
                 use_folder=self.last_folder
@@ -596,7 +602,7 @@ class user_fbot(object):
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
                 response="Bot locked."
-                report("w","<"+self.allowed_user+"> "+"Bot was locked down with password.")
+                report("w","<"+self.allowed_user+"> "+"Bot instance was locked down with password.")
             else:
                 response="Bad password for locking."
         elif command_type=="unlock":
@@ -791,7 +797,7 @@ if fatal_error==False and len(collect_allowed_senders)==0:
 BotInstances=[]
 
 if fatal_error==False:
-    report("m","Bot instances starting.")
+    report("m","Bot instances starting up...")
     for i in collect_allowed_senders:
         BotInstances.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
     Console=user_console(BotInstances)
