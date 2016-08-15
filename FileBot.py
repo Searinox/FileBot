@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.12
+VERSION_NUMBER=1.13
 
 
 """
@@ -235,7 +235,7 @@ class user_fbot(object):
                 bot_get_ok=True
             except:
                 if activation_fail_announced==False:
-                    report("w","<"+self.allowed_user+"> "+"Bot instance activation error. Will continue trying...")
+                    report("w","<"+self.allowed_user+"> "+"Bot instance activation error. Will keep trying...")
                     activation_fail_announce=True
                 time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
 
@@ -712,6 +712,8 @@ class user_entry(object):
                 if self.home[0]==">":
                     self.allow_write=True
                     self.home=self.home[1:]
+            if len(self.home)==0:
+                raise ValueError("Home path was empty.")
         except:
             report("m","WARNING: User list \""+from_string+"\" was not validly formatted.")
             self.username=""
