@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.13
+VERSION_NUMBER=1.14
 
 
 """
@@ -158,6 +158,8 @@ class user_fbot(object):
         self.allowed_root=input_root
         self.pending_lockclear=threading.Event()
         self.pending_lockclear.clear()
+        self.lock_status=threading.Event()
+        self.lock_status.clear()
         return
 
     def sendmsg(self,sid,msg):
@@ -402,6 +404,7 @@ class user_fbot(object):
             if msg.lower().find("/unlock ")==0:
                 if msg[len("/unlock "):].strip()==self.bot_lock_pass:
                     self.bot_lock_pass=""
+                    self.lock_status.clear()
                     self.sendmsg(sid,"Bot unlocked.")
                     report("w","<"+self.allowed_user+"> "+"Bot instance unlocked by user.")
                     return
@@ -602,6 +605,7 @@ class user_fbot(object):
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
                 response="Bot locked."
+                self.lock_status.set()
                 report("w","<"+self.allowed_user+"> "+"Bot instance was locked down with password.")
             else:
                 response="Bad password for locking."
@@ -657,6 +661,7 @@ class user_console(object):
             input_argument=user_data[1].strip()
         else:
             input_argument=""
+            
         if input_command=="start":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
@@ -665,6 +670,10 @@ class user_console(object):
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.LISTEN(False)
+        if input_command=="stats":
+            for i in self.bot_list:
+                if i.allowed_user.lower()==input_argument or input_argument=="":
+                    report("c","Bot instance for user \""+i.allowed_user+"\":\nHome path=\""+i.allowed_root+"\"\nWrite mode: "+str(i.allow_writing).upper()+"\nLocked: "+str(i.lock_status.is_set()).upper()+"\nListening: "+str(i.listen_flag.is_set()).upper()+"\n\n")
         if input_command=="unlock":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
@@ -674,6 +683,7 @@ class user_console(object):
             report("c","start [USER]: start listening to messages for user; leave blank to apply to all instances")
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
+            report("c","stats [USER]: list bot stats; leave blank to list all instances")
             report("c","help: display help\n")
         return
 
