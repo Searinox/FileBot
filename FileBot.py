@@ -789,7 +789,6 @@ MAIN
 """
 
 
-TELEGRAM_SERVER_TIMER_DELTA=-1
 LOG_LOCK=threading.Lock()
 TIMER_LOCK=threading.Lock()
 
@@ -801,8 +800,8 @@ report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlis
 
 CURRENT_PROCESS_ID=win32api.GetCurrentProcessId()
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,CURRENT_PROCESS_ID)
-
 PATH_7ZIP=""
+TELEGRAM_SERVER_TIMER_DELTA=-1
 
 try:
     reg_conn=_winreg.ConnectRegistry(None,_winreg.HKEY_LOCAL_MACHINE)
