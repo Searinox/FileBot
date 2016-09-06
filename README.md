@@ -1,5 +1,5 @@
 # FileBot
-Telegram file server bot.
+Telegram file server bot for Windows Vista and higher, 64-bit.
 
 This bot can be run and will serve files on the host machine.
 Type "help" in the console for a list of commands.
