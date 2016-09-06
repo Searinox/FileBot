@@ -724,7 +724,7 @@ class user_console(object):
         elif input_command=="sync":
             report("c","Manual time sync requested...")
             if Sync_Telegram_Server_Time():
-                report("c","Time sync successful. Local machine time difference is "+str(int(int(time.time())-telegram_time()))+" second(s).")
+                report("c","Time sync successful. Local machine time difference is "+str(int(int(round(time.time()))-telegram_time()))+" second(s).")
             else:
                 report("c","Time sync failed.")
         elif input_command=="help":
@@ -865,7 +865,7 @@ while time_synced==False:
     time_synced=Sync_Telegram_Server_Time()
     if time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-report("m","Sync completed. Local machine time difference is "+str(int(int(time.time())-telegram_time()))+" second(s).")
+report("m","Sync completed. Local machine time difference is "+str(int(int(round(time.time()))-telegram_time()))+" second(s).")
 
 BotInstances=[]
 
@@ -875,13 +875,13 @@ if fatal_error==False:
         BotInstances.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
     Console=user_console(BotInstances)
 
-    server_time_check=0
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
+    last_server_time_check=time.time()
+
     while Console.IS_DONE()==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
         sys.stdout.flush()
         process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
-        server_time_check+=MAINTHREAD_HEARTBEAT_SECONDS
         if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
             process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
             try:
@@ -891,12 +891,12 @@ if fatal_error==False:
             except:
                 report("m","Error managing process priority.")
 
-        if server_time_check>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
+        if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
             if Sync_Telegram_Server_Time()==True:
-                report("m","Automatic time synchronization was performed.")
+                report("m","Automatic time synchronization was performed. Local machine time difference is "+str(int(int(round(time.time()))-telegram_time()))+" second(s).")
             else:
                 report("m","Automatic time synchronization failed.")
-            server_time_check-=SERVER_TIME_RESYNC_INTERVAL_SECONDS
+            last_server_time_check=time.time()
 
 while len(BotInstances)>0:
     del BotInstances[0]
