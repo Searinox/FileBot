@@ -882,6 +882,7 @@ if fatal_error==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
         sys.stdout.flush()
         process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
+        server_time_check+=MAINTHREAD_HEARTBEAT_SECONDS
         if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
             process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
             try:
