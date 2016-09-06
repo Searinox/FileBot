@@ -150,7 +150,7 @@ def Live_UTC_Time():
     timestr=response.read()
     quot1=timestr.find("\"")
     quot2=quot1+1+timestr[quot1+1:].find("\"")
-    return int(timestr[quot1+1:quot2-6])
+    return round(int(timestr[quot1+1:quot2-3])/1000.0)
 
 def Sync_Telegram_Server_Time():
     global TELEGRAM_SERVER_TIMER_DELTA
@@ -203,9 +203,9 @@ class user_fbot(object):
 
     def sendmsg(self,sid,msg):
         for i in reversed(range(len(self.lastsent_timers))):
-            if time.time()-self.lastsent_timers[i]>=60:
+            if OS_uptime()-self.lastsent_timers[i]>=60:
                 del self.lastsent_timers[i]
-        second_delay=time.time()-self.last_send_time
+        second_delay=OS_uptime()-self.last_send_time
         if second_delay<1:
             second_delay=1-second_delay
         else:
@@ -217,7 +217,7 @@ class user_fbot(object):
         throttle_time=second_delay+max(extra_sleep-second_delay,0)
         time.sleep(throttle_time)
         try:
-            self.last_send_time=time.time()
+            self.last_send_time=OS_uptime()
             self.bot_handle.sendMessage(sid,msg)
             self.lastsent_timers.append(self.last_send_time)
             excess_entries=max(0,len(self.lastsent_timers)-40)
@@ -724,7 +724,7 @@ class user_console(object):
         elif input_command=="sync":
             report("c","Manual time sync requested...")
             if Sync_Telegram_Server_Time():
-                report("c","Time sync successful.")
+                report("c","Time sync successful. Local machine time difference is "+str(int(int(time.time())-telegram_time()))+" second(s).")
             else:
                 report("c","Time sync failed.")
         elif input_command=="help":
@@ -866,7 +866,7 @@ while time_synced==False:
     time_synced=Sync_Telegram_Server_Time()
     if time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-report("m","Sync completed.")
+report("m","Sync completed. Local machine time difference is "+str(int(int(time.time())-telegram_time()))+" second(s).")
 
 BotInstances=[]
 
