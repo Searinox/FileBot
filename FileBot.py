@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.14
+VERSION_NUMBER=1.15
 
 
 """
@@ -16,9 +16,12 @@ import subprocess
 import win32api
 import win32con
 import win32process
+import win32pdh
 import _winreg
+import urllib2
 
 MAINTHREAD_HEARTBEAT_SECONDS=1
+SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*24
 PRIORITY_RECHECK_INTERVAL_SECONDS=60
 BOT_WORKTHREAD_HEARTBEAT_SECONDS=1
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
@@ -135,6 +138,42 @@ def folder_list_string(input_folder,search_in,folders_only=False):
 
     return response
 
+def OS_uptime():
+    path=win32pdh.MakeCounterPath((None,"System",None,None,0,"System Up Time"))
+    query=win32pdh.OpenQuery()
+    handle=win32pdh.AddCounter(query,path)
+    win32pdh.CollectQueryData(query)
+    return win32pdh.GetFormattedCounterValue(handle,win32pdh.PDH_FMT_LONG|win32pdh.PDH_FMT_NOSCALE)[1]
+
+def Live_UTC_Time():
+    response=urllib2.urlopen("http://time.gov/actualtime.cgi")
+    timestr=response.read()
+    quot1=timestr.find("\"")
+    quot2=quot1+1+timestr[quot1+1:].find("\"")
+    return int(timestr[quot1+1:quot2-6])
+
+def Sync_Telegram_Server_Time():
+    global TELEGRAM_SERVER_TIMER_DELTA
+    begin_sync=OS_uptime()
+    TIMER_LOCK.acquire()
+    try:
+        TELEGRAM_SERVER_TIMER_DELTA=Live_UTC_Time()-OS_uptime()
+        end_sync=OS_uptime()
+        TELEGRAM_SERVER_TIMER_DELTA+=end_sync-begin_sync
+    except:
+        TIMER_LOCK.release()
+        return False
+    TIMER_LOCK.release()
+    return True
+
+def telegram_time():
+    global TELEGRAM_SERVER_TIMER_DELTA
+    global TIMER_LOCK
+    TIMER_LOCK.acquire()
+    retval=OS_uptime()+TELEGRAM_SERVER_TIMER_DELTA
+    TIMER_LOCK.release()
+    return retval
+
 class user_fbot(object):
     def __init__(self,input_token,input_root,input_user,input_write):
         self.name=""
@@ -204,7 +243,11 @@ class user_fbot(object):
     def usable_path(self,newpath):
         if self.allowed_path(newpath)==True:
             if os.path.exists(newpath)==True:
-                return True
+                try:
+                    test_path=win32api.GetLongPathNameW(win32api.GetShortPathName(newpath))
+                    return True
+                except:
+                    return False
         return False
 
     def rel_to_abs(self,raw_command_args,isfile=False):
@@ -287,7 +330,7 @@ class user_fbot(object):
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
         responses=[]
-        self.start_time=time.time()
+        self.start_time=telegram_time()
         return
 
     def START(self):
@@ -332,7 +375,7 @@ class user_fbot(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if time.time()-msg_send_time<=30:
+                    if telegram_time()-msg_send_time<=30:
                         if input_msglist[i][u"message"][u"from"][u"username"]==self.allowed_user:
                             if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
                                 collect_new_messages.insert(0,input_msglist[i][u"message"])
@@ -341,12 +384,11 @@ class user_fbot(object):
         self.last_ID_checked=newest_ID
 
         for m in collect_new_messages:
-            if time.time()-m[u"date"]<=30:
+            if telegram_time()-m[u"date"]<=30:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
                     if u"document" in m:
-                        print self.bot_handle.getFile(m[u"document"][u"file_id"])
                         self.process_files(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"])
                     elif u"audio" in m:
                         proceed=True
@@ -504,14 +546,14 @@ class user_fbot(object):
                         self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                     else:
                         if fsize!=0:
-                            response="Bots cannot upload files larger than 50MB."
+                            response="Bots cannot upload files larger than "+readable_size(BOTS_MAX_ALLOWED_FILESIZE_BYTES)+"."
                         else:
                             response="File is empty."
                 except:
                     response="Problem getting file."
                     report("w","<"+self.allowed_user+"> "+"File send error.")
             else:
-                response="File not found."
+                response="File not found or inaccessible."
         elif command_type=="eat" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -540,7 +582,7 @@ class user_fbot(object):
                         response="Problem deleting file."
                         report("w","<"+self.allowed_user+"> "+"File delete error.")
             else:
-                response="File not found."
+                response="File not found or inaccessible."
         elif command_type=="del" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -553,7 +595,7 @@ class user_fbot(object):
                     response="Problem deleting file."
                     report("w","<"+self.allowed_user+"> "+"File delete error.")
             else:
-                response="File not found."
+                response="File not found or inaccessible."
         elif command_type=="up":
             if self.last_folder.count("\\")>1:
                 newpath=self.last_folder[:-1]
@@ -599,8 +641,8 @@ class user_fbot(object):
                     response="Problem getting file."
                     report("w","<"+self.allowed_user+"> "+"Zip \""+command_args+"\" failed.")
             else:
-                response="File not found."
-                report("w","<"+self.allowed_user+"> "+"[BOTWRK] Zip \""+command_args+"\" file not found.")
+                response="File not found or inaccessible."
+                report("w","<"+self.allowed_user+"> "+"[BOTWRK] Zip \""+command_args+"\" file not found or inaccessible.")
         elif command_type=="lock":
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
@@ -617,7 +659,8 @@ class user_fbot(object):
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+="/zip <PATH[FILE]>: make a 7ZIP archive, extension will be .7z.TMP until finished\n"
+                if PATH_7ZIP!="":
+                    response+="/zip <PATH[FILE]>: make a 7-ZIP archive, extension will be .7z.TMP until finished\n"
             response+="/up: move up one folder from current path\n"
             response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram\n"
             if self.allow_writing==True:
@@ -666,25 +709,34 @@ class user_console(object):
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.LISTEN(True)
-        if input_command=="stop":
+        elif input_command=="stop":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.LISTEN(False)
-        if input_command=="stats":
+        elif input_command=="stats":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     report("c","Bot instance for user \""+i.allowed_user+"\":\nHome path=\""+i.allowed_root+"\"\nWrite mode: "+str(i.allow_writing).upper()+"\nLocked: "+str(i.lock_status.is_set()).upper()+"\nListening: "+str(i.listen_flag.is_set()).upper()+"\n\n")
-        if input_command=="unlock":
+        elif input_command=="unlock":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.pending_lockclear.set()
-        if input_command=="help":
+        elif input_command=="sync":
+            report("c","Manual time sync requested...")
+            if Sync_Telegram_Server_Time():
+                report("c","Time sync successful.")
+            else:
+                report("c","Time sync failed.")
+        elif input_command=="help":
             report("c","AVAILABLE CONSOLE COMMANDS:\n")
             report("c","start [USER]: start listening to messages for user; leave blank to apply to all instances")
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","stats [USER]: list bot stats; leave blank to list all instances")
+            report("c","sync: manually resynchronize bot timer with internet world time")
             report("c","help: display help\n")
+        else:
+            report("c","Unrecognized command. Type \"help\" for a list of commands.")
         return
 
     def process_input(self):
@@ -737,7 +789,9 @@ MAIN
 """
 
 
+TELEGRAM_SERVER_TIMER_DELTA=-1
 LOG_LOCK=threading.Lock()
+TIMER_LOCK=threading.Lock()
 
 report("==========================FileBot==========================")
 report("Author: Searinox Navras")
@@ -766,7 +820,7 @@ except:
     pass
 
 if PATH_7ZIP=="":
-    report("m","WARNING: 7ZIP path not found in registry. \"/zip\" functionality will not be available.")
+    report("m","WARNING: 7-ZIP path not found in registry. \"/zip\" functionality will not be available.")
 
 fatal_error=False
 collect_api_token=""
@@ -806,6 +860,14 @@ if fatal_error==False and len(collect_allowed_senders)==0:
     report("m","ERROR: There were no valid user lists to add.")
     fatal_error=True
 
+report("m","Synchronizing with internet time...")
+time_synced=False
+while time_synced==False:
+    time_synced=Sync_Telegram_Server_Time()
+    if time_synced==False:
+        time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
+report("m","Sync completed.")
+
 BotInstances=[]
 
 if fatal_error==False:
@@ -814,6 +876,7 @@ if fatal_error==False:
         BotInstances.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
     Console=user_console(BotInstances)
 
+    server_time_check=0
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
     while Console.IS_DONE()==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
@@ -827,6 +890,13 @@ if fatal_error==False:
                     report("m","Idle process priority set.")
             except:
                 report("m","Error managing process priority.")
+
+        if server_time_check>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
+            if Sync_Telegram_Server_Time()==True:
+                report("m","Automatic time synchronization was performed.")
+            else:
+                report("m","Automatic time synchronization failed.")
+            server_time_check-=SERVER_TIME_RESYNC_INTERVAL_SECONDS
 
 while len(BotInstances)>0:
     del BotInstances[0]
