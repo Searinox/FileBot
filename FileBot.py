@@ -88,11 +88,11 @@ def readable_size(input_size):
     if input_size<1024:
         return str(input_size)+" Bytes"
     if input_size<1024**2:
-        return str(round(input_size/1024.0,2))+" KB"
+        return str(int(round(input_size/1024.0,2)))+" KB"
     if input_size<1024**3:
-        return str(round(input_size/1024.0**2,2))+" MB"
+        return str(int(round(input_size/1024.0**2,2)))+" MB"
     if input_size<1024**4:
-        return str(round(input_size/1024.0**3,2))+" GB"
+        return str(int(round(input_size/1024.0**3,2)))+" GB"
 
 def folder_list_string(input_folder,search_in,folders_only=False):
     search=search_in.lower()
@@ -150,7 +150,7 @@ def Live_UTC_Time():
     timestr=response.read()
     quot1=timestr.find("\"")
     quot2=quot1+1+timestr[quot1+1:].find("\"")
-    return round(int(timestr[quot1+1:quot2-3])/1000.0)
+    return int(round(int(timestr[quot1+1:quot2-3])/1000.0))
 
 def Sync_Telegram_Server_Time():
     global TELEGRAM_SERVER_TIMER_DELTA
