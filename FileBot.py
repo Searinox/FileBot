@@ -885,7 +885,7 @@ if fatal_error==False:
     Console=user_console(BotInstances)
 
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
-    last_server_time_check=time.time()
+    last_server_time_check=time.time()-SERVER_TIME_RESYNC_INTERVAL_SECONDS
 
     while Console.IS_DONE()==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
