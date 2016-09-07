@@ -1,5 +1,4 @@
-# FileBot
-# Telegram file server bot for Windows Vista and higher, 64-bit.
+# FileBot - Telegram file server bot for Windows Vista and higher, 64-bit.
 
 This bot is based on the Telepot library by nickcoala. (https://github.com/nickoala/telepot)
 
