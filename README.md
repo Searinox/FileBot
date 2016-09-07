@@ -1,6 +1,8 @@
 # FileBot
 Telegram file server bot for Windows Vista and higher, 64-bit.
 
+This bot is based on the Telepot library by nickcoala. (https://github.com/nickoala/telepot)
+
 This bot can be run and will serve files on the host machine.
 Type "help" in the console for a list of commands.
 Formatting info for token and allowed users + paths is available at console startup.
