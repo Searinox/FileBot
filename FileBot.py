@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.15
+VERSION_NUMBER=1.16
 
 
 """
@@ -152,26 +152,33 @@ def Live_UTC_Time():
     quot2=quot1+1+timestr[quot1+1:].find("\"")
     return int(round(int(timestr[quot1+1:quot2-3])/1000.0))
 
-def Sync_Telegram_Server_Time():
+def Sync_Server_Time():
     global TELEGRAM_SERVER_TIMER_DELTA
-    begin_sync=OS_uptime()
-    TIMER_LOCK.acquire()
-    try:
-        TELEGRAM_SERVER_TIMER_DELTA=Live_UTC_Time()-OS_uptime()
-        end_sync=OS_uptime()
-        TELEGRAM_SERVER_TIMER_DELTA+=end_sync-begin_sync
-    except:
-        TIMER_LOCK.release()
-        return False
-    TIMER_LOCK.release()
-    return True
+    update_success=False
 
-def telegram_time():
+    try:
+        begin_sync=OS_uptime()
+        get_new_delta=Live_UTC_Time()-OS_uptime()
+        end_sync=OS_uptime()
+        get_new_delta+=end_sync-begin_sync
+        update_success=True
+    except:
+        pass
+
+    if update_success==True:
+        TIMER_LOCK.acquire()
+        TELEGRAM_SERVER_TIMER_DELTA=get_new_delta
+        TIMER_LOCK.release()
+
+    return update_success
+
+def server_time():
     global TELEGRAM_SERVER_TIMER_DELTA
     global TIMER_LOCK
     TIMER_LOCK.acquire()
-    retval=OS_uptime()+TELEGRAM_SERVER_TIMER_DELTA
+    get_delta=TELEGRAM_SERVER_TIMER_DELTA
     TIMER_LOCK.release()
+    retval=OS_uptime()+get_delta
     return retval
 
 class user_fbot(object):
@@ -330,7 +337,7 @@ class user_fbot(object):
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
         responses=[]
-        self.start_time=telegram_time()
+        self.start_time=server_time()
         return
 
     def START(self):
@@ -375,7 +382,7 @@ class user_fbot(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if telegram_time()-msg_send_time<=30:
+                    if server_time()-msg_send_time<=30:
                         if input_msglist[i][u"message"][u"from"][u"username"]==self.allowed_user:
                             if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
                                 collect_new_messages.insert(0,input_msglist[i][u"message"])
@@ -384,7 +391,7 @@ class user_fbot(object):
         self.last_ID_checked=newest_ID
 
         for m in collect_new_messages:
-            if telegram_time()-m[u"date"]<=30:
+            if server_time()-m[u"date"]<=30:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
@@ -723,8 +730,8 @@ class user_console(object):
                     i.pending_lockclear.set()
         elif input_command=="sync":
             report("c","Manual time sync requested...")
-            if Sync_Telegram_Server_Time():
-                report("c","Time sync successful. Local machine time difference is "+str(int(int(round(time.time()))-telegram_time()))+" second(s).")
+            if Sync_Server_Time():
+                report("c","Time sync successful. Local machine time difference is "+str(int(int(round(time.time()))-server_time()))+" second(s).")
             else:
                 report("c","Time sync failed.")
         elif input_command=="help":
@@ -733,7 +740,7 @@ class user_console(object):
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","stats [USER]: list bot stats; leave blank to list all instances")
-            report("c","sync: manually resynchronize bot timer with internet world time")
+            report("c","sync: manually re-synchronize bot time with internet world time")
             report("c","help: display help\n")
         else:
             report("c","Unrecognized command. Type \"help\" for a list of commands.")
@@ -796,7 +803,7 @@ report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
-report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n7-Zip x64 will be needed for /zip functionality.\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n")
+report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n7-ZIP x64 will be needed for \"/zip\" functionality.\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n")
 
 CURRENT_PROCESS_ID=win32api.GetCurrentProcessId()
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,CURRENT_PROCESS_ID)
@@ -820,6 +827,8 @@ except:
 
 if PATH_7ZIP=="":
     report("m","WARNING: 7-ZIP path not found in registry. \"/zip\" functionality will not be available.")
+else:
+    report("m","7-ZIP installation path found at \""+PATH_7ZIP+"\".")
 
 fatal_error=False
 collect_api_token=""
@@ -862,10 +871,10 @@ if fatal_error==False and len(collect_allowed_senders)==0:
 report("m","Synchronizing with internet time...")
 time_synced=False
 while time_synced==False:
-    time_synced=Sync_Telegram_Server_Time()
+    time_synced=Sync_Server_Time()
     if time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-report("m","Sync completed. Local machine time difference is "+str(int(int(round(time.time()))-telegram_time()))+" second(s).")
+report("m","Sync completed. Local machine time difference is "+str(int(int(round(time.time()))-server_time()))+" second(s).")
 
 BotInstances=[]
 
@@ -892,8 +901,8 @@ if fatal_error==False:
                 report("m","Error managing process priority.")
 
         if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
-            if Sync_Telegram_Server_Time()==True:
-                report("m","Automatic time synchronization was performed. Local machine time difference is "+str(int(int(round(time.time()))-telegram_time()))+" second(s).")
+            if Sync_Server_Time()==True:
+                report("m","Automatic time synchronization was performed. Local machine time difference is "+str(int(int(round(time.time()))-server_time()))+" second(s).")
             else:
                 report("m","Automatic time synchronization failed.")
             last_server_time_check=time.time()
