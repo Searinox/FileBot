@@ -145,7 +145,7 @@ def OS_uptime():
     win32pdh.CollectQueryData(query)
     return win32pdh.GetFormattedCounterValue(handle,win32pdh.PDH_FMT_LONG|win32pdh.PDH_FMT_NOSCALE)[1]
 
-def Live_UTC_Time():
+def Current_UTC_Internet_Time():
     response=urllib2.urlopen("http://time.gov/actualtime.cgi")
     timestr=response.read()
     quot1=timestr.find("\"")
@@ -153,12 +153,14 @@ def Live_UTC_Time():
     return int(round(int(timestr[quot1+1:quot2-3])/1000.0))
 
 def Sync_Server_Time():
+    global TIME_DELTA_LOCK
     global TELEGRAM_SERVER_TIMER_DELTA
+
     update_success=False
 
     try:
         begin_sync=OS_uptime()
-        get_new_delta=Live_UTC_Time()-OS_uptime()
+        get_new_delta=Current_UTC_Internet_Time()-OS_uptime()
         end_sync=OS_uptime()
         get_new_delta+=end_sync-begin_sync
         update_success=True
@@ -166,19 +168,21 @@ def Sync_Server_Time():
         pass
 
     if update_success==True:
-        TIMER_LOCK.acquire()
+        TIME_DELTA_LOCK.acquire()
         TELEGRAM_SERVER_TIMER_DELTA=get_new_delta
-        TIMER_LOCK.release()
+        TIME_DELTA_LOCK.release()
 
     return update_success
 
 def server_time():
+    global TIME_DELTA_LOCK
     global TELEGRAM_SERVER_TIMER_DELTA
-    global TIMER_LOCK
-    TIMER_LOCK.acquire()
+
+    TIME_DELTA_LOCK.acquire()
     get_delta=TELEGRAM_SERVER_TIMER_DELTA
-    TIMER_LOCK.release()
+    TIME_DELTA_LOCK.release()
     retval=OS_uptime()+get_delta
+
     return retval
 
 class user_fbot(object):
@@ -736,7 +740,7 @@ class user_console(object):
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","stats [USER]: list bot stats; leave blank to list all instances")
-            report("c","sync: manually re-synchronize bot time with internet world time")
+            report("c","sync: manually re-synchronize bot time with Internet world time")
             report("c","help: display help\n")
         else:
             report("c","Unrecognized command. Type \"help\" for a list of commands.")
@@ -792,8 +796,8 @@ MAIN
 """
 
 
+TIME_DELTA_LOCK=threading.Lock()
 LOG_LOCK=threading.Lock()
-TIMER_LOCK=threading.Lock()
 
 report("==========================FileBot==========================")
 report("Author: Searinox Navras")
@@ -864,7 +868,7 @@ if fatal_error==False and len(collect_allowed_senders)==0:
     report("m","ERROR: There were no valid user lists to add.")
     fatal_error=True
 
-report("m","Synchronizing with internet time...")
+report("m","Synchronizing with Internet time...")
 time_synced=False
 while time_synced==False:
     time_synced=Sync_Server_Time()
