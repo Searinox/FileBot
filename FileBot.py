@@ -615,15 +615,11 @@ class user_fbot(object):
                     response="Already at top folder."
             else:
                 response="Already at top folder."
-        elif command_type=="zip" and self.allow_writing==True:
-            if PATH_7ZIP!="":
-                newpath=self.rel_to_abs(command_args)
-            else:
-                response="7ZIP install was not found."
-                report("w","<"+self.allowed_user+"> "+"Attempted to call 7ZIP but install is missing.")
+        elif command_type=="zip" and self.allow_writing==True and PATH_7ZIP!="":
+            newpath=self.rel_to_abs(command_args)
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
-            if self.usable_path(newpath)==True and PATH_7ZIP!="":
+            if self.usable_path(newpath)==True:
                 try:
                     if os.path.isfile(newpath):
                         folder_path=newpath[:newpath.rfind("\\")+1]
