@@ -21,12 +21,12 @@ import _winreg
 import urllib2
 
 MAINTHREAD_HEARTBEAT_SECONDS=1
-SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*24
+SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*12
 PRIORITY_RECHECK_INTERVAL_SECONDS=60
 BOT_WORKTHREAD_HEARTBEAT_SECONDS=1
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
 
-BOTS_MAX_ALLOWED_FILESIZE_BYTES=50*1024*1024
+BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
 
 
@@ -74,6 +74,58 @@ def report(source,input_data=""):
 
     LOG_LOCK.release()
     return
+
+def OS_uptime():
+    path=win32pdh.MakeCounterPath((None,"System",None,None,0,"System Up Time"))
+    query=win32pdh.OpenQuery()
+    handle=win32pdh.AddCounter(query,path)
+    win32pdh.CollectQueryData(query)
+    return win32pdh.GetFormattedCounterValue(handle,win32pdh.PDH_FMT_LONG|win32pdh.PDH_FMT_NOSCALE)[1]
+
+def Current_UTC_Internet_Time():
+    response=urllib2.urlopen("http://time.gov/actualtime.cgi")
+    timestr=response.read()
+    quot1=timestr.find("time=\"")
+    quot1+=len("time=\"")
+    quot2=quot1+timestr[quot1+1:].find("\"")
+    quot2+=1
+    return int(timestr[quot1:quot2-3])/1000.0
+
+def Sync_Server_Time():
+    global TIME_DELTA_LOCK
+    global TELEGRAM_SERVER_TIMER_DELTA
+
+    update_success=False
+
+    try:
+        get_new_delta=Current_UTC_Internet_Time()-OS_uptime()
+        update_success=True
+    except:
+        pass
+
+    if update_success==True:
+        TIME_DELTA_LOCK.acquire()
+        TELEGRAM_SERVER_TIMER_DELTA=get_new_delta
+        TIME_DELTA_LOCK.release()
+
+    return update_success
+
+def server_time():
+    global TIME_DELTA_LOCK
+    global TELEGRAM_SERVER_TIMER_DELTA
+
+    TIME_DELTA_LOCK.acquire()
+    get_delta=TELEGRAM_SERVER_TIMER_DELTA
+    TIME_DELTA_LOCK.release()
+    return round(OS_uptime()+get_delta)
+
+def local_machine_time_delta_str():
+    time_difference_int=int(int(round(time.time()))-server_time())
+    if time_difference_int>0:
+        retval="+"+str(time_difference_int)
+    else:
+        retval=str(time_difference_int)
+    return retval
 
 def chunkalize(input_string,chunksize):
     retval=[]
@@ -137,53 +189,6 @@ def folder_list_string(input_folder,search_in,folders_only=False):
         response="<Bad dir path.>"
 
     return response
-
-def OS_uptime():
-    path=win32pdh.MakeCounterPath((None,"System",None,None,0,"System Up Time"))
-    query=win32pdh.OpenQuery()
-    handle=win32pdh.AddCounter(query,path)
-    win32pdh.CollectQueryData(query)
-    return win32pdh.GetFormattedCounterValue(handle,win32pdh.PDH_FMT_LONG|win32pdh.PDH_FMT_NOSCALE)[1]
-
-def Current_UTC_Internet_Time():
-    response=urllib2.urlopen("http://time.gov/actualtime.cgi")
-    timestr=response.read()
-    quot1=timestr.find("\"")
-    quot2=quot1+1+timestr[quot1+1:].find("\"")
-    return int(round(int(timestr[quot1+1:quot2-3])/1000.0))
-
-def Sync_Server_Time():
-    global TIME_DELTA_LOCK
-    global TELEGRAM_SERVER_TIMER_DELTA
-
-    update_success=False
-
-    try:
-        begin_sync=OS_uptime()
-        get_new_delta=Current_UTC_Internet_Time()-OS_uptime()
-        end_sync=OS_uptime()
-        get_new_delta+=end_sync-begin_sync
-        update_success=True
-    except:
-        pass
-
-    if update_success==True:
-        TIME_DELTA_LOCK.acquire()
-        TELEGRAM_SERVER_TIMER_DELTA=get_new_delta
-        TIME_DELTA_LOCK.release()
-
-    return update_success
-
-def server_time():
-    global TIME_DELTA_LOCK
-    global TELEGRAM_SERVER_TIMER_DELTA
-
-    TIME_DELTA_LOCK.acquire()
-    get_delta=TELEGRAM_SERVER_TIMER_DELTA
-    TIME_DELTA_LOCK.release()
-    retval=OS_uptime()+get_delta
-
-    return retval
 
 class user_fbot(object):
     def __init__(self,input_token,input_root,input_user,input_write):
@@ -729,9 +734,9 @@ class user_console(object):
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     i.pending_lockclear.set()
         elif input_command=="sync":
-            report("c","Manual time sync requested...")
+            report("c","Manual Internet time synchronization requested...")
             if Sync_Server_Time():
-                report("c","Time sync successful. Local machine time difference is "+str(int(int(round(time.time()))-server_time()))+" second(s).")
+                report("c","Manual Internet time synchronization successful. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
             else:
                 report("c","Time sync failed.")
         elif input_command=="help":
@@ -740,7 +745,7 @@ class user_console(object):
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","stats [USER]: list bot stats; leave blank to list all instances")
-            report("c","sync: manually re-synchronize bot time with Internet world time")
+            report("c","sync: manually re-synchronize bot time with Internet time")
             report("c","help: display help\n")
         else:
             report("c","Unrecognized command. Type \"help\" for a list of commands.")
@@ -868,13 +873,13 @@ if fatal_error==False and len(collect_allowed_senders)==0:
     report("m","ERROR: There were no valid user lists to add.")
     fatal_error=True
 
-report("m","Synchronizing with Internet time...")
+report("m","Performing initial Internet time synchronization...")
 time_synced=False
 while time_synced==False:
     time_synced=Sync_Server_Time()
     if time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-report("m","Sync completed. Local machine time difference is "+str(int(int(round(time.time()))-server_time()))+" second(s).")
+report("m","Initial Internet time synchronization completed. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
 
 BotInstances=[]
 
@@ -885,7 +890,7 @@ if fatal_error==False:
     Console=user_console(BotInstances)
 
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
-    last_server_time_check=time.time()-SERVER_TIME_RESYNC_INTERVAL_SECONDS
+    last_server_time_check=time.time()
 
     while Console.IS_DONE()==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
@@ -901,8 +906,9 @@ if fatal_error==False:
                 report("m","Error managing process priority.")
 
         if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
+            report("m","Performing automatic Internet time synchronization...")
             if Sync_Server_Time()==True:
-                report("m","Automatic time synchronization was performed. Local machine time difference is "+str(int(int(round(time.time()))-server_time()))+" second(s).")
+                report("m","Automatic time synchronization complete. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
             else:
                 report("m","Automatic time synchronization failed.")
             last_server_time_check=time.time()
