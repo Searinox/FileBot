@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.16
+VERSION_NUMBER=1.21
 
 
 """
@@ -11,6 +11,7 @@ import sys
 import time
 import datetime
 import threading
+import warnings
 import telepot
 import subprocess
 import win32api
@@ -23,7 +24,8 @@ import urllib2
 MAINTHREAD_HEARTBEAT_SECONDS=1
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*12
 PRIORITY_RECHECK_INTERVAL_SECONDS=60
-BOT_WORKTHREAD_HEARTBEAT_SECONDS=1
+LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
+USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
@@ -48,13 +50,17 @@ def report(source,input_data=""):
     if len(source_literal)>0:
         source_literal=source_literal[0]
     if source_literal=="w":
-        source_literal="BOT_WRK"
-    elif source_literal=="b":
-        source_literal="BOT_OBJ"
+        source_literal="USRMSGHN"
+    elif source_literal=="u":
+        source_literal="UMSGHMGR"
     elif source_literal=="c":
-        source_literal="CONSOLE"
+        source_literal="UCONSOLE"
     elif source_literal=="m":
-        source_literal="MAINTRD"
+        source_literal="MAINTHRD"
+    elif source_literal=="l":
+        source_literal="LSTNSRVC"
+    elif source_literal=="o":
+        source_literal="LSNSVMGR"
     if source_literal!="":
         source_literal=" ["+source_literal+"] "
     else:
@@ -190,18 +196,160 @@ def folder_list_string(input_folder,search_in,folders_only=False):
 
     return response
 
-class user_fbot(object):
-    def __init__(self,input_token,input_root,input_user,input_write):
-        self.name=""
-        self.bot_thread=threading.Thread(target=self.bot_thread_work)
+class listener_object(object):
+    def __init__(self,input_token,username_list):
+        self.token=input_token
+        self.keep_running=threading.Event()
+        self.keep_running.clear()
+        self.has_exited=threading.Event()
+        self.has_exited.set()
+        self.is_active=threading.Event()
+        self.is_active.clear()
+        self.last_ID_checked=-1
+        self.start_time=0
+        self.listen_thread=threading.Thread(target=self.listen_thread_work)
+        self.listen_thread.daemon=True
+        self.listen_users=username_list
+        self.messagelist_lock={}
+        for i in self.listen_users:
+            self.messagelist_lock[i]=threading.Lock()
+        self.user_messages={}
+        for i in self.listen_users:
+            self.user_messages[i]=[]
+        return
+
+    def START(self):
+        report("o","Listener service start issued.")
+        self.has_exited.clear()
+        self.keep_running.set()
+        self.listen_thread.start()
+        
+    def STOP(self):
+        report("o","Listener service stop issued.")
+        self.keep_running.clear()
+    
+    def IS_RUNNING(self):
+        return self.has_exited.is_set()==False
+        
+    def ACTIVE(self):
+        return self.is_active.is_set()==True
+
+    def listen_thread_work(self):
+        self.bot_handle=telepot.Bot(self.token)
+        last_check_status=False
+        bot_bind_ok=False
+        activation_fail_announced=False
+        self.is_active.set()
+
+        while bot_bind_ok==False:
+            try:
+                self.name=self.bot_handle.getMe()[u"username"]
+                bot_bind_ok=True
+            except:
+                if activation_fail_announced==False:
+                    report("l","Listener service activation error. Will keep trying...")
+                    activation_fail_announce=True
+                time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+
+        report("l","Listener service for bot \""+self.name+"\" is now online.")
+        self.catch_up_IDs()
+
+        while self.keep_running.is_set()==True:
+            time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+            response=[]
+
+            try:
+                response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                check_status=True
+            except:
+                check_status=False
+
+            if check_status!=last_check_status:
+                last_check_status=check_status
+                if check_status==True:
+                    report("l","Message retrieval is now online.")
+                else:
+                    report("l","Stopped being able to retrieve messages.")
+
+            self.organize_messages(response)
+
+        self.is_active.clear()
+        report("l","Listener has exited.")
+        self.has_exited.set()
+        return
+
+    def catch_up_IDs(self):
+        retrieved=False
+        responses=[]
+        announced_fail=False
+        while retrieved==False:
+            try:
+                responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                retrieved=True
+                report("l","Caught up with messages.")
+            except:
+                if announced_fail==False:
+                    report("l","Failed to catch up with messages. Will keep trying...")
+                    announced_fail=True
+                time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+        if len(responses)>0:
+            self.last_ID_checked=responses[-1][u"update_id"]
+        responses=[]
+        self.start_time=server_time()
+        return
+
+    def organize_messages(self,input_msglist):
+        collect_new_messages={}
+        for i in self.listen_users:
+            collect_new_messages[i]=[]
+
+        newest_ID=self.last_ID_checked
+        for i in reversed(range(len(input_msglist))):
+            this_msg_ID=input_msglist[i][u"update_id"]
+            if this_msg_ID>self.last_ID_checked:
+                if newest_ID<this_msg_ID:
+                    newest_ID=this_msg_ID
+                try:
+                    msg_send_time=input_msglist[i][u"message"][u"date"]
+                except:
+                    msg_send_time=0
+                if msg_send_time>=self.start_time:
+                    if server_time()-msg_send_time<=30:
+                        msg_user=input_msglist[i][u"message"][u"from"][u"username"]
+                        if msg_user in self.listen_users:
+                            if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
+                                collect_new_messages[msg_user].insert(0,input_msglist[i][u"message"])
+            else:
+                break
+        self.last_ID_checked=newest_ID
+
+        for i in collect_new_messages:
+            self.messagelist_lock[i].acquire()
+            if len(collect_new_messages[i])>0:
+                self.user_messages[i]+=collect_new_messages[i]
+            for j in reversed(range(len(self.user_messages[i]))):
+                if server_time()-self.user_messages[i][j][u"date"]>30:
+                    del self.user_messages[i][j]
+            self.messagelist_lock[i].release()
+        return
+
+    def consume_user_messages(self,input_username):
+        self.messagelist_lock[input_username].acquire()
+        get_messages=self.user_messages[input_username]
+        self.user_messages[input_username]=[]
+        self.messagelist_lock[input_username].release()
+        return get_messages
+
+class user_message_handler(object):
+    def __init__(self,input_token,input_root,input_user,input_write,input_listener_service):
+        self.bot_thread=threading.Thread(target=self.message_handler_thread_work)
         self.bot_thread.daemon=True
         self.token=input_token
+        self.listener=input_listener_service
         self.keep_running=threading.Event()
         self.keep_running.clear()
         self.bot_has_exited=threading.Event()
         self.bot_has_exited.set()
-        self.last_ID_checked=-1
-        self.start_time=0
         self.last_folder=""
         self.allow_writing=input_write
         self.listen_flag=threading.Event()
@@ -241,7 +389,7 @@ class user_fbot(object):
                 del self.lastsent_timers[0]
             return True
         except:
-            report("w","<"+self.allowed_user+"> "+"Bot instance was unable to respond.")
+            report("w","<"+self.allowed_user+"> "+"Message handler was unable to respond.")
             return False
 
     def allowed_path(self,input_path):
@@ -282,75 +430,44 @@ class user_fbot(object):
         if self.pending_lockclear.is_set()==True:
             self.pending_lockclear.clear()
             self.bot_lock_pass=""
-            report("w","<"+self.allowed_user+"> "+"Bot instance unlocked by console.")
+            report("w","<"+self.allowed_user+"> "+"Message handler unlocked by console.")
+            self.listener.consume_user_messages(self.allowed_user)
         return
 
-    def bot_thread_work(self):
+    def message_handler_thread_work(self):
         self.bot_handle=telepot.Bot(self.token)
         last_check_status=False
-        bot_get_ok=False
+        bot_bind_ok=False
         activation_fail_announced=False
-        while bot_get_ok==False:
+        while bot_bind_ok==False:
             try:
-                self.name=self.bot_handle.getMe()[u"username"]
-                bot_get_ok=True
+                get_name=self.bot_handle.getMe()[u"username"]
+                bot_bind_ok=True
             except:
                 if activation_fail_announced==False:
-                    report("w","<"+self.allowed_user+"> "+"Bot instance activation error. Will keep trying...")
+                    report("w","<"+self.allowed_user+"> "+"Message handler activation error. Will keep trying...")
                     activation_fail_announce=True
-                time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
+                time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
 
-        report("w","<"+self.allowed_user+"> "+"Bot instance for \""+self.allowed_user+"\" is now online.")
-        self.catch_up_IDs()
+        report("w","<"+self.allowed_user+"> "+"Message handler for user \""+self.allowed_user+"\" is now online.")
+        self.listener.consume_user_messages(self.allowed_user)
 
         while self.keep_running.is_set()==True:
-            time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
+            time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
             self.check_tasks()
             if self.listen_flag.is_set()==True:
-                response=[]
+                new_messages=self.listener.consume_user_messages(self.allowed_user)
+                total_new_messages=len(new_messages)
+                if total_new_messages>0:
+                    report("w","<"+self.allowed_user+"> "+str(total_new_messages)+" new message(s) received.")
+                    self.process_messages(new_messages)
 
-                try:
-                    response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
-                    check_status=True
-                except:
-                    check_status=False
-
-                if check_status!=last_check_status:
-                    last_check_status=check_status
-                    if check_status==True:
-                        report("w","<"+self.allowed_user+"> "+"Message retrieval is now online.")
-                    else:
-                        report("w","<"+self.allowed_user+"> "+"Stopped being able to retrieve messages.")
-
-                if len(response)>0:
-                    self.process_messages(response)
-
-        report("w","<"+self.allowed_user+"> "+"Bot instance exited.")
+        report("w","<"+self.allowed_user+"> "+"Message handler exited.")
         self.bot_has_exited.set()
         return
 
-    def catch_up_IDs(self):
-        retrieved=False
-        responses=[]
-        announced_fail=False
-        while retrieved==False:
-            try:
-                responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
-                retrieved=True
-                report("w","<"+self.allowed_user+"> "+"Caught up with messages.")
-            except:
-                if announced_fail==False:
-                    report("w","<"+self.allowed_user+"> "+"Failed to catch up with messages. Will keep trying...")
-                    announced_fail=True
-                time.sleep(BOT_WORKTHREAD_HEARTBEAT_SECONDS)
-        if len(responses)>0:
-            self.last_ID_checked=responses[-1][u"update_id"]
-        responses=[]
-        self.start_time=server_time()
-        return
-
     def START(self):
-        report("b","<"+self.allowed_user+"> "+"Bot instance start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
+        report("u","<"+self.allowed_user+"> "+"User message handler start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
         self.bot_has_exited.clear()
         self.keep_running.set()
         self.bot_thread.start()
@@ -358,19 +475,19 @@ class user_fbot(object):
 
     def LISTEN(self,new_state):
         if new_state==True:
-            report("b","<"+self.allowed_user+"> "+"Listen started.")
+            report("u","<"+self.allowed_user+"> "+"Listen started.")
             if self.allowed_root=="*":
                 self.last_folder="C:\\"
             else:
                 self.last_folder=self.allowed_root
-            self.catch_up_IDs()
+            self.listener.consume_user_messages(self.allowed_user)
             self.listen_flag.set()
         else:
-            report("b","<"+self.allowed_user+"> "+"Listen stopped.")
+            report("u","<"+self.allowed_user+"> "+"Listen stopped.")
             self.listen_flag.clear()
 
     def STOP(self):
-        report("b","<"+self.allowed_user+"> "+"Bot instance stop issued.")
+        report("u","<"+self.allowed_user+"> "+"Message handler stop issued.")
         self.listen_flag.clear()
         self.keep_running.clear()
         return
@@ -379,27 +496,7 @@ class user_fbot(object):
         return self.bot_has_exited.is_set()==False
 
     def process_messages(self,input_msglist):
-        collect_new_messages=[]
-        newest_ID=self.last_ID_checked
-        for i in reversed(range(len(input_msglist))):
-            this_msg_ID=input_msglist[i][u"update_id"]
-            if this_msg_ID>self.last_ID_checked:
-                if newest_ID<this_msg_ID:
-                    newest_ID=this_msg_ID
-                try:
-                    msg_send_time=input_msglist[i][u"message"][u"date"]
-                except:
-                    msg_send_time=0
-                if msg_send_time>=self.start_time:
-                    if server_time()-msg_send_time<=30:
-                        if input_msglist[i][u"message"][u"from"][u"username"]==self.allowed_user:
-                            if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
-                                collect_new_messages.insert(0,input_msglist[i][u"message"])
-            else:
-                break
-        self.last_ID_checked=newest_ID
-
-        for m in collect_new_messages:
+        for m in input_msglist:
             if server_time()-m[u"date"]<=30:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
@@ -464,14 +561,13 @@ class user_fbot(object):
                     self.bot_lock_pass=""
                     self.lock_status.clear()
                     self.sendmsg(sid,"Bot unlocked.")
-                    report("w","<"+self.allowed_user+"> "+"Bot instance unlocked by user.")
+                    report("w","<"+self.allowed_user+"> "+"Message handler unlocked by user.")
                     return
                 else:
                     return
             else:
                 return
 
-        report("w","<"+self.allowed_user+"> "+"New message processed.")
         if msg[0]!="/":
             return
         cmd_end=msg.find(" ")
@@ -482,7 +578,7 @@ class user_fbot(object):
         response=""
         
         if command_type=="start":
-            report("w","<"+self.allowed_user+"> "+"Bot instance start requested.")
+            report("w","<"+self.allowed_user+"> "+"Message handler start requested.")
         elif command_type=="dir":
 
             extra_search=""
@@ -660,7 +756,7 @@ class user_fbot(object):
                 self.bot_lock_pass=command_args.strip()
                 response="Bot locked."
                 self.lock_status.set()
-                report("w","<"+self.allowed_user+"> "+"Bot instance was locked down with password.")
+                report("w","<"+self.allowed_user+"> "+"Message handler was locked down with password.")
             else:
                 response="Bad password for locking."
         elif command_type=="unlock":
@@ -728,7 +824,7 @@ class user_console(object):
         elif input_command=="stats":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
-                    report("c","Bot instance for user \""+i.allowed_user+"\":\nHome path=\""+i.allowed_root+"\"\nWrite mode: "+str(i.allow_writing).upper()+"\nLocked: "+str(i.lock_status.is_set()).upper()+"\nListening: "+str(i.listen_flag.is_set()).upper()+"\n\n")
+                    report("c","Message handler for user \""+i.allowed_user+"\":\nHome path=\""+i.allowed_root+"\"\nWrite mode: "+str(i.allow_writing).upper()+"\nLocked: "+str(i.lock_status.is_set()).upper()+"\nListening: "+str(i.listen_flag.is_set()).upper()+"\n\n")
         elif input_command=="unlock":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
@@ -801,6 +897,7 @@ MAIN
 """
 
 
+warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
 TIME_DELTA_LOCK=threading.Lock()
 LOG_LOCK=threading.Lock()
 
@@ -881,13 +978,22 @@ while time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
 report("m","Initial Internet time synchronization completed. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
 
-BotInstances=[]
+UserHandleInstances=[]
 
 if fatal_error==False:
-    report("m","Bot instances starting up...")
+
+    collect_allowed_usernames=[]
     for i in collect_allowed_senders:
-        BotInstances.append(user_fbot(collect_api_token,i.home,i.username,i.allow_write))
-    Console=user_console(BotInstances)
+        collect_allowed_usernames.append(i.username)
+    ListenerService=listener_object(collect_api_token,collect_allowed_usernames)
+    ListenerService.START()
+    while ListenerService.ACTIVE()==False:
+        time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+
+    report("m","User message handler(s) starting up...")
+    for i in collect_allowed_senders:
+        UserHandleInstances.append(user_message_handler(collect_api_token,i.home,i.username,i.allow_write,ListenerService))
+    Console=user_console(UserHandleInstances)
 
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
     last_server_time_check=time.time()
@@ -913,8 +1019,14 @@ if fatal_error==False:
                 report("m","Automatic time synchronization failed.")
             last_server_time_check=time.time()
 
-while len(BotInstances)>0:
-    del BotInstances[0]
+ListenerService.STOP()
+while ListenerService.IS_RUNNING()==True:
+    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+
+while len(UserHandleInstances)>0:
+    del UserHandleInstances[0]
+
+del ListenerService
 
 report("m","Program finished. Press ENTER to exit.")
 raw_input()
