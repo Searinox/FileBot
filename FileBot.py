@@ -146,11 +146,11 @@ def readable_size(input_size):
     if input_size<1024:
         return str(input_size)+" Bytes"
     if input_size<1024**2:
-        return str(int(round(input_size/1024.0,2)))+" KB"
+        return str(round(input_size/1024.0,2))+" KB"
     if input_size<1024**3:
-        return str(int(round(input_size/1024.0**2,2)))+" MB"
+        return str(round(input_size/1024.0**2,2))+" MB"
     if input_size<1024**4:
-        return str(int(round(input_size/1024.0**3,2)))+" GB"
+        return str(round(input_size/1024.0**3,2))+" GB"
 
 def folder_list_string(input_folder,search_in,folders_only=False):
     search=search_in.lower()
