@@ -239,7 +239,6 @@ class listener_object(object):
         last_check_status=False
         bot_bind_ok=False
         activation_fail_announced=False
-        self.is_active.set()
 
         while bot_bind_ok==False:
             try:
@@ -251,8 +250,9 @@ class listener_object(object):
                     activation_fail_announce=True
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
 
-        report("l","Listener service for bot \""+self.name+"\" is now online.")
         self.catch_up_IDs()
+        report("l","Listener service for bot \""+self.name+"\" is now active.")
+        self.is_active.set()
 
         while self.keep_running.is_set()==True:
             time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
@@ -449,8 +449,8 @@ class user_message_handler(object):
                     activation_fail_announce=True
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
 
-        report("w","<"+self.allowed_user+"> "+"Message handler for user \""+self.allowed_user+"\" is now online.")
         self.listener.consume_user_messages(self.allowed_user)
+        report("w","<"+self.allowed_user+"> "+"Message handler for user \""+self.allowed_user+"\" is now active.")
 
         while self.keep_running.is_set()==True:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
