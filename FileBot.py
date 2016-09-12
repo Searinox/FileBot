@@ -50,9 +50,9 @@ def report(source,input_data=""):
     if len(source_literal)>0:
         source_literal=source_literal[0]
     if source_literal=="w":
-        source_literal="USRMSGHN"
+        source_literal="MSGHNDLR"
     elif source_literal=="u":
-        source_literal="UMSGHMGR"
+        source_literal="MSGHDMGR"
     elif source_literal=="c":
         source_literal="UCONSOLE"
     elif source_literal=="m":
@@ -60,7 +60,7 @@ def report(source,input_data=""):
     elif source_literal=="l":
         source_literal="LSTNSRVC"
     elif source_literal=="o":
-        source_literal="LSNSVMGR"
+        source_literal="LSRVCMGR"
     if source_literal!="":
         source_literal=" ["+source_literal+"] "
     else:
@@ -855,7 +855,7 @@ class user_console(object):
         report("c","User console activated.")
         report("c","Type \"help\" in the console for available commands.")
         while loop_input==True:
-            command=raw_input("[CONSOL] Input Commands: ")
+            command=raw_input("[USRINPUT] Input Commands: ")
             if command.lower().strip()=="exit" or self.bots_running()==0:
                 loop_input=False
                 for i in self.bot_list:
