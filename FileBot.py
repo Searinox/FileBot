@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.21
+VERSION_NUMBER=1.22
 
 
 """
@@ -315,7 +315,15 @@ class listener_object(object):
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
                     if server_time()-msg_send_time<=30:
-                        msg_user=input_msglist[i][u"message"][u"from"][u"username"]
+                        if u"username" in input_msglist[i][u"message"][u"from"]:
+                            msg_user=input_msglist[i][u"message"][u"from"][u"username"]
+                        else:
+                            msg_user="#"
+                            if u"first_name" in input_msglist[i][u"message"][u"from"]:
+                                msg_user+=input_msglist[i][u"message"][u"from"][u"first_name"]
+                            msg_user+="#"
+                            if u"last_name" in input_msglist[i][u"message"][u"from"]:
+                                msg_user+=input_msglist[i][u"message"][u"from"][u"last_name"]
                         if msg_user in self.listen_users:
                             if input_msglist[i][u"message"][u"chat"][u"type"]=="private":
                                 collect_new_messages[msg_user].insert(0,input_msglist[i][u"message"])
@@ -905,7 +913,13 @@ report("==========================FileBot==========================")
 report("Author: Searinox Navras")
 report("Version: "+str(float(VERSION_NUMBER)))
 report("===========================================================\n")
-report("\n\nRequirements:\n-bot token in \"token.txt\"\n-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n7-ZIP x64 will be needed for \"/zip\" functionality.\nBegin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n")
+report("\n\nRequirements:\n-bot token in \"token.txt\"\n"+
+"-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n"+
+"7-ZIP x64 will be needed for \"/zip\" functionality.\n"+
+"Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+
+"If a user has no username, you can add them via first name and last name with a \"#\" before each. Example:\n"+
+"FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+
+"Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n")
 
 CURRENT_PROCESS_ID=win32api.GetCurrentProcessId()
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,CURRENT_PROCESS_ID)
