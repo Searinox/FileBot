@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.22
+VERSION_NUMBER=1.23
 
 
 """
@@ -877,23 +877,36 @@ class user_console(object):
 
 class user_entry(object):
     def __init__(self,from_string):
+        segments=[]
+
         try:
             segments=from_string.split("|")
             for i in range(len(segments)):
                 segments[i]=segments[i].strip()
         
+            if len(segments)==1:
+                raise ValueError("Home path was not present.")
+            if len(segments)>2:
+                raise ValueError("Wrong number of \"|\"-separated characters.")
+
             self.username=segments[0]
             self.home=segments[1]
             self.allow_write=False
+
+            if self.username.count("#")!=2 and self.username.count("#")!=0:
+                raise ValueError("Username contained an incorrect number of \"#\" characters.")
+
+            if self.username=="##" or self.username=="":
+                raise ValueError("Username was empty.")
 
             if len(self.home)>0:
                 if self.home[0]==">":
                     self.allow_write=True
                     self.home=self.home[1:]
-            if len(self.home)==0:
+            if self.home=="":
                 raise ValueError("Home path was empty.")
         except:
-            report("m","WARNING: User list \""+from_string+"\" was not validly formatted.")
+            report("m","WARNING: User list \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1]))
             self.username=""
             self.home=""
             self.allow_write=False
@@ -965,13 +978,15 @@ collect_allowed_senders=[]
 
 if fatal_error==False:
     file_entries=[]
-    try:
+    #try:
+    if True:
         file_handle=open("userlist.txt","r")
         file_entries=file_handle.readlines()
         for i in file_entries:
             if i.strip()!="":
                 collect_allowed_senders.append(user_entry(i.strip()))
-    except:
+    else:
+    #except:
         report("m","ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
     file_entries=[]
@@ -992,13 +1007,16 @@ while time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
 report("m","Initial Internet time synchronization completed. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
 
-UserHandleInstances=[]
+report("m","Number of users to listen for: "+str(len(collect_allowed_senders))+".")
 
 if fatal_error==False:
+
+    UserHandleInstances=[]
 
     collect_allowed_usernames=[]
     for i in collect_allowed_senders:
         collect_allowed_usernames.append(i.username)
+
     ListenerService=listener_object(collect_api_token,collect_allowed_usernames)
     ListenerService.START()
     while ListenerService.ACTIVE()==False:
@@ -1033,14 +1051,13 @@ if fatal_error==False:
                 report("m","Automatic time synchronization failed.")
             last_server_time_check=time.time()
 
-ListenerService.STOP()
-while ListenerService.IS_RUNNING()==True:
-    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+    ListenerService.STOP()
+    while ListenerService.IS_RUNNING()==True:
+        time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+    del ListenerService
 
-while len(UserHandleInstances)>0:
-    del UserHandleInstances[0]
-
-del ListenerService
+    while len(UserHandleInstances)>0:
+        del UserHandleInstances[0]
 
 report("m","Program finished. Press ENTER to exit.")
 raw_input()
