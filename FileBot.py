@@ -978,15 +978,13 @@ collect_allowed_senders=[]
 
 if fatal_error==False:
     file_entries=[]
-    #try:
-    if True:
+    try:
         file_handle=open("userlist.txt","r")
         file_entries=file_handle.readlines()
         for i in file_entries:
             if i.strip()!="":
                 collect_allowed_senders.append(user_entry(i.strip()))
-    else:
-    #except:
+    except:
         report("m","ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
     file_entries=[]
