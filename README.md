@@ -1,4 +1,4 @@
-# FileBot - Telegram file server bot for Windows Vista and higher, 64-bit written in Pythin 2.7.
+# FileBot - Telegram file server bot for Windows Vista and higher, 64-bit written in Python 2.7
 
 This bot is based on the Telepot library by nickcoala. (https://github.com/nickoala/telepot)
 
