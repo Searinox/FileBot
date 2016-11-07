@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.23
+VERSION_NUMBER=1.24
 
 
 """
@@ -550,15 +550,21 @@ class user_message_handler(object):
         if self.allow_writing==False:
             return
 
-        self.sendmsg(sid,"Putting file \""+filename+"\" at \""+self.last_folder+"\"...")
-        if os.path.exists(self.last_folder+filename)==False or (os.path.exists(self.last_folder+filename)==True and os.path.isfile(self.last_folder+filename)==False):
+        foldername=self.last_folder
+        complete_put_path=foldername+filename
+        self.sendmsg(sid,"Putting file \""+filename+"\" at \""+foldername+"\"...")
+        report("w","<"+self.allowed_user+"> "+" Receiving file \""+complete_put_path+"\"...")
+        if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
             try:
-                self.bot_handle.download_file(fid,self.last_folder+filename)
-                self.sendmsg(sid,"Finished putting file \""+filename+"\" in folder \""+self.last_folder+"\".")
+                self.bot_handle.download_file(fid,complete_put_path)
+                self.sendmsg(sid,"Finished putting file \""+complete_put_path+"\".")
+                report("w","<"+self.allowed_user+"> "+" File download complete.")
             except:
                 self.sendmsg(sid,"File \""+filename+"\" could not be placed.")
+                report("w","<"+self.allowed_user+"> "+" File download aborted due to unknown issue.")
         else:
             self.sendmsg(sid,"File \""+filename+"\" already exists at the location.")
+            report("w","<"+self.allowed_user+"> "+" File download aborted due to existing instance.")
 
     def process_instructions(self,sid,msg,cid):
         global BOTS_MAX_ALLOWED_FILESIZE_BYTES
@@ -658,7 +664,7 @@ class user_message_handler(object):
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                report("w","<"+self.allowed_user+"> "+"Requested get file \""+newpath+"\".")
+                report("w","<"+self.allowed_user+"> "+"Requested get file \""+newpath+"\". Processing...")
                 self.sendmsg(sid,"Getting file, please wait...")
                 try:
                     fsize=os.path.getsize(newpath)
@@ -667,6 +673,7 @@ class user_message_handler(object):
                     else:
                         if fsize!=0:
                             response="Bots cannot upload files larger than "+readable_size(BOTS_MAX_ALLOWED_FILESIZE_BYTES)+"."
+                            report("w","<"+self.allowed_user+"> "+"Requested file too large.")
                         else:
                             response="File is empty."
                 except:
@@ -674,6 +681,7 @@ class user_message_handler(object):
                     report("w","<"+self.allowed_user+"> "+"File send error.")
             else:
                 response="File not found or inaccessible."
+                report("w","<"+self.allowed_user+"> "+"File not found.")
         elif command_type=="eat" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -696,11 +704,13 @@ class user_message_handler(object):
                     report("w","<"+self.allowed_user+"> "+"File send error.")
                 if success==True:
                     try:
+                        report("w","<"+self.allowed_user+"> "+"File sent. Deleting...")
                         os.remove(newpath)
                         self.sendmsg(sid,"File deleted.")
                     except:
                         response="Problem deleting file."
                         report("w","<"+self.allowed_user+"> "+"File delete error.")
+                        report("w","<"+self.allowed_user+"> "+"File deleted.")
             else:
                 response="File not found or inaccessible."
         elif command_type=="del" and self.allow_writing==True:
