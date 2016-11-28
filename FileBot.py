@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.24
+VERSION_NUMBER=1.25
 
 
 """
@@ -66,12 +66,12 @@ def report(source,input_data=""):
     else:
         source_literal=" "
     msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal
-    sys.stdout.write(msg+"\n")
-    sys.stdout.flush()
 
     LOG_LOCK.acquire()
 
     try:
+        sys.stdout.write(msg+"\n")
+        sys.stdout.flush()
         log_handle=open("log.txt","a")
         log_handle.write(msg+"\n")
         log_handle.close()
@@ -1041,6 +1041,7 @@ if fatal_error==False:
     while Console.IS_DONE()==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
         sys.stdout.flush()
+        sys.stderr.flush()
         process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
         if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
             process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
