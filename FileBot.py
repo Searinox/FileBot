@@ -238,14 +238,14 @@ class listener_object(object):
         self.bot_handle=telepot.Bot(self.token)
         last_check_status=False
         bot_bind_ok=False
-        activation_fail_announced=False
+        activation_fail_announce=False
 
         while bot_bind_ok==False:
             try:
                 self.name=self.bot_handle.getMe()[u"username"]
                 bot_bind_ok=True
             except:
-                if activation_fail_announced==False:
+                if activation_fail_announce==False:
                     report("l","Listener service activation error. Will keep trying...")
                     activation_fail_announce=True
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
@@ -416,7 +416,7 @@ class user_message_handler(object):
         if self.allowed_path(newpath)==True:
             if os.path.exists(newpath)==True:
                 try:
-                    test_path=win32api.GetLongPathNameW(win32api.GetShortPathName(newpath))
+                    win32api.GetLongPathNameW(win32api.GetShortPathName(newpath))
                     return True
                 except:
                     return False
@@ -444,15 +444,14 @@ class user_message_handler(object):
 
     def message_handler_thread_work(self):
         self.bot_handle=telepot.Bot(self.token)
-        last_check_status=False
         bot_bind_ok=False
-        activation_fail_announced=False
+        activation_fail_announce=False
         while bot_bind_ok==False:
             try:
-                get_name=self.bot_handle.getMe()[u"username"]
+                self.bot_handle.getMe()[u"username"]
                 bot_bind_ok=True
             except:
-                if activation_fail_announced==False:
+                if activation_fail_announce==False:
                     report("w","<"+self.allowed_user+"> "+"Message handler activation error. Will keep trying...")
                     activation_fail_announce=True
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
