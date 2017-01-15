@@ -1,4 +1,4 @@
-VERSION_NUMBER=1.25
+__version__="1.30"
 
 
 """
@@ -7,6 +7,7 @@ INIT
 
 
 import os
+import ctypes
 import sys
 import time
 import datetime
@@ -14,28 +15,90 @@ import threading
 import warnings
 import telepot
 import subprocess
+import msvcrt
 import win32api
 import win32con
 import win32process
-import win32pdh
 import _winreg
 import urllib2
 
-MAINTHREAD_HEARTBEAT_SECONDS=1
-SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*12
+PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
+MAINTHREAD_HEARTBEAT_SECONDS=0.04
+SCREEN_OUTPUT_REFRESH_RATE_SECONDS=0.05
+REPORT_OUTPUT_REFRESH_INTERVAL_SECONDS=0.9
 PRIORITY_RECHECK_INTERVAL_SECONDS=60
+COMMAND_CHECK_INTERVAL_SECONDS=0.2
+CONSOLE_INPUT_KEY_READ_POLLING_SECONDS=0.02
+SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
-PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
+
+WINDOW_ROWS=58
+WINDOW_COLS=130
+
+TITLEBAR_Y=1
+TITLEBAR_BOTNAME_X=2
+TITLEBAR_TIMEDIFF_X=86
+TITLEBAR_ONLINESTATUS_X=58
+
+COMMAND_BOX_TITLE="INPUT COMMANDS:"
+REPORT_X=1
+REPORT_WIDTH=WINDOW_COLS-REPORT_X*2
+REPORT_Y=3
+REPORT_HEIGHT=WINDOW_ROWS-REPORT_Y-4
+
+INPUT_FIELD_X=1
+INPUT_FIELD_Y=WINDOW_ROWS-2
+INPUT_FIELD_LENGTH=WINDOW_COLS-2
+
+COLOR_WINDOW_TX=15
+COLOR_WINDOW_BG=4
+COLOR_FRAME_TX=14
+COLOR_TITLEBAR_TX=15
+
+COLOR_REPORT_TX=15
+COLOR_REPORT_BG=1
+
+COLOR_COMMAND_TX=10
+COLOR_COMMAND_BG=0
+COLOR_COMMAND_TITLE_TX=15
 
 
 """
 DEFS
 """
 
+
+class _CursorInfo(ctypes.Structure):
+    _fields_=[("size",ctypes.c_int),("visible",ctypes.c_byte)]
+                    
+def cursor_visibility(state):
+    global WINDOW_HANDLE
+    ci=_CursorInfo()
+    ctypes.windll.kernel32.GetConsoleCursorInfo(WINDOW_HANDLE,ctypes.byref(ci))
+    ci.visible=state
+    ctypes.windll.kernel32.SetConsoleCursorInfo(WINDOW_HANDLE,ctypes.byref(ci))
+    return
+
+def console_setup():
+    global COLOR_WINDOW_TX
+    global COLOR_WINDOW_BG
+    global WINDOW_ROWS
+    global WINDOW_COLS
+    global WINDOW_HANDLE
+
+    OUTPUT_ROW_BUFFER=WINDOW_ROWS
+
+    os.system("@title FileBot v"+__version__)
+    os.system("color "+str(hex(COLOR_WINDOW_TX+COLOR_WINDOW_BG*16))[2:])
+    os.popen("mode con: lines="+str(WINDOW_ROWS)+" cols="+str(WINDOW_COLS))
+    WINDOW_HANDLE=ctypes.windll.kernel32.GetStdHandle(-12)
+    ctypes.windll.kernel32.SetConsoleScreenBufferSize(WINDOW_HANDLE,OUTPUT_ROW_BUFFER*(2**16)+WINDOW_COLS)
+    cursor_visibility(False)
+    return
 
 def report(source,input_data=""):
     global LOG_LOCK
@@ -65,15 +128,15 @@ def report(source,input_data=""):
         source_literal=" ["+source_literal+"] "
     else:
         source_literal=" "
-    msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal
+    msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal+"\n"
+
+    add_report_out_text(msg)
 
     LOG_LOCK.acquire()
 
     try:
-        sys.stdout.write(msg+"\n")
-        sys.stdout.flush()
         log_handle=open("log.txt","a")
-        log_handle.write(msg+"\n")
+        log_handle.write(msg)
         log_handle.close()
     except:
         pass
@@ -81,13 +144,24 @@ def report(source,input_data=""):
     LOG_LOCK.release()
     return
 
-def OS_uptime():
-    path=win32pdh.MakeCounterPath((None,"System",None,None,0,"System Up Time"))
-    query=win32pdh.OpenQuery()
-    handle=win32pdh.AddCounter(query,path)
-    win32pdh.CollectQueryData(query)
-    return win32pdh.GetFormattedCounterValue(handle,win32pdh.PDH_FMT_LONG|win32pdh.PDH_FMT_NOSCALE)[1]
+def add_report_out_text(msg):
+    global LOCK_SCREEN_REPORT
+    global SCREEN_REPORT_LINES
+    global SCREEN_REPORT_EDITED
+    global REPORT_HEIGHT
 
+    LOCK_SCREEN_REPORT.acquire()
+    SCREEN_REPORT_LINES+=[msg]
+    if len(SCREEN_REPORT_LINES)>REPORT_HEIGHT:
+        del SCREEN_REPORT_LINES[0]
+    SCREEN_REPORT_EDITED=True
+    LOCK_SCREEN_REPORT.release()
+
+    return
+
+def OS_uptime():
+    return ctypes.windll.kernel32.GetTickCount64()/1000.0
+    
 def Current_UTC_Internet_Time():
     response=urllib2.urlopen("http://time.gov/actualtime.cgi")
     timestr=response.read()
@@ -123,14 +197,14 @@ def server_time():
     TIME_DELTA_LOCK.acquire()
     get_delta=TELEGRAM_SERVER_TIMER_DELTA
     TIME_DELTA_LOCK.release()
-    return round(OS_uptime()+get_delta)
+    return round(OS_uptime()+get_delta,3)
 
 def local_machine_time_delta_str():
-    time_difference_int=int(int(round(time.time()))-server_time())
-    if time_difference_int>0:
-        retval="+"+str(time_difference_int)
+    time_difference=round(time.time()-server_time(),3)
+    if time_difference>0:
+        retval="+"+str(time_difference)
     else:
-        retval=str(time_difference_int)
+        retval=str(time_difference)
     return retval
 
 def chunkalize(input_string,chunksize):
@@ -227,6 +301,7 @@ class listener_object(object):
     def STOP(self):
         report("o","Listener service stop issued.")
         self.keep_running.clear()
+        return
     
     def IS_RUNNING(self):
         return self.has_exited.is_set()==False
@@ -251,6 +326,8 @@ class listener_object(object):
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
 
         self.catch_up_IDs()
+        os.system("@title FileBot v"+__version__+" - "+self.name)
+        set_general_data("bot_name",self.name)
         report("l","Listener service for bot \""+self.name+"\" is now active.")
         self.is_active.set()
 
@@ -267,8 +344,10 @@ class listener_object(object):
             if check_status!=last_check_status:
                 last_check_status=check_status
                 if check_status==True:
+                    set_general_data("online","yes")
                     report("l","Message retrieval is now online.")
                 else:
+                    set_general_data("online","no")
                     report("l","Stopped being able to retrieve messages.")
 
             self.organize_messages(response)
@@ -803,13 +882,14 @@ class user_message_handler(object):
         return
 
 class user_console(object):
-    def __init__(self,bot_list):
+    def __init__(self,bot_list,key_input_source):
         self.working_thread=threading.Thread(target=self.process_input)
         self.working_thread.daemon=True
         self.bot_list=bot_list
         self.finished_work=threading.Event()
         self.finished_work.clear()
         self.working_thread.start()
+        self.active_input=key_input_source
         return
 
     def IS_DONE(self):
@@ -842,6 +922,12 @@ class user_console(object):
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
                     report("c","Message handler for user \""+i.allowed_user+"\":\nHome path=\""+i.allowed_root+"\"\nWrite mode: "+str(i.allow_writing).upper()+"\nLocked: "+str(i.lock_status.is_set()).upper()+"\nListening: "+str(i.listen_flag.is_set()).upper()+"\n\n")
+        elif input_command=="list":
+            list_out=""
+            for i in self.bot_list:
+                list_out+=i.allowed_user+", "
+            list_out=list_out[:-2]+"."
+            report("c","Allowed user(s): "+list_out)
         elif input_command=="unlock":
             for i in self.bot_list:
                 if i.allowed_user.lower()==input_argument or input_argument=="":
@@ -849,7 +935,9 @@ class user_console(object):
         elif input_command=="sync":
             report("c","Manual Internet time synchronization requested...")
             if Sync_Server_Time():
-                report("c","Manual Internet time synchronization successful. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
+                get_time_diff=local_machine_time_delta_str()
+                set_general_data("time_difference",get_time_diff)
+                report("c","Manual Internet time synchronization successful. Local clock bias is "+get_time_diff+" second(s).")
             else:
                 report("c","Time sync failed.")
         elif input_command=="help":
@@ -858,6 +946,7 @@ class user_console(object):
             report("c","stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
             report("c","unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
             report("c","stats [USER]: list bot stats; leave blank to list all instances")
+            report("c","list: lists allowed users")
             report("c","sync: manually re-synchronize bot time with Internet time")
             report("c","help: display help\n")
         else:
@@ -865,6 +954,8 @@ class user_console(object):
         return
 
     def process_input(self):
+        global COMMAND_CHECK_INTERVAL_SECONDS
+
         loop_input=True
         for i in self.bot_list:
             i.START()
@@ -872,16 +963,19 @@ class user_console(object):
         report("c","User console activated.")
         report("c","Type \"help\" in the console for available commands.")
         while loop_input==True:
-            command=raw_input("[USRINPUT] Input Commands: ")
-            if command.lower().strip()=="exit" or self.bots_running()==0:
-                loop_input=False
-                for i in self.bot_list:
-                    i.STOP()
-                while self.bots_running()>0:
-                    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
-                self.finished_work.set()
-            else:
-                self.process_command(command)
+            command=self.active_input.get_console_input(True)["command"]
+            if command!="":
+                if command.lower().strip()=="exit" or self.bots_running()==0:
+                    loop_input=False
+                    self.active_input.STOP()
+                    for i in self.bot_list:
+                        i.STOP()
+                    while self.bots_running()>0 or self.active_input.exit_complete.is_set()==False:
+                        time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+                    self.finished_work.set()
+                else:
+                    self.process_command(command)
+            time.sleep(COMMAND_CHECK_INTERVAL_SECONDS)
         return
 
 class user_entry(object):
@@ -922,6 +1016,367 @@ class user_entry(object):
         return
 
 
+def clear_key():
+    while msvcrt.kbhit()!=0:
+        msvcrt.getch()
+    return
+def get_key():
+    retval=[0,0]
+    if msvcrt.kbhit()!=0:
+        retval[0]=ord(msvcrt.getch())
+        if msvcrt.kbhit()!=0:
+            retval[1]=ord(msvcrt.getch())
+    if retval[0]==224:
+        if retval[1]!=0:
+            retval[0]=0
+    return retval
+
+def wait_for_enter():
+    last_val=[0,0]
+    clear_key()
+    while not (last_val[1]==0 and (last_val[0]==10 or last_val[0]==13)):
+        last_val=get_key()
+        time.sleep(0.05)
+    return
+
+class Console_Input(object):
+    def __init__(self,input_length):
+        self.exit_requested=threading.Event()
+        self.exit_requested.clear()
+        self.OUT_LOCK=threading.Lock()
+        self.current_command=""
+        self.current_input=""
+        self.max_length=input_length
+        self.exit_complete=threading.Event()
+        self.exit_complete.clear()
+        self.working_thread=threading.Thread(target=self.update_loop)
+        self.working_thread.daemon=True
+        self.working_thread.start()
+        return
+
+    def update_loop(self):
+        global CONSOLE_INPUT_KEY_READ_POLLING_SECONDS
+
+        clear_key()
+
+        while self.exit_requested.is_set()==False:
+            self.OUT_LOCK.acquire()
+            if self.current_command=="":
+                key_pressed=get_key()
+                if key_pressed[0]+key_pressed[1]>0:
+                    if key_pressed[0]!=0 and key_pressed[1]==0:
+                        if key_pressed[0]==13 or key_pressed[0]==10:
+                            if len(self.current_input)>0:
+                                self.current_command=self.current_input
+                        elif key_pressed[0]==8:
+                            if len(self.current_input)>0:
+                                self.current_input=self.current_input[:-1]
+                        else:
+                            if len(self.current_input)<self.max_length:
+                                self.current_input+=chr(key_pressed[0])
+            self.OUT_LOCK.release()
+            time.sleep(CONSOLE_INPUT_KEY_READ_POLLING_SECONDS)
+
+        self.exit_complete.set()
+        return
+
+    def get_console_input(self,clear=False):
+        retval={"input":"","command":""}
+
+        self.OUT_LOCK.acquire()
+        retval["command"]=self.current_command
+        retval["input"]=self.current_input
+        if clear==True:
+            if self.current_command!="":
+                self.current_command=""
+                self.current_input=""
+        self.OUT_LOCK.release()
+
+        return retval
+
+    def STOP(self):
+        self.OUT_LOCK.acquire()
+        self.current_command=""
+        self.current_input=""
+        self.OUT_LOCK.release()
+        self.exit_requested.set()
+        return
+
+def move_cursor(x,y):
+    global WINDOW_HANDLE
+    ctypes.windll.kernel32.SetConsoleCursorPosition(WINDOW_HANDLE,y*(2**16)+x)
+    return
+
+def cursor_color(tx,bg):
+    global WINDOW_HANDLE
+    ctypes.windll.kernel32.SetConsoleTextAttribute(WINDOW_HANDLE,bg*16+tx)
+    return
+
+def flat_coords(x,y):
+    global WINDOW_ROWS_RANGE
+    return x+WINDOW_COLS*y
+
+class Screen_Manager(object):
+    def __init__(self,console_handle):
+        global WINDOW_ROWS
+        global WINDOW_COLS
+        global COLOR_REPORT_TX
+        global COLOR_REPORT_BG
+        global WINDOW_ROWS_RANGE
+        global WINDOW_COLS_RANGE
+
+        self.exit_requested=threading.Event()
+        self.exit_requested.clear()
+        self.screenbuffer_current=[{"col_tx":0,"col_bg":COLOR_WINDOW_BG,"char":32} for i in range(WINDOW_ROWS*WINDOW_COLS)]
+        self.screenbuffer_last=[{"col_tx":0,"col_bg":COLOR_WINDOW_BG,"char":32} for i in range(WINDOW_ROWS*WINDOW_COLS)]
+        self.exit_complete=threading.Event()
+        self.exit_complete.clear()
+        self.active_console=console_handle
+        self.screen_init()
+        self.last_input_field="\n"
+        self.last_report_refresh_time=0
+        self.working_thread=threading.Thread(target=self.refresh_loop)
+        self.working_thread.daemon=True
+        self.working_thread.start()
+        return
+
+    def out_pos_color_txt(self,x,y,tx,bg,txt):
+        for i in range(len(txt)):
+            self.screenbuffer_current[flat_coords((x+i)%WINDOW_COLS,y+int((x+i)/WINDOW_COLS))]["col_tx"]=tx
+            self.screenbuffer_current[flat_coords((x+i)%WINDOW_COLS,y+int((x+i)/WINDOW_COLS))]["col_bg"]=bg
+            self.screenbuffer_current[flat_coords((x+i)%WINDOW_COLS,y+int((x+i)/WINDOW_COLS))]["char"]=ord(txt[i])
+        return
+
+    def screen_init(self):
+        global COLOR_FRAME_TX
+        global REPORT_X
+        global REPORT_Y
+        global REPORT_WIDTH
+        global REPORT_HEIGHT
+        global COLOR_WINDOW_BG
+        global COLOR_REPORT_TX
+        global COLOR_REPORT_BG
+        global WINDOW_COLS
+        global COMMAND_BOX_TITLE
+        global COLOR_COMMAND_TITLE_TX
+        global REPORT_WIDTH_RANGE
+        global TITLEBAR_ONLINESTATUS_X
+        global TITLEBAR_TIMEDIFF_X
+        global TITLEBAR_BOTNAME_X
+        global COLOR_TITLEBAR_TX
+        global COLOR_TITLEBAR_BG
+
+        title="FileBot v"+__version__+" by Searinox Navras"
+        self.out_pos_color_txt(WINDOW_COLS/2-len(title)/2,0,14,COLOR_WINDOW_BG,title)
+        self.out_pos_color_txt(TITLEBAR_BOTNAME_X,TITLEBAR_Y,COLOR_TITLEBAR_TX,COLOR_WINDOW_BG,"Bot name: <not retrieved>")
+        self.out_pos_color_txt(TITLEBAR_TIMEDIFF_X,TITLEBAR_Y,COLOR_TITLEBAR_TX,COLOR_WINDOW_BG,"Local clock bias(seconds): UNKNOWN")
+        self.out_pos_color_txt(TITLEBAR_ONLINESTATUS_X,TITLEBAR_Y,COLOR_TITLEBAR_TX,COLOR_WINDOW_BG,"Status: NOT STARTED")
+
+        for i in REPORT_WIDTH_RANGE:
+            self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y-1)]["col_tx"]=14
+            self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y-1)]["char"]=205
+            self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y+REPORT_HEIGHT)]["col_tx"]=14
+            self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y+REPORT_HEIGHT)]["char"]=205
+
+        for i in range(REPORT_HEIGHT):
+            self.screenbuffer_current[flat_coords(REPORT_X-1,REPORT_Y+i)]["col_tx"]=14
+            self.screenbuffer_current[flat_coords(REPORT_X-1,REPORT_Y+i)]["char"]=186
+            self.screenbuffer_current[flat_coords(REPORT_X+REPORT_WIDTH,REPORT_Y+i)]["col_tx"]=14
+            self.screenbuffer_current[flat_coords(REPORT_X+REPORT_WIDTH,REPORT_Y+i)]["char"]=186
+
+        self.screenbuffer_current[flat_coords(REPORT_X-1,REPORT_Y-1)]["col_tx"]=14
+        self.screenbuffer_current[flat_coords(REPORT_X-1,REPORT_Y-1)]["char"]=201
+
+        self.screenbuffer_current[flat_coords(REPORT_X+REPORT_WIDTH,REPORT_Y-1)]["col_tx"]=14
+        self.screenbuffer_current[flat_coords(REPORT_X+REPORT_WIDTH,REPORT_Y-1)]["char"]=187
+
+        self.screenbuffer_current[flat_coords(REPORT_X-1,REPORT_Y+REPORT_HEIGHT)]["col_tx"]=14
+        self.screenbuffer_current[flat_coords(REPORT_X-1,REPORT_Y+REPORT_HEIGHT)]["char"]=200
+
+        self.screenbuffer_current[flat_coords(REPORT_X+REPORT_WIDTH,REPORT_Y+REPORT_HEIGHT)]["col_tx"]=14
+        self.screenbuffer_current[flat_coords(REPORT_X+REPORT_WIDTH,REPORT_Y+REPORT_HEIGHT)]["char"]=188
+
+        for i in REPORT_WIDTH_RANGE:
+            for j in range(REPORT_HEIGHT):
+                self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y+j)]["col_tx"]=COLOR_REPORT_TX
+                self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y+j)]["col_bg"]=COLOR_REPORT_BG
+                self.screenbuffer_current[flat_coords(REPORT_X+i,REPORT_Y+j)]["char"]=32
+
+        center_text=int(WINDOW_COLS/2-len(COMMAND_BOX_TITLE)/2)
+        self.out_pos_color_txt(center_text,INPUT_FIELD_Y-1,COLOR_COMMAND_TITLE_TX,COLOR_WINDOW_BG,COMMAND_BOX_TITLE)
+
+        return
+
+    def recompile_report(self,get_screen_report):
+        global REPORT_X
+        global REPORT_Y
+        global REPORT_WIDTH
+        global REPORT_HEIGHT
+        global COLOR_REPORT_TX
+        global COLOR_REPORT_BG
+        global REPORT_WIDTH_RANGE
+
+        parse_report_lines=len(get_screen_report)-1
+
+        screen_report_formatted=[]
+        while len(screen_report_formatted)<REPORT_HEIGHT and parse_report_lines>=0:
+            curr_line=get_screen_report[parse_report_lines]
+            curr_line_array=reversed(curr_line.splitlines())
+            for line in curr_line_array:
+                if line=="":
+                    screen_report_formatted.insert(0," "*REPORT_WIDTH)
+                else:
+                    for segment in reversed(chunkalize(line,REPORT_WIDTH)):
+                        screen_report_formatted.insert(0,segment+" "*(REPORT_WIDTH-len(segment)))
+                        if len(screen_report_formatted)==REPORT_HEIGHT:
+                            break
+                if len(screen_report_formatted)==REPORT_HEIGHT:
+                    break
+            parse_report_lines-=1
+
+        for line_idx in range(len(screen_report_formatted)):
+            for c_idx in REPORT_WIDTH_RANGE:
+                self.screenbuffer_current[flat_coords(REPORT_X+c_idx,REPORT_Y+line_idx)]={
+                "char":ord(screen_report_formatted[line_idx][c_idx]),
+                "col_tx":COLOR_REPORT_TX,
+                "col_bg":COLOR_REPORT_BG
+                }
+
+        return
+
+    def recompile_input(self,got_input):
+        global INPUT_FIELD_X
+        global INPUT_FIELD_Y
+        global INPUT_FIELD_LENGTH
+        global COLOR_COMMAND_TX
+        global COLOR_COMMAND_BG
+
+        if len(got_input)<INPUT_FIELD_LENGTH:
+            got_input+="_"
+        got_input+=" "*(INPUT_FIELD_LENGTH-len(got_input))
+
+        for c_idx in range(len(got_input)):
+            self.screenbuffer_current[flat_coords(INPUT_FIELD_X+c_idx,INPUT_FIELD_Y)]={
+            "char":ord(got_input[c_idx]),"col_tx":COLOR_COMMAND_TX,"col_bg":COLOR_COMMAND_BG
+            }
+
+        return
+
+    def screen_prepare(self):
+        global REPORT_OUTPUT_REFRESH_INTERVAL_SECONDS
+        global LOCK_SCREEN_REPORT
+        global SCREEN_REPORT_EDITED
+        global TITLEBAR_Y
+        global COLOR_TITLEBAR_TX
+        global COLOR_WINDOW_BG
+        global TITLEBAR_BOTNAME_X
+        global TITLEBAR_TIMEDIFF_X
+        global TITLEBAR_ONLINESTATUS_X
+
+        got_input=self.active_console.get_console_input()["input"]
+
+        if self.last_input_field!=got_input:
+            self.last_input_field=got_input
+            self.recompile_input(got_input)
+
+        if OS_uptime()-self.last_report_refresh_time>=REPORT_OUTPUT_REFRESH_INTERVAL_SECONDS:
+            LOCK_SCREEN_REPORT.acquire()
+            get_screen_report=SCREEN_REPORT_LINES
+            get_report_edited=SCREEN_REPORT_EDITED
+            SCREEN_REPORT_EDITED=False
+            LOCK_SCREEN_REPORT.release()
+
+            if get_report_edited==True:
+                self.last_report_lines=get_screen_report
+                self.recompile_report(get_screen_report)
+
+            self.last_report_refresh_time=OS_uptime()
+
+        general_data=get_new_general_data()
+        for data_type in general_data:
+            value=general_data[data_type]
+            if data_type=="bot_name":
+                self.out_pos_color_txt(TITLEBAR_BOTNAME_X+len("Bot name: "),TITLEBAR_Y,11,COLOR_WINDOW_BG,value+" "*(32-len(value)))
+            elif data_type=="time_difference":
+                time_difference=float(value[1:])
+                time_color=10
+                if time_difference>=30:
+                    time_color=14
+                if time_difference>=60:
+                    time_color=12
+                self.out_pos_color_txt(TITLEBAR_TIMEDIFF_X+len("Local clock bias(seconds): "),TITLEBAR_Y,time_color,COLOR_WINDOW_BG,value+" "*(10-len(value)))
+            elif data_type=="online":
+                if value=="yes":
+                    out="ONLINE"
+                    colorstate=10
+                else:
+                    out="OFFLINE"
+                    colorstate=12
+                self.out_pos_color_txt(TITLEBAR_ONLINESTATUS_X+len("Status: "),TITLEBAR_Y,colorstate,COLOR_WINDOW_BG,out+" "*(11-len(out)))
+
+        return
+
+    def refresh_loop(self):
+        global SCREEN_OUTPUT_REFRESH_RATE_SECONDS
+
+        while self.exit_requested.is_set()==False:
+            time.sleep(SCREEN_OUTPUT_REFRESH_RATE_SECONDS)
+            self.screen_prepare()
+            self.screen_delta_update()
+
+        self.last_report_refresh_time=0
+        self.screen_prepare()
+        self.screen_delta_update()
+        move_cursor(0,WINDOW_ROWS)
+        cursor_visibility(True)
+        self.exit_complete.set()
+        return
+
+    def screen_delta_update(self):
+        global WINDOW_COLS
+        global WINDOW_TILES_RANGE
+
+        for i in WINDOW_TILES_RANGE:
+            current_char=self.screenbuffer_current[i]
+            last_char=self.screenbuffer_last[i]
+            if last_char["col_tx"]!=current_char["col_tx"] or last_char["col_bg"]!=current_char["col_bg"] or last_char["char"]!=current_char["char"]:
+                move_cursor(i%WINDOW_COLS,i/WINDOW_COLS)
+                cursor_color(current_char["col_tx"],current_char["col_bg"])
+                sys.stdout.write(chr(current_char["char"]))
+                self.screenbuffer_last[i]={
+                "col_tx":current_char["col_tx"],"col_bg":current_char["col_bg"],"char":current_char["char"]
+                }
+
+        return
+
+    def STOP(self):
+        self.exit_requested.set()
+        return
+
+
+def set_general_data(data_type,value):
+    global GENERAL_DATA
+    global LOCK_GENERAL_DATA
+    
+    LOCK_GENERAL_DATA.acquire()
+    GENERAL_DATA[data_type]=["0",str(value)]
+    LOCK_GENERAL_DATA.release()
+
+    return
+
+def get_new_general_data():
+    retval={}
+
+    LOCK_GENERAL_DATA.acquire()
+    for data_type in GENERAL_DATA:
+        if GENERAL_DATA[data_type][0]=="0":
+            GENERAL_DATA[data_type][0]="1"
+            retval[data_type]=GENERAL_DATA[data_type][1]
+    LOCK_GENERAL_DATA.release()
+
+    return retval
+
+
 """
 MAIN
 """
@@ -930,11 +1385,25 @@ MAIN
 warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
 TIME_DELTA_LOCK=threading.Lock()
 LOG_LOCK=threading.Lock()
+LOCK_SCREEN_REPORT=threading.Lock()
+LOCK_GENERAL_DATA=threading.Lock()
+SCREEN_REPORT_LINES=[]
+GENERAL_DATA={}
+SCREEN_REPORT_EDITED=False
+WINDOW_ROWS_RANGE=range(WINDOW_ROWS)
+WINDOW_COLS_RANGE=range(WINDOW_COLS)
+WINDOW_TILES_RANGE=range(WINDOW_ROWS*WINDOW_COLS)
+REPORT_WIDTH_RANGE=range(REPORT_WIDTH)
 
-report("==========================FileBot==========================")
+console_setup()
+
+Active_Key_Input=Console_Input(INPUT_FIELD_LENGTH)
+Active_Screen=Screen_Manager(Active_Key_Input)
+
+report("============================ FileBot ============================")
 report("Author: Searinox Navras")
-report("Version: "+str(float(VERSION_NUMBER)))
-report("===========================================================\n")
+report("Version: "+str(__version__))
+report("=================================================================\n")
 report("\n\nRequirements:\n-bot token in \"token.txt\"\n"+
 "-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n"+
 "7-ZIP x64 will be needed for \"/zip\" functionality.\n"+
@@ -1012,7 +1481,10 @@ while time_synced==False:
     time_synced=Sync_Server_Time()
     if time_synced==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-report("m","Initial Internet time synchronization completed. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
+
+get_time_diff=local_machine_time_delta_str()
+set_general_data("time_difference",get_time_diff)
+report("m","Initial Internet time synchronization complete. Local clock bias is "+get_time_diff+" second(s).")
 
 report("m","Number of users to listen for: "+str(len(collect_allowed_senders))+".")
 
@@ -1032,7 +1504,7 @@ if fatal_error==False:
     report("m","User message handler(s) starting up...")
     for i in collect_allowed_senders:
         UserHandleInstances.append(user_message_handler(collect_api_token,i.home,i.username,i.allow_write,ListenerService))
-    Console=user_console(UserHandleInstances)
+    Console=user_console(UserHandleInstances,Active_Key_Input)
 
     process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
     last_server_time_check=time.time()
@@ -1054,7 +1526,9 @@ if fatal_error==False:
         if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
             report("m","Performing automatic Internet time synchronization...")
             if Sync_Server_Time()==True:
-                report("m","Automatic time synchronization complete. Local machine time difference is "+local_machine_time_delta_str()+" second(s).")
+                get_time_diff=local_machine_time_delta_str()
+                set_general_data("time_difference",get_time_diff)
+                report("m","Automatic time synchronization complete. Local clock bias is "+get_time_diff+" second(s).")
             else:
                 report("m","Automatic time synchronization failed.")
             last_server_time_check=time.time()
@@ -1067,5 +1541,19 @@ if fatal_error==False:
     while len(UserHandleInstances)>0:
         del UserHandleInstances[0]
 
-report("m","Program finished. Press ENTER to exit.")
-raw_input()
+report("m","Program finished. Press ENTER to quit.")
+
+Active_Screen.STOP()
+
+while Active_Screen.exit_complete.is_set()==False:
+    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+
+del Active_Screen
+del Active_Key_Input
+
+cursor_color(7,0)
+move_cursor(0,WINDOW_ROWS)
+sys.stdout.flush()
+wait_for_enter()
+sys.stdout.write("\n")
+sys.stdout.flush()
