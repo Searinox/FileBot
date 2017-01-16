@@ -1015,11 +1015,11 @@ class user_entry(object):
             self.allow_write=False
         return
 
-
 def clear_key():
     while msvcrt.kbhit()!=0:
         msvcrt.getch()
     return
+
 def get_key():
     retval=[0,0]
     if msvcrt.kbhit()!=0:
