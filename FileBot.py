@@ -1536,10 +1536,13 @@ if fatal_error==False:
     ListenerService.STOP()
     while ListenerService.IS_RUNNING()==True:
         time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+    ListenerService.listen_thread.join()
     del ListenerService
 
     while len(UserHandleInstances)>0:
+        UserHandleInstances[0].bot_thread.join()
         del UserHandleInstances[0]
+        
 
 report("m","Program finished. Press ENTER to quit.")
 
@@ -1548,7 +1551,9 @@ Active_Screen.STOP()
 while Active_Screen.exit_complete.is_set()==False:
     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
 
+Active_Screen.working_thread.join()
 del Active_Screen
+Active_Key_Input.working_thread.join()
 del Active_Key_Input
 
 cursor_color(7,0)
