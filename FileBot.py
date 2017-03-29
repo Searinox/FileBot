@@ -22,7 +22,7 @@ import win32process
 import _winreg
 import urllib2
 
-PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.2
+PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.15
 MAINTHREAD_HEARTBEAT_SECONDS=0.04
 SCREEN_OUTPUT_REFRESH_RATE_SECONDS=0.05
 REPORT_OUTPUT_REFRESH_INTERVAL_SECONDS=0.9
@@ -1511,8 +1511,10 @@ if fatal_error==False:
 
     while Console.IS_DONE()==False:
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
+
         sys.stdout.flush()
         sys.stderr.flush()
+
         process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
         if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
             process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
@@ -1542,6 +1544,14 @@ if fatal_error==False:
     while len(UserHandleInstances)>0:
         UserHandleInstances[0].bot_thread.join()
         del UserHandleInstances[0]
+
+    Console.working_thread.join()
+    del Console
+
+Active_Key_Input.STOP()
+
+while Active_Key_Input.exit_complete.is_set()==False:
+    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
 
 report("m","Program finished. Press ENTER to quit.")
 
