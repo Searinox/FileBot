@@ -1,4 +1,4 @@
-__version__="1.30"
+__version__="1.31"
 
 
 """
@@ -887,9 +887,9 @@ class user_console(object):
         self.working_thread.daemon=True
         self.bot_list=bot_list
         self.finished_work=threading.Event()
+        self.active_input=key_input_source
         self.finished_work.clear()
         self.working_thread.start()
-        self.active_input=key_input_source
         return
 
     def IS_DONE(self):
@@ -1542,7 +1542,6 @@ if fatal_error==False:
     while len(UserHandleInstances)>0:
         UserHandleInstances[0].bot_thread.join()
         del UserHandleInstances[0]
-        
 
 report("m","Program finished. Press ENTER to quit.")
 
