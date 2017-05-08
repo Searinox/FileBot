@@ -1,4 +1,4 @@
-__version__="1.31"
+__version__="1.32"
 
 
 """
@@ -71,6 +71,10 @@ COLOR_COMMAND_TITLE_TX=15
 DEFS
 """
 
+
+GetTickCount64=ctypes.windll.kernel32.GetTickCount64
+GetTickCount64.restype=ctypes.c_uint64
+GetTickCount64.argtypes=()
 
 class _CursorInfo(ctypes.Structure):
     _fields_=[("size",ctypes.c_int),("visible",ctypes.c_byte)]
@@ -297,15 +301,15 @@ class listener_object(object):
         self.has_exited.clear()
         self.keep_running.set()
         self.listen_thread.start()
-        
+
     def STOP(self):
         report("o","Listener service stop issued.")
         self.keep_running.clear()
         return
-    
+
     def IS_RUNNING(self):
         return self.has_exited.is_set()==False
-        
+
     def ACTIVE(self):
         return self.is_active.is_set()==True
 
