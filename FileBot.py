@@ -23,9 +23,9 @@ import _winreg
 import urllib2
 import ssl
 
-SSL_NOCERT = ssl.create_default_context()
-SSL_NOCERT.check_hostname = False
-SSL_NOCERT.verify_mode = ssl.CERT_NONE
+SSL_NOCERT=ssl.create_default_context()
+SSL_NOCERT.check_hostname=False
+SSL_NOCERT.verify_mode=ssl.CERT_NONE
 
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.15
 MAINTHREAD_HEARTBEAT_SECONDS=0.04
