@@ -1,4 +1,4 @@
-__version__="1.32"
+__version__="1.33"
 
 
 """
@@ -21,6 +21,11 @@ import win32con
 import win32process
 import _winreg
 import urllib2
+import ssl
+
+SSL_NOCERT = ssl.create_default_context()
+SSL_NOCERT.check_hostname = False
+SSL_NOCERT.verify_mode = ssl.CERT_NONE
 
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.15
 MAINTHREAD_HEARTBEAT_SECONDS=0.04
@@ -167,7 +172,9 @@ def OS_uptime():
     return ctypes.windll.kernel32.GetTickCount64()/1000.0
     
 def Current_UTC_Internet_Time():
-    response=urllib2.urlopen("http://time.gov/actualtime.cgi")
+    global SSL_NOCERT
+
+    response=urllib2.urlopen("https://time.gov/actualtime.cgi",context=SSL_NOCERT)
     timestr=response.read()
     quot1=timestr.find("time=\"")
     quot1+=len("time=\"")
