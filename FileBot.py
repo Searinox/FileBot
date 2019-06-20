@@ -27,7 +27,7 @@ import urllib2
 import ssl
 from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView)
-from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QKeySequence)
+from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
 
 SSL_NOCERT=ssl.create_default_context()
 SSL_NOCERT.check_hostname=False
@@ -45,11 +45,11 @@ BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
 
 FONT_POINT_SIZE=8
-FONTS={"general":{"type":"","size":1,"properties":[]},"log":{"type":"Consolas","size":1,"properties":["bold"]},"status":{"type":"","size":1,"properties":["bold"]}}
+FONTS={"general":{"type":"Monospace","size":1,"properties":[]},"status":{"type":"Monospace","size":1,"properties":["bold"]},"log":{"type":"Consolas","size":1,"properties":["bold"]}}
 
-CUSTOM_UI_SCALING=1.15
+CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
-OUTPUT_LINES_MAX=10000
+OUTPUT_ENTRIES_MAX=10000
 
 APP_ICONS_B64={"default":"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAABnRSTlMA/wD/AP83WBt9AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAEnElEQVR42u2dMW7VQBCGn0e+AVJEQYWQklyDGokLRLTpEEdBdGlRLoBEzTWSSBEVBYrEGUzxpGDs9dvZ3dmZ2fW/FXnys/2+f+bfmbWxh2maDo2MYRj4G7fyuwafJ5rEumlJHAlQA7p/MYwF0ITuUwwbATxwd6KEtgAl6C/urvgb31/eNiGDngBJ6JNYV5JEh0x1Afjca0AvF6M6n3oHYKLX5J6tREVKlXYdpW/LPUOJWqDE99scelsZhAU4Td8z+iQlBKGJCdANeqYMYtxEdnSCfqPo1TQoFaBj9DoyFAlQm352N1up2d46nyKG2V/eoi8V+Pr0TTQg0BeRJ3uNKycDggcTdPwF/ZuHJwWy1+dnST8kGCIZMMk5fbcj+JMz8oBA31YDAn1bDcgn/U9ffuxEAwJ9Ww0I9G01IKmD7Zl+CRZKDX/QT9IgmgQE+rYakMlZ9ko/aR6NCFAv/LunnwSKQN/WiFQtaFfOwwxZUgv/vfk+cyYYdar+9TrP549vuyd+cXcVXeCi7EUMDJEkILWmd58jCnBUDn+dy1vOk2B+4YwQ/rZJQHB/25mAEP62SUCgYzsI/mPrQgT/sXUhWJDxGL2d0PMdajvpQmg9AcB/dFzoiB0WBAty7xIaZSgGBIAAGBbzMKEEwiS8+z4AAwLAgtAHIANgQRgQAHMAylBkACwIQ9OCpmlydUV+72Voi/9dHRaEwR2L+J6mCQIgA9AHoA8wzoDFc54wD+tMALAg43GMeyxHu5yE4UI6/vNPgIbeJtaT/3i0oLxiKWhc/ILK0PcoNWWqMuUgC27G/K43//lPAFsXYuI7vZlnDYL+E7Gg+8tbnfu05uCuz8+YhvDn1ZvjP178eox8/evv8C4+vLQN/6UA3pamt3R6Rj//cy5DK+Efb8QUZoKgobtdzJAN/4AAyjPBHNbrb+84qizCf+1IDYU/aylCpxw60p9r0HHzFRFALQn6KGlKwv/AXIyrnQTzwO8mCZjQiKmVuAbMnmv94Va146oKWuPa8hUSl7Qk/E8kAX+1oK31VEoyLPHw3zKc58+3kmAe74s/Gwr/SCe87stEeuM505/vv3O2Pwb1zcPT/LtB6OHwV+l4M+jHLUhhMkgap+3F3Hwy4JDOYUowLba/eXha7yH4oQf6USePXw8ILhAVelE5LM4eNCXJfqsVKwOCO8Jly3L6CRYEDWrQPyRdkhTxos4WGMrfp5c2CSMPZOnnVEF5GrTyBAT+eUq9SzLzdba136baXOBnrx1k3pq4dbDu7Uj8fcKu36jdPf0D3ilf3vwXAiy9M+54+I4fvFsPfdEcUONUdkj/IHhvqPN7igTRywbceMBIqeLEcx0CmKGHAAm9S71JTlKAhqYBfsNYu74YZA/g+SGYqV26Tmk3thKhqVpmL4ool9RjK/6gsMpk0s2M/tF3yd2jAMr0nXTv467oO1wyGT2jX/BKqnFbWZ4afdIP4utyyW/0H/h9DwL93WVAjQt7EACB78OCTnA8Efh7flYL6YQ8bGdrDOII+NU66JuVoUBvWYaCvqUAoG9mQUBvmQGgb5YBQK+dAXPioB8dfwFI8/wMQP2QSAAAAABJRU5ErkJggg==",
 "deactivated":"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAABnRSTlMA/wD/AP83WBt9AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAEkUlEQVR42u2dP47VMBDGk5FvgLSi2AqttPegRuIGtNshjoLoXssNkKi5x5MQFQVaac8QikiPkDjxv/HM2PncvVVe4vf7Zj57nGw8TtM0NNLGcYw/uJXfNdrsaBLrpiUxJEAN6PbFUBZAErpNMXQEsMDdiBLSApSgf7l/iD/41e+fTcggJ0AS+iTWlSSRIVNdgHjuNaCXi1GdT70LRKKX5J6tREVKlU4dpK/LPUOJWqDYz9scel0ZmAU4pm8ZfZISjNDYBOgGfaQMbNxYTnRAv1H0YhqUCtAxehkZigSoTT+7mq1UbO/1p4hh9pf36HMFvjx9FQ0I9FnkyV7jyskA78UYHX9F/3J9FiD79HiX9EO8IZIBk4zTN9u8PzkjDwj0dTUg0NfVgGzS//Tlx0k0INDX1YBAX1cD4rrYmemXYKHU8Af9JA2CSUCgr6sBqfSyV/pJ42hAgHrh3z39JFAE+rpGJGpBp3KeyJAlsfA/m+9HjgROZta/Xef5/PFt98Rf7h+CC1yUvYiBxpIEJFb0nrMFATrh8Je5vWU8CZY3zgjhr5sEBPfXHQkI4a+bBAQ6uo3gP7ouRPAfXReCBSk3Z61DtyfUTlKF0HYAgP/IuNCMHRYECzLvEhLTUDQIAAHQNMZhwhQIg/Dp6wA0CAALQh2ADIAFoUEAjAGYhiIDYEFokhY0TZOpO/Jnn4a2+O/qsCC02LaK72maIAAyAHUA6gDlDFi95wnjsMwAAAtSbnPcYzna5CAMF5Lxn38CNLSbWE/+Y9GC8iZLXuOKn1Ap+p47SBnhR1RmXkEWXqyR37XmP/+NAbouFBmtx4dVrSFq+E/AgsSSYAnu6fEuMpBvfVvGl//rX//4T/HhtW74rwWwtjS9p9MqLOaPrczcVk5DJepVMp9CJzFlRMkv6xAeCZaw3nx7F6PKnis28VTrFi+Va8jSZvpLDTouvgICiCVBH1OakvAfIhfjaifBMvC7SYJIaBSpFbsGMQHuPWavJ6ZmQdvO7PkKsUtaEv4HSRBf5ba1nkpJhsUe/nuGc/v7XhIso2H1saHwD1TC27qMpTZeMv31/nvM8XNQX67Py+96ofvDX6TizaAftiCBwSCpHduLuvlkwCGZy5RgWh1/uT5vz+D9owX6QSeP2saqfA+HW+fMjpCp21ix0I/NAO+JcNuynH6CBUGDGvSH1J30sr2oIanyrDV7Bp82CCMPeOnnzILyNGjlDQjx/eTaSzJzO9vau6k2F/jZaweZjybuXax7O2LfT9j0jtrd0x+wp3x58V8IsPTJuPnyHb94tx76ojGgRldOSH9gfDbU+DNFjOh5A84NaCmzOPZchwBq6CFAQu1Sb5DjFKChYSC+YKw9vxh5L2D5JZipVbrM1M61EqGpWmYvighPqV0r/iCwyqRSzTj76LvkblEAYfpGqnd3KvoGl0ycZfQrXklz3FaWp5xN+l58XS75OfuB33cj0D9dBtS4sQcBEPg2LOiA40Hgn/ldLSQT8rCdvTayI4ifrYO+2jQU6DWnoaCvKQDoq1kQ0GtmAOirZQDQS2fAkjjoB9tftPkDoEi2BJIAAAAASUVORK5CYII=",
@@ -1164,7 +1164,6 @@ class Main_Window(QMainWindow):
         global __author__
         global __version__
         global APP_ICONS_B64
-        global UI_SCALE
         global FONTS
         global CUSTOM_UI_SCALING
 
@@ -1173,7 +1172,7 @@ class Main_Window(QMainWindow):
         self.active_logger=input_logger
 
         UI_SCALE=self.logicalDpiX()/96.0
-        UI_SCALE=UI_SCALE*CUSTOM_UI_SCALING
+        UI_SCALE*=CUSTOM_UI_SCALING
         self.font_cache={}
         for fontname in FONTS:
             self.font_cache[fontname]=QFont(FONTS[fontname]["type"])
@@ -1188,8 +1187,13 @@ class Main_Window(QMainWindow):
                 if fontproperty=="strikeout":
                     self.font_cache[fontname].setStrikeOut(True)
 
+        self.setFixedSize(900*UI_SCALE,628*UI_SCALE)
+        self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
+
         self.lock_log_content=threading.Lock()
+        self.lock_output_update=threading.Lock()
         self.lock_clipboard=threading.Lock()
+        self.active_clipboard=QApplication.clipboard()
         self.UI_signaller=input_signaller
         self.UI_signaller.active_signal.connect(self.signal_response_handler)
 
@@ -1206,7 +1210,6 @@ class Main_Window(QMainWindow):
         self.command_history_index=-1
         self.console=None
         self.update_log_on_restore=False
-        self.in_output_update=False
         self.clipboard_queue=""
 
         self.icon_cache={}
@@ -1216,11 +1219,7 @@ class Main_Window(QMainWindow):
             icon_qpix=QPixmap.fromImage(icon_qimg)
             self.icon_cache[iconname]=QIcon(icon_qpix)
 
-        self.setFixedSize(900*UI_SCALE,628*UI_SCALE)
         self.setWindowIcon(self.icon_cache["default"])
-        self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
-
-        self.active_clipboard=QApplication.clipboard()
 
         self.tray_current_state="deactivated"
         self.tray_current_text="FileBot"
@@ -1260,39 +1259,45 @@ class Main_Window(QMainWindow):
 
         self.label_botname=QLabel(self)
         self.label_botname.setText("Bot name:")
-        self.label_botname.setGeometry(10*UI_SCALE,5*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botname.setGeometry(22*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botname.setFont(self.font_cache["general"])
+        self.label_botname.setAlignment(Qt.AlignLeft)
 
         self.label_botname_value=QLabel(self)
-        self.label_botname_value.setGeometry(65*UI_SCALE,5*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botname_value.setGeometry(75*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botname_value.setFont(self.font_cache["status"])
         self.label_botname_value.setText("<not retrieved>")
+        self.label_botname_value.setAlignment(Qt.AlignLeft)
 
-        self.label_status=QLabel(self)
-        self.label_status.setText("Status:")
-        self.label_status.setGeometry(360*UI_SCALE,5*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
-        self.label_status.setFont(self.font_cache["general"])
+        self.label_botstatus=QLabel(self)
+        self.label_botstatus.setText("Status:")
+        self.label_botstatus.setGeometry(372*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus.setFont(self.font_cache["general"])
+        self.label_botstatus.setAlignment(Qt.AlignLeft)
 
-        self.label_status_value=QLabel(self)
-        self.label_status_value.setGeometry(400*UI_SCALE,5*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
-        self.label_status_value.setFont(self.font_cache["status"])
-        self.label_status_value.setText("NOT STARTED")
+        self.label_botstatus_value=QLabel(self)
+        self.label_botstatus_value.setGeometry(410*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus_value.setFont(self.font_cache["status"])
+        self.label_botstatus_value.setText("NOT STARTED")
+        self.label_botstatus_value.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
-        self.label_clock_bias.setGeometry(630*UI_SCALE,5*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias.setGeometry(620*UI_SCALE,12*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias.setFont(self.font_cache["general"])
+        self.label_clock_bias.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias_value=QLabel(self)
-        self.label_clock_bias_value.setGeometry(790*UI_SCALE,5*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias_value.setGeometry(800*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
+        self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
 
         self.textbox_output=QListView(self)
         self.textbox_output.setModel(QStringListModel(self))
         self.textbox_output.setFont(self.font_cache["log"])
         self.textbox_output.setGeometry(20*UI_SCALE,32*UI_SCALE,860*UI_SCALE,526*UI_SCALE)
-        self.textbox_output.setStyleSheet("QListView::enabled {background-color: #000000; color: #FFFFFF;} QListView::disabled {background-color: #808080; color: #000000;}")
+        self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#808080; color:#000000;}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn);
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff);
         self.textbox_output.setAcceptDrops(False)
@@ -1304,14 +1309,14 @@ class Main_Window(QMainWindow):
         self.textbox_output.setFrameStyle(QFrame.NoFrame)
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
-        self.output_scrollbar=self.textbox_output.verticalScrollBar()
-        self.output_scrollbar.setStyleSheet("QScrollBar:vertical {width:"+str(int(15*UI_SCALE))+"px;}")
+        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CCCCCC; color:#000000; background-color:#CCCCCC; width:"+str(int(15*UI_SCALE))+"px;}")
         self.textbox_output.installEventFilter(self)
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
-        self.label_commands.setGeometry(400*UI_SCALE,568*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_commands.setGeometry(390*UI_SCALE,570*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_commands.setFont(self.font_cache["general"])
+        self.label_commands.setAlignment(Qt.AlignLeft)
 
         self.input_commandfield=QLineEdit(self)
         self.input_commandfield.setGeometry(20*UI_SCALE,590*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
@@ -1320,14 +1325,13 @@ class Main_Window(QMainWindow):
         self.input_commandfield.setAcceptDrops(False)
         self.input_commandfield.returnPressed.connect(self.input_commandfield_onsend)
         self.input_commandfield.installEventFilter(self)
-        self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color: #000000; color: #00FF00;} QLineEdit::disabled {background-color: #808080; color: #000000;}")
+        self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color:#000000; color:#00FF00;} QLineEdit::disabled {background-color:#808080; color:#000000;}")
 
         self.set_UI_lock(True)
         self.update_UI_usability()
         self.update_tray_icon()
 
         input_is_ready.set()
-
         return
 
     def clipboard_insert(self):
@@ -1349,27 +1353,30 @@ class Main_Window(QMainWindow):
         return
 
     def update_output(self):
-        global OUTPUT_LINES_MAX
+        global OUTPUT_ENTRIES_MAX
 
-        if self.is_exiting.is_set()==True or self.in_output_update==True:
+        if self.is_exiting.is_set()==True:
             return
 
-        self.in_output_update=True
+        self.lock_output_update.acquire()
+
         self.lock_log_content.acquire()
         get_output_queue=self.output_queue[:]
+        get_output_queue_len=len(get_output_queue)
         self.output_queue=[]
         self.lock_log_content.release()
-        rows_to_delete=max(0,self.textbox_output.model().rowCount()+len(get_output_queue)-OUTPUT_LINES_MAX)
+
+        cache_model=self.textbox_output.model()
+        rows_to_delete=max(0,cache_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
+        starting_row=cache_model.rowCount()-rows_to_delete
+        index=0
 
         self.textbox_output.setUpdatesEnabled(False)
 
-        self.textbox_output.model().removeRows(0,rows_to_delete)
-        starting_row=self.textbox_output.model().rowCount()
-        self.textbox_output.model().insertRows(starting_row,len(get_output_queue))
-
-        index=0
+        cache_model.removeRows(0,rows_to_delete)
+        cache_model.insertRows(starting_row,get_output_queue_len)
         for line in get_output_queue:
-            self.textbox_output.model().setItemData(self.textbox_output.model().index(starting_row+index),{0:line})
+            cache_model.setItemData(cache_model.index(starting_row+index),{0:line})
             index+=1
 
         self.timer_scroll_output.start(0)
@@ -1377,11 +1384,13 @@ class Main_Window(QMainWindow):
 
     def scroll_output(self):
         if self.is_exiting.is_set()==True:
+            self.lock_output_update.release()
             return
 
         self.textbox_output.scrollToBottom()
         self.textbox_output.setUpdatesEnabled(True)
-        self.in_output_update=False
+
+        self.lock_output_update.release()
         return
 
     def queue_close(self):
@@ -1414,7 +1423,9 @@ class Main_Window(QMainWindow):
         elif widget==self.textbox_output:
             if event.type()==QEvent.KeyPress:
                 key_pressed=event.key()
-                if key_pressed==Qt.Key_C:
+                if key_pressed==Qt.Key_Escape:
+                    rows=self.textbox_output.selectionModel().clearSelection()
+                elif key_pressed==Qt.Key_C:
                     if event.modifiers()&Qt.ControlModifier:
                         rows=self.textbox_output.selectionModel().selectedRows()
                         if len(rows)>0:
@@ -1472,8 +1483,6 @@ class Main_Window(QMainWindow):
         return
 
     def add_output_line(self,input_line):
-        global OUTPUT_LINES_MAX
-
         self.add_to_output_queue(input_line)
 
         if self.is_minimized==False:
@@ -1552,13 +1561,13 @@ class Main_Window(QMainWindow):
             self.update_tray_icon()
 
         elif event_type=="status":
-            self.label_status_value.setText(event_data)
+            self.label_botstatus_value.setText(event_data)
             if event_data=="ONLINE":
-                self.label_status_value.setStyleSheet("QLabel {color: #009900}")
+                self.label_botstatus_value.setStyleSheet("QLabel {color: #009900}")
                 self.online_state=True
                 self.update_tray_icon()
             elif event_data=="OFFLINE":
-                self.label_status_value.setStyleSheet("QLabel {color: #990000}")
+                self.label_botstatus_value.setStyleSheet("QLabel {color: #990000}")
                 self.online_state=False
                 self.update_tray_icon()
 
