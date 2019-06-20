@@ -287,11 +287,11 @@ class Message_Listener(object):
         self.working_thread.daemon=True
         self.listen_users=username_list
         self.messagelist_lock={}
-        for i in self.listen_users:
-            self.messagelist_lock[i]=threading.Lock()
+        for username in self.listen_users:
+            self.messagelist_lock[username]=threading.Lock()
         self.user_messages={}
-        for i in self.listen_users:
-            self.user_messages[i]=[]
+        for username in self.listen_users:
+            self.user_messages[username]=[]
         return
 
     def log(self,input_text):
@@ -383,8 +383,8 @@ class Message_Listener(object):
 
     def organize_messages(self,input_msglist):
         collect_new_messages={}
-        for i in self.listen_users:
-            collect_new_messages[i]=[]
+        for username in self.listen_users:
+            collect_new_messages[username]=[]
 
         newest_ID=self.last_ID_checked
         for i in reversed(range(len(input_msglist))):
@@ -414,14 +414,14 @@ class Message_Listener(object):
                 break
         self.last_ID_checked=newest_ID
 
-        for i in collect_new_messages:
-            self.messagelist_lock[i].acquire()
-            if len(collect_new_messages[i])>0:
-                self.user_messages[i]+=collect_new_messages[i]
-            for j in reversed(range(len(self.user_messages[i]))):
-                if server_time()-self.user_messages[i][j][u"date"]>30:
-                    del self.user_messages[i][j]
-            self.messagelist_lock[i].release()
+        for message in collect_new_messages:
+            self.messagelist_lock[message].acquire()
+            if len(collect_new_messages[message])>0:
+                self.user_messages[message]+=collect_new_messages[message]
+            for i in reversed(range(len(self.user_messages[message]))):
+                if server_time()-self.user_messages[message][i][u"date"]>30:
+                    del self.user_messages[message][i]
+            self.messagelist_lock[message].release()
         return
 
     def consume_user_messages(self,input_username):
@@ -484,7 +484,7 @@ class User_Message_Handler(object):
             self.bot_handle.sendMessage(sid,msg)
             self.lastsent_timers.append(self.last_send_time)
             excess_entries=max(0,len(self.lastsent_timers)-40)
-            for i in range(excess_entries):
+            for _ in range(excess_entries):
                 del self.lastsent_timers[0]
             return True
         except:
@@ -698,8 +698,8 @@ class User_Message_Handler(object):
             if len(folderlist)>0:
                 response+="<FOLDERS:>\n"
 
-            for i in folderlist:
-                response+="\n"+i
+            for folder in folderlist:
+                response+="\n"+folder
 
             if len(folderlist)>0:
                 response+="\n\n"
@@ -707,8 +707,8 @@ class User_Message_Handler(object):
             if len(filelist)>0:
                 response+="<FILES:>\n"
 
-            for i in filelist:
-                response+="\n"+i
+            for filename in filelist:
+                response+="\n"+filename
         except:
             response="<Bad dir path.>"
 
@@ -984,14 +984,14 @@ class User_Console(object):
 
     def bots_running(self):
         total=0
-        for i in self.bot_list:
-            if i.IS_RUNNING()==True:
+        for bot_instance in self.bot_list:
+            if bot_instance.IS_RUNNING()==True:
                 total+=1
         return total
 
     def any_bots_busy(self):
-        for i in self.bot_list:
-            if i.processing_messages.is_set()==True:
+        for bot_instance in self.bot_list:
+            if bot_instance.processing_messages.is_set()==True:
                 return True
         return False
 
@@ -1004,31 +1004,31 @@ class User_Console(object):
             input_argument=""
             
         if input_command=="start":
-            for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="":
-                    i.LISTEN(True)
+            for bot_instance in self.bot_list:
+                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
+                    bot_instance.LISTEN(True)
             return True
         elif input_command=="stop":
-            for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="":
-                    i.LISTEN(False)
+            for bot_instance in self.bot_list:
+                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
+                    bot_instance.LISTEN(False)
             return True
         elif input_command=="stats":
-            for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="":
-                    self.log("Message handler for user \""+i.allowed_user+"\":\nHome path=\""+i.allowed_root+"\"\nWrite mode: "+str(i.allow_writing).upper()+"\nLocked: "+str(i.lock_status.is_set()).upper()+"\nListening: "+str(i.listen_flag.is_set()).upper()+"\n\n")
+            for bot_instance in self.bot_list:
+                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
+                    self.log("Message handler for user \""+bot_instance.allowed_user+"\":\nHome path=\""+bot_instance.allowed_root+"\"\nWrite mode: "+str(bot_instance.allow_writing).upper()+"\nCurrent folder=\""+bot_instance.last_folder+"\"\nLocked: "+str(bot_instance.lock_status.is_set()).upper()+"\nListening: "+str(bot_instance.listen_flag.is_set()).upper()+"\n")
             return True
         elif input_command=="list":
             list_out=""
-            for i in self.bot_list:
-                list_out+=i.allowed_user+", "
+            for bot_instance in self.bot_list:
+                list_out+=bot_instance.allowed_user+", "
             list_out=list_out[:-2]+"."
             self.log("Allowed user(s): "+list_out)
             return True
         elif input_command=="unlock":
-            for i in self.bot_list:
-                if i.allowed_user.lower()==input_argument or input_argument=="":
-                    i.pending_lockclear.set()
+            for bot_instance in self.bot_list:
+                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
+                    bot_instance.pending_lockclear.set()
             return True
         elif input_command=="sync":
             self.log("Manual Internet time synchronization requested...")
@@ -1068,9 +1068,9 @@ class User_Console(object):
     def process_input(self):
         global COMMAND_CHECK_INTERVAL_SECONDS
 
-        for i in self.bot_list:
-            i.START()
-            i.LISTEN(True)
+        for bot_instance in self.bot_list:
+            bot_instance.START()
+            bot_instance.LISTEN(True)
         self.log("User console activated.")
         self.log("Type \"help\" in the console for available commands.")
         self.active_UI_signaller.send("attach_console",self)
@@ -1108,8 +1108,8 @@ class User_Console(object):
                 if command!="":
                     self.active_UI_signaller.send("commandfield_failed",{})
             else:
-                for i in self.bot_list:
-                    i.STOP()
+                for bot_instance in self.bot_list:
+                    bot_instance.STOP()
                 while self.bots_running()>0:
                     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
                 continue_processing=False
@@ -1159,6 +1159,58 @@ class User_Entry(object):
         return
 
 
+class UI(object):
+    def __init__(self,input_signaller,input_logger=None):
+        self.active_logger=input_logger
+        self.is_ready=threading.Event()
+        self.is_ready.clear()
+        self.is_exiting=threading.Event()
+        self.is_exiting.clear()
+        self.has_quit=threading.Event()
+        self.has_quit.clear()
+        self.UI_signaller=input_signaller
+        self.working_thread=threading.Thread(target=self.UI_thread_launcher)
+        self.working_thread.daemon=True
+        self.working_thread.start()
+        return
+
+    def UI_thread_launcher(self):
+        self.UI_APP=0
+        self.UI_APP=QApplication([])
+        self.UI_APP.setStyle("fusion")
+        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.active_logger)
+        self.UI_window.show()
+        self.UI_APP.aboutToQuit.connect(self.UI_APP.deleteLater)
+        self.UI_window.raise_()
+        self.UI_window.activateWindow()
+        sys.exit(self.UI_APP.exec_())
+        return
+
+    def IS_RUNNING(self):
+        return self.has_quit.is_set()==False
+
+    def IS_READY(self):
+        return self.is_ready.is_set()==True
+
+
+class UI_Signaller(QObject):
+    active_signal=pyqtSignal(object)
+
+    def __init__(self):
+        super(UI_Signaller,self).__init__(None)
+        return
+
+    def send(self,input_type,input_data={}):
+        output_signal_info={"type":input_type,"data":input_data}
+        self.active_signal.emit(output_signal_info)
+        return
+
+
+"""
+WINS
+"""
+
+
 class Main_Window(QMainWindow):
     def __init__(self,input_is_ready,input_is_exiting,input_has_quit,input_signaller,input_logger=None):
         global __author__
@@ -1170,6 +1222,8 @@ class Main_Window(QMainWindow):
         super(Main_Window,self).__init__(None)
 
         self.active_logger=input_logger
+        self.is_exiting=input_is_exiting
+        self.has_quit=input_has_quit
 
         UI_SCALE=self.logicalDpiX()/96.0
         UI_SCALE*=CUSTOM_UI_SCALING
@@ -1196,9 +1250,6 @@ class Main_Window(QMainWindow):
         self.active_clipboard=QApplication.clipboard()
         self.UI_signaller=input_signaller
         self.UI_signaller.active_signal.connect(self.signal_response_handler)
-
-        self.is_exiting=input_is_exiting
-        self.has_quit=input_has_quit
 
         self.is_minimized=False
         self.disable_hide=False
@@ -1362,9 +1413,10 @@ class Main_Window(QMainWindow):
 
         self.lock_log_content.acquire()
         get_output_queue=self.output_queue[:]
+        self.lock_log_content.release()
+
         get_output_queue_len=len(get_output_queue)
         self.output_queue=[]
-        self.lock_log_content.release()
 
         cache_model=self.textbox_output.model()
         rows_to_delete=max(0,cache_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
@@ -1409,7 +1461,7 @@ class Main_Window(QMainWindow):
                         change_index=-1
                     elif key_pressed==Qt.Key_Down:
                         change_index=1
-    
+
                     if change_index!=0:
                         new_index=self.command_history_index+change_index
                         if new_index>=0 and new_index<=len(self.command_history):
@@ -1520,10 +1572,12 @@ class Main_Window(QMainWindow):
             self.input_commandfield.setDisabled(do_disable)
             if do_disable==False:
                 self.input_commandfield.setFocus()
+        return
 
     def update_UI_usability(self):
         usable=self.console is not None
         self.set_UI_lock(not usable)
+        return
 
     def signal_response_handler(self,event):
         global COMMAND_HISTORY_MAX
@@ -1575,9 +1629,9 @@ class Main_Window(QMainWindow):
             self.label_clock_bias_value.setText(event_data)
             get_number=float(event_data.replace("+","").replace("-",""))
             self.label_clock_bias_value.setStyleSheet("QLabel {color: #009900}")
-            if get_number>30:
+            if get_number>=30:
                 self.label_clock_bias_value.setStyleSheet("QLabel {color: #999900}")
-            if get_number>60:
+            if get_number>=60:
                 self.label_clock_bias_value.setStyleSheet("QLabel {color: #990000}")
 
         elif event_type=="commandfield_failed":
@@ -1667,54 +1721,6 @@ class Main_Window(QMainWindow):
         return
 
 
-class UI(object):
-    def __init__(self,input_signaller,input_logger=None):
-        self.active_logger=input_logger
-        self.is_ready=threading.Event()
-        self.is_ready.clear()
-        self.is_exiting=threading.Event()
-        self.is_exiting.clear()
-        self.has_quit=threading.Event()
-        self.has_quit.clear()
-        self.UI_signaller=input_signaller
-        self.working_thread=threading.Thread(target=self.UI_thread_launcher)
-        self.working_thread.daemon=True
-        self.working_thread.start()
-        return
-
-    def UI_thread_launcher(self):
-        self.UI_APP=0
-        self.UI_APP=QApplication([])
-        self.UI_APP.setStyle("fusion")
-        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.active_logger)
-        self.UI_window.show()
-        self.UI_APP.aboutToQuit.connect(self.UI_APP.deleteLater)
-        self.UI_window.raise_()
-        self.UI_window.activateWindow()
-        sys.exit(self.UI_APP.exec_())
-        return
-
-    def IS_RUNNING(self):
-        return self.has_quit.is_set()==False
-
-    def IS_READY(self):
-        return self.is_ready.is_set()==True
-
-
-
-class UI_Signaller(QObject):
-    active_signal=pyqtSignal(object)
-
-    def __init__(self):
-        super(UI_Signaller,self).__init__(None)
-        return
-
-    def send(self,input_type,input_data={}):
-        output_signal_info={"type":input_type,"data":input_data}
-        self.active_signal.emit(output_signal_info)
-        return
-
-
 """
 MAIN
 """
@@ -1778,9 +1784,9 @@ if fatal_error==False:
     try:
         file_handle=open(os.path.join(environment_info["working_dir"],"userlist.txt"),"r")
         file_entries=file_handle.readlines()
-        for i in file_entries:
-            if i.strip()!="":
-                collect_allowed_senders.append(User_Entry(i.strip()))
+        for entry in file_entries:
+            if entry.strip()!="":
+                collect_allowed_senders.append(User_Entry(entry.strip()))
     except:
         log("ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
@@ -1841,10 +1847,10 @@ if fatal_error==False:
             while Active_UI.IS_RUNNING()==True:
 
                 time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-    
+
                 sys.stdout.flush()
                 sys.stderr.flush()
-    
+
                 process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
                 if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
                     process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
