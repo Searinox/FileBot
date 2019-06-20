@@ -1842,7 +1842,7 @@ if fatal_error==False:
                     set_process_priority_idle()
 
                 if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
-                    Perform_Time_Sync()
+                    Perform_Time_Sync(UI_SIGNAL)
                     last_server_time_check=time.time()
 
             log("Left thread waiting loop.")
