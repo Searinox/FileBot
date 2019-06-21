@@ -969,7 +969,7 @@ class User_Message_Handler(object):
         return
 
 class User_Console(object):
-    def __init__(self,bot_list,input_signaller,input_logger=None):
+    def __init__(self,bot_list,input_signaller,input_time_sync,input_logger=None):
         self.active_logger=input_logger
         self.working_thread=threading.Thread(target=self.process_input)
         self.working_thread.daemon=True
@@ -982,6 +982,7 @@ class User_Console(object):
         self.request_exit=threading.Event()
         self.request_exit.clear()
         self.lock_command=threading.Lock()
+        self.request_time_sync=input_time_sync
         self.pending_command=""
         return
 
@@ -1049,8 +1050,9 @@ class User_Console(object):
                     bot_instance.pending_lockclear.set()
             return True
         elif input_command=="sync":
-            self.log("Manual Internet time synchronization requested...")
-            Perform_Time_Sync(self.active_UI_signaller)
+            if self.request_time_sync.is_set()==False:
+                self.log("Manual Internet time synchronization requested...")
+                self.request_time_sync.set()
             return True
         elif input_command=="help":
             self.log("AVAILABLE CONSOLE COMMANDS:\n")
@@ -1852,7 +1854,10 @@ if fatal_error==False:
             for sender in collect_allowed_senders:
                 UserHandleInstances.append(User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,ListenerService,LOGGER))
 
-            Command_Console=User_Console(UserHandleInstances,UI_SIGNAL,LOGGER)
+            request_sync_time=threading.Event()
+            request_sync_time.clear()
+
+            Command_Console=User_Console(UserHandleInstances,UI_SIGNAL,request_sync_time,LOGGER)
             log("Starting Console...")
             Command_Console.START()
 
@@ -1873,9 +1878,15 @@ if fatal_error==False:
                     process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
                     set_process_priority_idle()
 
-                if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS:
-                    Perform_Time_Sync(UI_SIGNAL)
-                    last_server_time_check=time.time()
+                if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or request_sync_time.is_set()==True:
+                    time_sync_result=Perform_Time_Sync(UI_SIGNAL)
+                    if request_sync_time.is_set()==True:
+                        request_sync_time.clear()
+                        if time_sync_result==True:
+                            last_server_time_check=time.time()
+                    else:
+                        request_sync_time.clear()
+                        last_server_time_check=time.time()
 
             log("Left thread waiting loop.")
 
