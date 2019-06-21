@@ -26,7 +26,7 @@ import win32process
 import urllib2
 import ssl
 from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel,QCoreApplication)
-from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView)
+from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
 
 SSL_NOCERT=ssl.create_default_context()
@@ -1265,7 +1265,7 @@ class Main_Window(QMainWindow):
                 if fontproperty=="strikeout":
                     self.font_cache[fontname].setStrikeOut(True)
 
-        self.setFixedSize(900*UI_SCALE,628*UI_SCALE)
+        self.setFixedSize(900*UI_SCALE,618*UI_SCALE)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
 
         self.lock_log_queue=threading.Lock()
@@ -1329,6 +1329,10 @@ class Main_Window(QMainWindow):
 
         self.options_macros["restore"].setVisible(False)
 
+        self.label_botname=QGroupBox(self)
+        self.label_botname.setGeometry(-10*UI_SCALE,-100*UI_SCALE,self.width()+10*UI_SCALE,self.height()+100*UI_SCALE)
+        self.label_botname.setStyleSheet("QGroupBox {background-color:#F0F0FF;}")
+
         self.label_botname=QLabel(self)
         self.label_botname.setText("Bot name:")
         self.label_botname.setGeometry(22*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
@@ -1387,12 +1391,12 @@ class Main_Window(QMainWindow):
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
-        self.label_commands.setGeometry(390*UI_SCALE,570*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_commands.setGeometry(390*UI_SCALE,565*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
 
         self.input_commandfield=QLineEdit(self)
-        self.input_commandfield.setGeometry(20*UI_SCALE,590*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
+        self.input_commandfield.setGeometry(20*UI_SCALE,580*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
         self.input_commandfield.setFont(self.font_cache["log"])
         self.input_commandfield.setMaxLength(512)
         self.input_commandfield.setAcceptDrops(False)
