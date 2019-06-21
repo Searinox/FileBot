@@ -1372,7 +1372,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setFrameStyle(QFrame.NoFrame)
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
-        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CCCCCC; color:#000000; background-color:#CCCCCC; width:"+str(int(15*UI_SCALE))+"px;}")
+        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CDCDCD; color:#000000; background-color:#CDCDCD; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {background-color:#DBDBDB}")
         self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
 
@@ -1488,6 +1488,7 @@ class Main_Window(QMainWindow):
                                 self.input_commandfield.selectAll()
                             else:
                                 self.input_commandfield.setText("")
+                        return True
 
         elif widget==self.textbox_output:
             if event.type()==QEvent.KeyPress:
@@ -1505,9 +1506,7 @@ class Main_Window(QMainWindow):
                                 for row in rows:
                                     clipboard_data+=cache_model.itemData(row)[0]+"\n"
                                 self.queue_clipboard_insert(clipboard_data)
-                                event.ignore()
-                                widget=None
-                                event=None
+                        return True
 
         return QWidget.eventFilter(self,widget,event)
 
