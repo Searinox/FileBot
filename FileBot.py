@@ -25,7 +25,7 @@ import win32con
 import win32process
 import urllib2
 import ssl
-from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel)
+from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel,QCoreApplication)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
 
@@ -40,6 +40,7 @@ COMMAND_CHECK_INTERVAL_SECONDS=0.2
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
+CLIPBOARD_COPY_TIMEOUT_SECONDS=2
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
@@ -55,7 +56,7 @@ APP_ICONS_B64={"default":"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAABnRSTl
 "deactivated":"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAABnRSTlMA/wD/AP83WBt9AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAEkUlEQVR42u2dP47VMBDGk5FvgLSi2AqttPegRuIGtNshjoLoXssNkKi5x5MQFQVaac8QikiPkDjxv/HM2PncvVVe4vf7Zj57nGw8TtM0NNLGcYw/uJXfNdrsaBLrpiUxJEAN6PbFUBZAErpNMXQEsMDdiBLSApSgf7l/iD/41e+fTcggJ0AS+iTWlSSRIVNdgHjuNaCXi1GdT70LRKKX5J6tREVKlU4dpK/LPUOJWqDYz9scel0ZmAU4pm8ZfZISjNDYBOgGfaQMbNxYTnRAv1H0YhqUCtAxehkZigSoTT+7mq1UbO/1p4hh9pf36HMFvjx9FQ0I9FnkyV7jyskA78UYHX9F/3J9FiD79HiX9EO8IZIBk4zTN9u8PzkjDwj0dTUg0NfVgGzS//Tlx0k0INDX1YBAX1cD4rrYmemXYKHU8Af9JA2CSUCgr6sBqfSyV/pJ42hAgHrh3z39JFAE+rpGJGpBp3KeyJAlsfA/m+9HjgROZta/Xef5/PFt98Rf7h+CC1yUvYiBxpIEJFb0nrMFATrh8Je5vWU8CZY3zgjhr5sEBPfXHQkI4a+bBAQ6uo3gP7ouRPAfXReCBSk3Z61DtyfUTlKF0HYAgP/IuNCMHRYECzLvEhLTUDQIAAHQNMZhwhQIg/Dp6wA0CAALQh2ADIAFoUEAjAGYhiIDYEFokhY0TZOpO/Jnn4a2+O/qsCC02LaK72maIAAyAHUA6gDlDFi95wnjsMwAAAtSbnPcYzna5CAMF5Lxn38CNLSbWE/+Y9GC8iZLXuOKn1Ap+p47SBnhR1RmXkEWXqyR37XmP/+NAbouFBmtx4dVrSFq+E/AgsSSYAnu6fEuMpBvfVvGl//rX//4T/HhtW74rwWwtjS9p9MqLOaPrczcVk5DJepVMp9CJzFlRMkv6xAeCZaw3nx7F6PKnis28VTrFi+Va8jSZvpLDTouvgICiCVBH1OakvAfIhfjaifBMvC7SYJIaBSpFbsGMQHuPWavJ6ZmQdvO7PkKsUtaEv4HSRBf5ba1nkpJhsUe/nuGc/v7XhIso2H1saHwD1TC27qMpTZeMv31/nvM8XNQX67Py+96ofvDX6TizaAftiCBwSCpHduLuvlkwCGZy5RgWh1/uT5vz+D9owX6QSeP2saqfA+HW+fMjpCp21ix0I/NAO+JcNuynH6CBUGDGvSH1J30sr2oIanyrDV7Bp82CCMPeOnnzILyNGjlDQjx/eTaSzJzO9vau6k2F/jZaweZjybuXax7O2LfT9j0jtrd0x+wp3x58V8IsPTJuPnyHb94tx76ojGgRldOSH9gfDbU+DNFjOh5A84NaCmzOPZchwBq6CFAQu1Sb5DjFKChYSC+YKw9vxh5L2D5JZipVbrM1M61EqGpWmYvighPqV0r/iCwyqRSzTj76LvkblEAYfpGqnd3KvoGl0ycZfQrXklz3FaWp5xN+l58XS75OfuB33cj0D9dBtS4sQcBEPg2LOiA40Hgn/ldLSQT8rCdvTayI4ifrYO+2jQU6DWnoaCvKQDoq1kQ0GtmAOirZQDQS2fAkjjoB9tftPkDoEi2BJIAAAAASUVORK5CYII=",
 "busy":"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAABnRSTlMA/wD/AP83WBt9AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAEk0lEQVR42u2dPY7UQBCF7VLHkyCtCIgQ0t6DmDOQboY4CiKblBtwAe4xEiEBGolkLmACS4Pxz/RfdVV19+todzVje75X9bqqx+sep2kaKhnjOIa/uJbPNdq80CjWVUtiSIAS0O2LoSyAJHSbYugIYIG7ESWkBchBP91iTnSqQwY5AeJqmFuBCzhZVKK4AOHcS0DPF6M4n3InCEQvyT1ZiYKUCh3aS1+Xe4ISpUCxH7c69LoyMAvwmL5l9FFKMEJjE6AZ9IEysHFjOdAD+pWiF9MgV4CG0cvIkCVAafrJ3WyhZvvoerIYJr/5iD5X4MvTV9GAQJ9FnuQ1rpQM2D0Zo+Ov6J8vVwGyL89PUR9kN0QSYJJx+mbH7kdOyAMCfV0NCPR1NSCb9D9//dGJBgT6uhoQ6OtqQFwn65l+DhaKDX/Qj9LAmwQE+roakMpVtko/ah71CFAu/JunHwWKQF/XiEQtqCvnCQxZEgv/3nw/cCZwMlX/dp3ny6f3zROfbv4FLkpexMBgSQISa3r7HF6ATjj8Zb7eMp4Eyy/OCOGvmwQE99edCQjhr5sEBDq6g+A/ui5E8B9dF4IFKQ9n7YLud6h10oXQdgKA/8i40IwdFgQLMu8SEmUoBgSAABga8zChBMIk3H0fgAEBYEHoA5ABsCAMCIA5AGUoMgAWhCFpQdM0mfpGvvcytMZ/V4cFYYSOVXxP0wQBkAHoA9AHKGfA6jlPmIdlJgBYkPKY4x7L0SYnYbiQjP/8E6Ci3cRa8h+LFpRWLO0aV3hBpeh77kHKCN+iMvPystjFGvhea/7z3xyg60KB0fr4ZUV7iBL+47EgsSRYgnt5fgoM5D9v3s0/vPr10/P2b7/3D/HxtW74rwWwtjR9pNMd/fLXpQy1hL+/EROoR7e+kekkpowo+mEdwjPBEtbb7x9CVFmF/9aRKgr/oKUImaZspr/UoOHmyyOAWBK0UdLkhP8Q+ujik0T4b39uPvwPBdhqxa5BSIDvvuao2jFVBW1xHfkKsUuaE/4PkiC8y61rPZWiDIs9/I8M5/73oyRYxvvq14rCf/DuIcP1BMX7NZ0v14TZ9R7U3vcuwz9qMS52DxkW+n4LEpgM0pSwaT4JcEjmNDmYVq8/X67bI+z+0QJ9r5MHbWOVv4fD0oJsToaZFpS8q1VQBuweCF9b5tOPsCBoUIL+ELuTXrIXVSRVmrUmV/BxkzDygJd+ShWUpkEtT0AIv06uvSQTt7MtvZtqdYGfvHaQeGvi0cmatyP2/YRN76jdPP0Be8rnN/+ZAHPvjJtP3/CDd8uhz5oDSlxKh/QHxntDjd9TxIieN+DcgBHV0HDnOgRQQw8BInqXcpMcpwAVTQPhDWPp+mLkPYHlh2DGdukypZ2rJUJjtUxeFBEuqV0t/iCwyqTSzTj76JvkblEAYfpGunfXFX2DSybOMvr1QyxiatxalqecTfq7+Jpc8nP2A7/tQaDfXQaU+GIPAiDwbVjQo/9EOA78np/VQjIhD9s5RMSOILxaB321MhToNctQ0NcUAPTVLAjoNTMA9NUyAOilM2BJHPS94y98l4ldLLAYcwAAAABJRU5ErkJggg=="}
 
-QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '"]
+QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 
 LOG_HANDLE=None
 UI_SIGNAL=None
@@ -1400,18 +1401,31 @@ class Main_Window(QMainWindow):
         input_is_ready.set()
         return
 
+    def log(self,input_text):
+        if self.active_logger is not None:
+            self.active_logger.LOG("GUINTRFC",input_text)
+        return
+
     def clipboard_insert(self):
+        global CLIPBOARD_COPY_TIMEOUT_SECONDS
+
         if self.is_exiting.is_set()==True:
             return
 
         self.lock_clipboard.acquire()
         if self.clipboard_queue!="":
-            self.active_clipboard.setText(self.clipboard_queue)
+            start_time=GetTickCount64()
+            while self.active_clipboard.text()!=self.clipboard_queue and (GetTickCount64()-start_time)/1000.0<CLIPBOARD_COPY_TIMEOUT_SECONDS:
+                self.active_clipboard.setText(self.clipboard_queue)
+                QCoreApplication.processEvents()
             self.clipboard_queue=""
         self.lock_clipboard.release()
         return
 
     def queue_clipboard_insert(self,input_text):
+        if input_text=="":
+            return
+
         self.lock_clipboard.acquire()
         self.clipboard_queue=input_text
         self.lock_clipboard.release()
@@ -1463,6 +1477,7 @@ class Main_Window(QMainWindow):
     def queue_close(self):
         if self.is_exiting.is_set()==True:
             return
+
         self.timer_close.start(0)
         return
 
@@ -1500,7 +1515,10 @@ class Main_Window(QMainWindow):
                             cache_model=self.textbox_output.model()
                             for row in rows:
                                 clipboard_data+=cache_model.itemData(row)[0]+"\n"
-                            self.queue_clipboard_insert(clipboard_data)
+                            self.queue_clipboard_insert(str(clipboard_data))
+                            event.ignore()
+                            widget=None
+                            event=None
 
         return QWidget.eventFilter(self,widget,event)
 
@@ -1536,16 +1554,15 @@ class Main_Window(QMainWindow):
             self.tray_icon.setIcon(self.icon_cache[self.tray_current_state])
         return
 
-    def log(self,input_text):
-        if self.active_logger is not None:
-            self.active_logger.LOG("GUINTRFC",input_text)
-        return
-
     def add_to_output_queue(self,input_line):
+        global OUTPUT_ENTRIES_MAX
+
         if input_line.endswith("\n"):
             input_line=input_line[:-1]
         self.lock_log_content.acquire()
         self.output_queue+=[input_line]
+        if len(self.output_queue)>OUTPUT_ENTRIES_MAX:
+            del self.output_queue[0]
         self.lock_log_content.release()
         return
 
