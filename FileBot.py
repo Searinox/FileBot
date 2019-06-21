@@ -41,6 +41,7 @@ SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
 CLIPBOARD_COPY_TIMEOUT_SECONDS=2
+CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
@@ -108,7 +109,7 @@ def log(input_text):
 
 def OS_uptime():
     return ctypes.windll.kernel32.GetTickCount64()/1000.0
-    
+
 def Current_UTC_Internet_Time():
     global SSL_NOCERT
 
@@ -186,8 +187,7 @@ def readable_size(input_size):
         return str(round(input_size/1024.0,2))+" KB"
     if input_size<1024**3:
         return str(round(input_size/1024.0**2,2))+" MB"
-    if input_size<1024**4:
-        return str(round(input_size/1024.0**3,2))+" GB"
+    return str(round(input_size/1024.0**3,2))+" GB"
 
 
 """
@@ -602,6 +602,7 @@ class User_Message_Handler(object):
         else:
             self.log("<"+self.allowed_user+"> "+"Listen stopped.")
             self.listen_flag.clear()
+        return
 
     def STOP(self):
         self.log("<"+self.allowed_user+"> "+"Message handler stop issued.")
@@ -653,10 +654,7 @@ class User_Message_Handler(object):
         return
 
     def process_files(self,sid,fid,filename):
-        if self.bot_lock_pass!="":
-            return
-
-        if self.allow_writing==False:
+        if self.bot_lock_pass!="" or self.allow_writing==False:
             return
 
         foldername=self.get_last_folder()
@@ -674,6 +672,7 @@ class User_Message_Handler(object):
         else:
             self.sendmsg(sid,"File \""+filename+"\" already exists at the location.")
             self.log("<"+self.allowed_user+"> "+" File download aborted due to existing instance.")
+        return
 
     def chunkalize(self,input_string,chunksize):
         retval=[]
@@ -752,7 +751,7 @@ class User_Message_Handler(object):
         command_type=msg[1:cmd_end].strip().lower()
         command_args=msg[cmd_end+1:].strip()
         response=""
-        
+
         if command_type=="start":
             self.log("<"+self.allowed_user+"> "+"Message handler start requested.")
         elif command_type=="dir":
@@ -1018,7 +1017,7 @@ class User_Console(object):
             input_argument=user_data[1].strip()
         else:
             input_argument=""
-            
+
         if input_command=="start":
             for bot_instance in self.bot_list:
                 if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
@@ -1103,7 +1102,7 @@ class User_Console(object):
             if last_busy_state!=self.any_bots_busy():
                 last_busy_state=not last_busy_state
                 UI_SIGNAL.send("bots_busy",last_busy_state)
-            
+
             command=self.retrieve_command()
 
             if command!="":
@@ -1260,7 +1259,7 @@ class Main_Window(QMainWindow):
         self.setFixedSize(900*UI_SCALE,628*UI_SCALE)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
 
-        self.lock_log_content=threading.Lock()
+        self.lock_log_queue=threading.Lock()
         self.lock_output_update=threading.Lock()
         self.lock_clipboard=threading.Lock()
         self.active_clipboard=QApplication.clipboard()
@@ -1278,6 +1277,7 @@ class Main_Window(QMainWindow):
         self.console=None
         self.update_log_on_restore=False
         self.clipboard_queue=""
+        self.last_clipboard_selection_time=GetTickCount64()
 
         self.icon_cache={}
         for iconname in APP_ICONS_B64:
@@ -1297,10 +1297,6 @@ class Main_Window(QMainWindow):
         self.timer_update_output=QTimer(self)
         self.timer_update_output.timeout.connect(self.update_output)
         self.timer_update_output.setSingleShot(True)
-
-        self.timer_scroll_output=QTimer(self)
-        self.timer_scroll_output.timeout.connect(self.scroll_output)
-        self.timer_scroll_output.setSingleShot(True)
 
         self.timer_close=QTimer(self)
         self.timer_close.timeout.connect(self.close)
@@ -1363,7 +1359,7 @@ class Main_Window(QMainWindow):
         self.textbox_output=QListView(self)
         self.textbox_output.setModel(QStringListModel(self))
         self.textbox_output.setFont(self.font_cache["log"])
-        self.textbox_output.setGeometry(20*UI_SCALE,32*UI_SCALE,860*UI_SCALE,526*UI_SCALE)
+        self.textbox_output.setGeometry(20*UI_SCALE,32*UI_SCALE,860*UI_SCALE,524*UI_SCALE)
         self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#808080; color:#000000;}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn);
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff);
@@ -1377,6 +1373,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
         self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CCCCCC; color:#000000; background-color:#CCCCCC; width:"+str(int(15*UI_SCALE))+"px;}")
+        self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
 
         self.label_commands=QLabel(self)
@@ -1413,12 +1410,11 @@ class Main_Window(QMainWindow):
             return
 
         self.lock_clipboard.acquire()
-        if self.clipboard_queue!="":
-            start_time=GetTickCount64()
-            while self.active_clipboard.text()!=self.clipboard_queue and (GetTickCount64()-start_time)/1000.0<CLIPBOARD_COPY_TIMEOUT_SECONDS:
-                self.active_clipboard.setText(self.clipboard_queue)
-                QCoreApplication.processEvents()
-            self.clipboard_queue=""
+        start_time=GetTickCount64()
+        while self.active_clipboard.text()!=self.clipboard_queue and (GetTickCount64()-start_time)/1000.0<CLIPBOARD_COPY_TIMEOUT_SECONDS:
+            self.active_clipboard.setText(self.clipboard_queue)
+            QCoreApplication.processEvents()
+        self.clipboard_queue=""
         self.lock_clipboard.release()
         return
 
@@ -1438,36 +1434,25 @@ class Main_Window(QMainWindow):
         if self.is_exiting.is_set()==True:
             return
 
+        self.lock_log_queue.acquire()
+        get_output_queue=self.output_queue[:]
+        self.output_queue=[]
+        self.lock_log_queue.release()
+        get_output_queue_len=len(get_output_queue)
+        cache_model=self.textbox_output.model()
+
         self.lock_output_update.acquire()
 
-        self.lock_log_content.acquire()
-        get_output_queue=self.output_queue[:]
-        self.lock_log_content.release()
-
-        get_output_queue_len=len(get_output_queue)
-        self.output_queue=[]
-
-        cache_model=self.textbox_output.model()
         rows_to_delete=max(0,cache_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
         starting_row=cache_model.rowCount()-rows_to_delete
-        index=0
+        index=-1
 
         self.textbox_output.setUpdatesEnabled(False)
-
         cache_model.removeRows(0,rows_to_delete)
         cache_model.insertRows(starting_row,get_output_queue_len)
         for line in get_output_queue:
-            cache_model.setItemData(cache_model.index(starting_row+index),{0:line})
             index+=1
-
-        self.timer_scroll_output.start(0)
-        return
-
-    def scroll_output(self):
-        if self.is_exiting.is_set()==True:
-            self.lock_output_update.release()
-            return
-
+            cache_model.setItemData(cache_model.index(starting_row+index),{0:line})
         self.textbox_output.scrollToBottom()
         self.textbox_output.setUpdatesEnabled(True)
 
@@ -1482,6 +1467,8 @@ class Main_Window(QMainWindow):
         return
 
     def eventFilter(self,widget,event):
+        global CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS
+
         if widget==self.input_commandfield:
             if self.input_commandfield.isEnabled()==True:
                 if event.type()==QEvent.KeyPress:
@@ -1509,16 +1496,18 @@ class Main_Window(QMainWindow):
                     rows=self.textbox_output.selectionModel().clearSelection()
                 elif key_pressed==Qt.Key_C:
                     if event.modifiers()&Qt.ControlModifier:
-                        rows=self.textbox_output.selectionModel().selectedRows()
-                        if len(rows)>0:
-                            clipboard_data=""
-                            cache_model=self.textbox_output.model()
-                            for row in rows:
-                                clipboard_data+=cache_model.itemData(row)[0]+"\n"
-                            self.queue_clipboard_insert(str(clipboard_data))
-                            event.ignore()
-                            widget=None
-                            event=None
+                        if (GetTickCount64()-self.last_clipboard_selection_time)/1000.0>CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS:
+                            self.last_clipboard_selection_time=GetTickCount64()
+                            rows=self.textbox_output.selectionModel().selectedRows()
+                            if len(rows)>0:
+                                clipboard_data=""
+                                cache_model=self.textbox_output.model()
+                                for row in rows:
+                                    clipboard_data+=cache_model.itemData(row)[0]+"\n"
+                                self.queue_clipboard_insert(clipboard_data)
+                                event.ignore()
+                                widget=None
+                                event=None
 
         return QWidget.eventFilter(self,widget,event)
 
@@ -1559,11 +1548,11 @@ class Main_Window(QMainWindow):
 
         if input_line.endswith("\n"):
             input_line=input_line[:-1]
-        self.lock_log_content.acquire()
+        self.lock_log_queue.acquire()
         self.output_queue+=[input_line]
         if len(self.output_queue)>OUTPUT_ENTRIES_MAX:
             del self.output_queue[0]
-        self.lock_log_content.release()
+        self.lock_log_queue.release()
         return
 
     def add_output_line(self,input_line):
@@ -1594,15 +1583,12 @@ class Main_Window(QMainWindow):
     def set_UI_lock(self,new_state):
         if new_state!=self.UI_lockstate:
             self.UI_lockstate=new_state
-            do_disable=self.UI_lockstate or self.console is None
-            get_updates_state=self.textbox_output.updatesEnabled()
-            if get_updates_state==False:
-                self.textbox_output.setUpdatesEnabled(True)
+            do_console_disable=self.UI_lockstate or self.console is None
+            self.lock_output_update.acquire()
             self.textbox_output.setDisabled(self.UI_lockstate)
-            if get_updates_state==False: 
-                self.textbox_output.setUpdatesEnabled(False)
-            self.input_commandfield.setDisabled(do_disable)
-            if do_disable==False:
+            self.lock_output_update.release()
+            self.input_commandfield.setDisabled(do_console_disable)
+            if do_console_disable==False:
                 self.input_commandfield.setFocus()
         return
 
@@ -1760,9 +1746,6 @@ MAIN
 
 warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
 TIME_DELTA_LOCK=threading.Lock()
-LOG_LOCK=threading.Lock()
-LOCK_SCREEN_REPORT=threading.Lock()
-SCREEN_REPORT_LINES=[]
 
 environment_info=get_run_environment()
 qInstallMessageHandler(qtmsg_handler)
