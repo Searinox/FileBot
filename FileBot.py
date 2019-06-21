@@ -459,6 +459,10 @@ class User_Message_Handler(object):
         self.lock_status.clear()
         self.processing_messages=threading.Event()
         self.processing_messages.clear()
+        if self.allowed_root=="*":
+            self.set_last_folder("C:\\")
+        else:
+            self.set_last_folder(self.allowed_root)
         return
 
     def log(self,input_text):
@@ -530,8 +534,11 @@ class User_Message_Handler(object):
     def check_tasks(self):
         if self.pending_lockclear.is_set()==True:
             self.pending_lockclear.clear()
-            self.bot_lock_pass=""
-            self.log("<"+self.allowed_user+"> "+"Message handler unlocked by console.")
+            if self.bot_lock_pass!="":
+                self.bot_lock_pass=""
+                self.log("<"+self.allowed_user+"> "+"Message handler unlocked by console.")
+            else:
+                self.log("<"+self.allowed_user+"> "+"Message handler unlock was requested, but it is not locked.")
             self.listener.consume_user_messages(self.allowed_user)
         return
 
@@ -593,10 +600,6 @@ class User_Message_Handler(object):
     def LISTEN(self,new_state):
         if new_state==True:
             self.log("<"+self.allowed_user+"> "+"Listen started.")
-            if self.allowed_root=="*":
-                self.set_last_folder("C:\\")
-            else:
-                self.set_last_folder(self.allowed_root)
             self.listener.consume_user_messages(self.allowed_user)
             self.listen_flag.set()
         else:
