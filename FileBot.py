@@ -42,6 +42,7 @@ LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
 CLIPBOARD_COPY_TIMEOUT_SECONDS=2
 CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
+LOG_UPDATE_INTERVAL_SECONDS=0.08
 
 BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
@@ -1286,7 +1287,9 @@ class Main_Window(QMainWindow):
         self.console=None
         self.update_log_on_restore=False
         self.clipboard_queue=""
+        self.log_is_updating=False
         self.last_clipboard_selection_time=GetTickCount64()
+        self.last_log_update_time=GetTickCount64()
 
         self.icon_cache={}
         for iconname in APP_ICONS_B64:
@@ -1441,37 +1444,6 @@ class Main_Window(QMainWindow):
         self.timer_clipboard.start(0)
         return
 
-    def update_output(self):
-        global OUTPUT_ENTRIES_MAX
-
-        if self.is_exiting.is_set()==True:
-            return
-
-        self.lock_log_queue.acquire()
-        get_output_queue=self.output_queue[:]
-        self.output_queue=[]
-        self.lock_log_queue.release()
-        get_output_queue_len=len(get_output_queue)
-        cache_model=self.textbox_output.model()
-
-        self.lock_output_update.acquire()
-
-        rows_to_delete=max(0,cache_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
-        starting_row=cache_model.rowCount()-rows_to_delete
-        index=-1
-
-        self.textbox_output.setUpdatesEnabled(False)
-        cache_model.removeRows(0,rows_to_delete)
-        cache_model.insertRows(starting_row,get_output_queue_len)
-        for line in get_output_queue:
-            index+=1
-            cache_model.setItemData(cache_model.index(starting_row+index),{0:line})
-        self.textbox_output.scrollToBottom()
-        self.textbox_output.setUpdatesEnabled(True)
-
-        self.lock_output_update.release()
-        return
-
     def queue_close(self):
         if self.is_exiting.is_set()==True:
             return
@@ -1524,7 +1496,45 @@ class Main_Window(QMainWindow):
         return QWidget.eventFilter(self,widget,event)
 
     def queue_log_update(self):
-        self.timer_update_output.start(0)
+        global LOG_UPDATE_INTERVAL_SECONDS
+
+        if self.log_is_updating==False:
+            self.log_is_updating=True
+            self.timer_update_output.start(max(0,self.last_log_update_time+LOG_UPDATE_INTERVAL_SECONDS*1000.0-GetTickCount64()))
+        return
+
+    def update_output(self):
+        global OUTPUT_ENTRIES_MAX
+
+        if self.is_exiting.is_set()==True:
+            return
+
+        self.lock_log_queue.acquire()
+        get_output_queue=self.output_queue[:]
+        self.output_queue=[]
+        self.lock_log_queue.release()
+        get_output_queue_len=len(get_output_queue)
+        cache_model=self.textbox_output.model()
+
+        self.lock_output_update.acquire()
+
+        rows_to_delete=max(0,cache_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
+        starting_row=cache_model.rowCount()-rows_to_delete
+        index=-1
+
+        self.textbox_output.setUpdatesEnabled(False)
+        cache_model.removeRows(0,rows_to_delete)
+        cache_model.insertRows(starting_row,get_output_queue_len)
+        for line in get_output_queue:
+            index+=1
+            cache_model.setItemData(cache_model.index(starting_row+index),{0:line})
+        self.textbox_output.scrollToBottom()
+        self.textbox_output.setUpdatesEnabled(True)
+        self.last_log_update_time=GetTickCount64()
+        self.log_is_updating=False
+
+        self.lock_output_update.release()
+
         return
 
     def update_tray_icon(self):
