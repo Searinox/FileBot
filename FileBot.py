@@ -1053,6 +1053,8 @@ class User_Console(object):
             if self.request_time_sync.is_set()==False:
                 self.log("Manual Internet time synchronization requested...")
                 self.request_time_sync.set()
+            else:
+                self.log("Manual Internet time synchronization is already in progress.")
             return True
         elif input_command=="help":
             self.log("AVAILABLE CONSOLE COMMANDS:\n")
@@ -1063,6 +1065,7 @@ class User_Console(object):
             self.log("list: lists allowed users")
             self.log("sync: manually re-synchronize bot time with Internet time")
             self.log("help: display help\n")
+            self.log("exit: close the program\n")
             return True
         else:
             self.log("Unrecognized command. Type \"help\" for a list of commands.")
@@ -1114,6 +1117,7 @@ class User_Console(object):
                 result=False
 
                 if command.lower()=="exit":
+                    self.log("Exit requested. Closing...")
                     self.is_exiting.set()
                 else:
                     result=self.process_command(command)
@@ -1731,7 +1735,7 @@ class Main_Window(QMainWindow):
         if self.is_exiting.is_set()==True:
             return
 
-        self.log("UI closing.")
+        self.log("UI closing...")
 
         self.is_exiting.set()
 
