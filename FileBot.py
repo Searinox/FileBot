@@ -1064,7 +1064,7 @@ class User_Console(object):
             self.log("stats [USER]: list bot stats; leave blank to list all instances")
             self.log("list: lists allowed users")
             self.log("sync: manually re-synchronize bot time with Internet time")
-            self.log("help: display help\n")
+            self.log("help: display help")
             self.log("exit: close the program\n")
             return True
         else:
