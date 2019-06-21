@@ -442,6 +442,7 @@ class User_Message_Handler(object):
         self.keep_running.clear()
         self.bot_has_quit=threading.Event()
         self.bot_has_quit.set()
+        self.lock_last_folder=threading.Lock()
         self.last_folder=""
         self.allow_writing=input_write
         self.listen_flag=threading.Event()
@@ -569,6 +570,18 @@ class User_Message_Handler(object):
         self.bot_has_quit.set()
         return
 
+    def get_last_folder(self):
+        self.lock_last_folder.acquire()
+        retval=self.last_folder
+        self.lock_last_folder.release()
+        return retval
+
+    def set_last_folder(self,input_folder):
+        self.lock_last_folder.acquire()
+        self.last_folder=input_folder
+        self.lock_last_folder.release()
+        return
+
     def START(self):
         self.log("<"+self.allowed_user+"> "+"User message handler start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
         self.bot_has_quit.clear()
@@ -580,9 +593,9 @@ class User_Message_Handler(object):
         if new_state==True:
             self.log("<"+self.allowed_user+"> "+"Listen started.")
             if self.allowed_root=="*":
-                self.last_folder="C:\\"
+                self.set_last_folder("C:\\")
             else:
-                self.last_folder=self.allowed_root
+                self.set_last_folder(self.allowed_root)
             self.listener.consume_user_messages(self.allowed_user)
             self.listen_flag.set()
         else:
@@ -645,7 +658,7 @@ class User_Message_Handler(object):
         if self.allow_writing==False:
             return
 
-        foldername=self.last_folder
+        foldername=self.get_last_folder()
         complete_put_path=foldername+filename
         self.sendmsg(sid,"Putting file \""+filename+"\" at \""+foldername+"\"...")
         self.log("<"+self.allowed_user+"> "+" Receiving file \""+complete_put_path+"\"...")
@@ -772,7 +785,7 @@ class User_Message_Handler(object):
             self.log("<"+self.allowed_user+"> "+"Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
 
             if command_args=="":
-                use_folder=self.last_folder
+                use_folder=self.get_last_folder()
             else:
                 use_folder=command_args
             use_folder=self.rel_to_abs(command_args)
@@ -798,16 +811,17 @@ class User_Message_Handler(object):
                             pass
                         if newpath[-1]!="\\":
                             newpath+="\\"
-                        self.last_folder=newpath
-                        if len(self.last_folder)>0:
-                            self.last_folder=self.last_folder[0].upper()+self.last_folder[1:]
-                        response="Current folder changed to \""+self.last_folder+"\"."
-                        self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+self.last_folder+"\".")
+                        if len(newpath)>0:
+                            newpath=newpath[0].upper()+newpath[1:]
+                        self.set_last_folder(newpath)
+                        response="Current folder changed to \""+newpath+"\"."
+                        self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+newpath+"\".")
                 else:
                     response="Bad path."
             else:
-                response="Current folder is \""+self.last_folder+"\"."
-                self.log("<"+self.allowed_user+"> "+"Queried current folder, which is \""+self.last_folder+"\".")
+                newpath=self.get_last_folder()
+                response="Current folder is \""+newpath+"\"."
+                self.log("<"+self.allowed_user+"> "+"Queried current folder, which is \""+newpath+"\".")
         elif command_type=="get":
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -876,12 +890,13 @@ class User_Message_Handler(object):
                 response="File not found or inaccessible."
         elif command_type=="up":
             if self.last_folder.count("\\")>1:
-                newpath=self.last_folder[:-1]
+                newpath=self.get_last_folder()
+                newpath=newpath[:-1]
                 newpath=newpath[:newpath.rfind("\\")+1]
                 if self.allowed_path(newpath)==True:
-                    self.last_folder=newpath
-                    response="Current folder is now \""+self.last_folder+"\"."
-                    self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+self.last_folder+"\".")
+                    self.set_last_folder(newpath)
+                    response="Current folder is now \""+newpath+"\"."
+                    self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+newpath+"\".")
                 else:
                     response="Already at top folder."
             else:
@@ -1016,7 +1031,7 @@ class User_Console(object):
         elif input_command=="stats":
             for bot_instance in self.bot_list:
                 if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
-                    self.log("Message handler for user \""+bot_instance.allowed_user+"\":\nHome path=\""+bot_instance.allowed_root+"\"\nWrite mode: "+str(bot_instance.allow_writing).upper()+"\nCurrent folder=\""+bot_instance.last_folder+"\"\nLocked: "+str(bot_instance.lock_status.is_set()).upper()+"\nListening: "+str(bot_instance.listen_flag.is_set()).upper()+"\n")
+                    self.log("Message handler for user \""+bot_instance.allowed_user+"\":\nHome path=\""+bot_instance.allowed_root+"\"\nWrite mode: "+str(bot_instance.allow_writing).upper()+"\nCurrent folder=\""+bot_instance.get_last_folder()+"\"\nLocked: "+str(bot_instance.lock_status.is_set()).upper()+"\nListening: "+str(bot_instance.listen_flag.is_set()).upper()+"\n")
             return True
         elif input_command=="list":
             list_out=""
