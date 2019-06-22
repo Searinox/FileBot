@@ -823,6 +823,7 @@ class User_Message_Handler(object):
                         self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+newpath+"\".")
                 else:
                     response="Bad path."
+                    self.log("<"+self.allowed_user+"> "+"Invalid path provided.")
             else:
                 newpath=self.get_last_folder()
                 response="Current folder is \""+newpath+"\"."
