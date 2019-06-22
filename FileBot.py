@@ -1589,7 +1589,7 @@ class Main_Window(QMainWindow):
         return
 
     def input_commandfield_onsend(self):
-        clean_text=str(self.input_commandfield.text().strip())
+        clean_text=str(self.input_commandfield.text().encode("utf-8").strip())
         self.input_commandfield.setText(clean_text)
         if clean_text=="":
             return
@@ -1805,7 +1805,7 @@ collect_api_token=""
 
 try:
     file_handle=open(os.path.join(environment_info["working_dir"],"token.txt"),"r")
-    collect_api_token=file_handle.readline()
+    collect_api_token=file_handle.readline().encode("utf-8")
     file_handle.close()
 except:
     log("ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
@@ -1823,7 +1823,7 @@ if fatal_error==False:
         file_handle=open(os.path.join(environment_info["working_dir"],"userlist.txt"),"r")
         file_entries=file_handle.readlines()
         for entry in file_entries:
-            if entry.strip()!="":
+            if entry.encode("utf-8").strip()!="":
                 collect_allowed_senders.append(User_Entry(entry.strip()))
     except:
         log("ERROR: Could not read entries from \"userlist.txt\".")
