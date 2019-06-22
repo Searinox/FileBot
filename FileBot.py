@@ -109,7 +109,7 @@ def log(input_text):
     return
 
 def OS_uptime():
-    return ctypes.windll.kernel32.GetTickCount64()/1000.0
+    return GetTickCount64()/1000.0
 
 def Current_UTC_Internet_Time():
     global SSL_NOCERT
@@ -261,20 +261,19 @@ class Logger(object):
         except:
             pass
 
-        self.log_lock.release()
-
         if self.active_signaller is not None:
             try:
                 self.active_signaller.send("logger_newline",msg)
             except:
                 pass
 
+        self.log_lock.release()
         return
 
 
-class Message_Listener(object):
+class Bot_Message_Listener(object):
     def __init__(self,input_token,username_list,input_listener,input_logger=None):
-        self.token=input_token
+        self.bot_token=input_token
         self.active_logger=input_logger
         self.keep_running=threading.Event()
         self.keep_running.clear()
@@ -316,7 +315,7 @@ class Message_Listener(object):
         return self.is_ready.is_set()==True
 
     def work_loop(self):
-        self.bot_handle=telepot.Bot(self.token)
+        self.bot_handle=telepot.Bot(self.bot_token)
         last_check_status=False
         bot_bind_ok=False
         activation_fail_announce=False
@@ -438,7 +437,7 @@ class User_Message_Handler(object):
         self.active_logger=input_logger
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
-        self.token=input_token
+        self.bot_token=input_token
         self.listener=input_listener_service
         self.keep_running=threading.Event()
         self.keep_running.clear()
@@ -547,10 +546,11 @@ class User_Message_Handler(object):
         global LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS
         global USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS
 
-        self.bot_handle=telepot.Bot(self.token)
+        self.bot_handle=telepot.Bot(self.bot_token)
+
         bot_bind_ok=False
         activation_fail_announce=False
-        while bot_bind_ok==False:
+        while bot_bind_ok==False and self.keep_running.is_set()==True:
             try:
                 self.bot_handle.getMe()[u"username"]
                 bot_bind_ok=True
@@ -560,8 +560,9 @@ class User_Message_Handler(object):
                     activation_fail_announce=True
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
 
-        self.listener.consume_user_messages(self.allowed_user)
-        self.log("<"+self.allowed_user+"> "+"Message handler for user \""+self.allowed_user+"\" is now active.")
+        if self.keep_running.is_set()==True:
+            self.listener.consume_user_messages(self.allowed_user)
+            self.log("<"+self.allowed_user+"> "+"Message handler for user \""+self.allowed_user+"\" is now active.")
 
         while self.keep_running.is_set()==True:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
@@ -1858,7 +1859,7 @@ if fatal_error==False:
         for sender in collect_allowed_senders:
             collect_allowed_usernames.append(sender.username)
 
-        ListenerService=Message_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
+        ListenerService=Bot_Message_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
         log("Starting Listener...")
         ListenerService.START()
 
