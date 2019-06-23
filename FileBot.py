@@ -80,7 +80,7 @@ def Flush_Std_Buffers():
     return
 
 def get_run_environment():
-    retval={"working_dir":"","process_binary":"","source_mode":False,"arguments":[]}
+    retval={"working_dir":"","process_binary":"","running_from_source":False,"arguments":[]}
     sys_exe=sys.executable
     retval["arguments"]=sys.argv
     retval["process_binary"]=os.path.basename(sys_exe).lower()
@@ -92,7 +92,7 @@ def get_run_environment():
             if retval["arguments"][0].replace("\"","").lower().strip().endswith(".py"):
                 retval["working_dir"]=os.path.realpath(os.path.dirname(retval["arguments"][0]))
                 retval["arguments"]=retval["arguments"][1:]
-                retval["source_mode"]=True
+                retval["running_from_source"]=True
     return retval
 
 def qtmsg_handler(msg_type,msg_log_context,msg_string):
@@ -1309,8 +1309,9 @@ class User_Entry(object):
 
 
 class UI(object):
-    def __init__(self,input_signaller,input_logger=None):
+    def __init__(self,input_signaller,input_minimized,input_logger=None):
         self.active_logger=input_logger
+        self.start_minimized=input_minimized
         self.is_ready=threading.Event()
         self.is_ready.clear()
         self.is_exiting=threading.Event()
@@ -1327,11 +1328,12 @@ class UI(object):
         self.UI_APP=0
         self.UI_APP=QApplication([])
         self.UI_APP.setStyle("fusion")
-        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.active_logger)
+        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
         self.UI_window.show()
         self.UI_APP.aboutToQuit.connect(self.UI_APP.deleteLater)
-        self.UI_window.raise_()
-        self.UI_window.activateWindow()
+        if self.start_minimized==False:
+            self.UI_window.raise_()
+            self.UI_window.activateWindow()
         sys.exit(self.UI_APP.exec_())
         return
 
@@ -1361,7 +1363,7 @@ WINS
 
 
 class Main_Window(QMainWindow):
-    def __init__(self,input_is_ready,input_is_exiting,input_has_quit,input_signaller,input_logger=None):
+    def __init__(self,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
         global __author__
         global __version__
         global APP_ICONS_B64
@@ -1433,6 +1435,10 @@ class Main_Window(QMainWindow):
         self.timer_update_output=QTimer(self)
         self.timer_update_output.timeout.connect(self.update_output)
         self.timer_update_output.setSingleShot(True)
+
+        self.timer_queue_minimize_window=QTimer(self)
+        self.timer_queue_minimize_window.timeout.connect(self.minimize_window)
+        self.timer_queue_minimize_window.setSingleShot(True)
 
         self.timer_close=QTimer(self)
         self.timer_close.timeout.connect(self.close)
@@ -1535,12 +1541,22 @@ class Main_Window(QMainWindow):
         self.update_UI_usability()
         self.update_tray_icon()
 
+        if start_minimized==True:
+            self.timer_queue_minimize_window.start(0)
+
         input_is_ready.set()
         return
 
     def log(self,input_text):
         if self.active_logger is not None:
             self.active_logger.LOG("GUINTRFC",input_text)
+        return
+
+    def minimize_window(self):
+        self.options_macros["restore"].setVisible(True)
+        self.is_minimized=True
+        self.setWindowState(Qt.WindowMinimized)
+        self.hide()
         return
 
     def clipboard_insert(self):
@@ -1898,6 +1914,14 @@ TIME_DELTA_LOCK=threading.Lock()
 LOCK_7ZIP_INSTANCES=threading.Lock()
 INSTANCES_7ZIP=[]
 
+start_minimized=False
+
+for argument in environment_info["arguments"]:
+    argument=argument.lower().strip()
+
+    if argument=="/minimized":
+        start_minimized=True
+
 LOGGER=Logger(os.path.join(environment_info["working_dir"],"log.txt"))
 LOGGER.START()
 
@@ -1909,7 +1933,7 @@ TELEGRAM_SERVER_TIMER_DELTA=-1
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
-Active_UI=UI(UI_SIGNAL,LOGGER)
+Active_UI=UI(UI_SIGNAL,start_minimized,LOGGER)
 
 while Active_UI.IS_READY()==False:
     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
@@ -1928,7 +1952,9 @@ log("\n\nREQUIREMENTS:\n"+\
     "Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n\n"+\
     "EXAMPLE ENTRIES:\n"+\
     "JohnDoe|C:\\MySharedFiles\n"+\
-    "TrustedUser|>*\n")
+    "TrustedUser|>*\n\n"+\
+    "COMMAND LINE:\n"+\
+    "/minimized: starts the application minimized to system tray\n")
 
 log("Process ID is "+str(environment_info["process_id"])+".")
 
