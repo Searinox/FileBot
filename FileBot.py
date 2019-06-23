@@ -35,7 +35,7 @@ SSL_NOCERT.verify_mode=ssl.CERT_NONE
 
 MAINTHREAD_HEARTBEAT_SECONDS=0.08
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.1
-PRIORITY_RECHECK_INTERVAL_SECONDS=60
+MAINTHREAD_PERIODIC_CHECKS_SECONDS=60
 COMMAND_CHECK_INTERVAL_SECONDS=0.2
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
@@ -189,6 +189,80 @@ def readable_size(input_size):
     if input_size<1024**3:
         return str(round(input_size/1024.0**2,2))+" MB"
     return str(round(input_size/1024.0**3,2))+" GB"
+
+def spawn_7zip(newpath):
+    global PATH_7ZIP
+    global LOCK_7ZIP_INSTANCES
+    global INSTANCES_7ZIP
+
+    if os.path.isfile(newpath):
+        folder_path=newpath[:newpath.rfind("\\")+1]
+    else:
+        folder_path=newpath[:newpath[:-1].rfind("\\")+1]
+    archive_filename=newpath[newpath.rfind("\\")+1:]
+    if archive_filename=="":
+        archive_filename=newpath[newpath[:-1].rfind("\\")+1:]
+        if archive_filename[-1]=="\\":
+            archive_filename=archive_filename[:-1]
+    zip_command="\""+PATH_7ZIP+"7z.exe"+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename+"\""
+    folder_command="cd /d \""+folder_path+"\""
+    rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
+    prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
+    full_target=folder_path+archive_filename
+    if os.path.exists(full_target+".7z")==False:
+        try:
+            new_process=subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
+            LOCK_7ZIP_INSTANCES.acquire()
+            INSTANCES_7ZIP+=[{"process":new_process,"temp_file":full_target+".7z.TMP"}]
+            LOCK_7ZIP_INSTANCES.release()
+            return {"result":"SPAWNED","full_target":full_target}
+        except:
+            return {"result":"ERROR","full_target":full_target}
+    else:
+        return {"result":"EXISTS","full_target":full_target}
+
+def update_7zip():
+    global LOCK_7ZIP_INSTANCES
+    global INSTANCES_7ZIP
+
+    LOCK_7ZIP_INSTANCES.acquire()
+    for i in reversed(range(len(INSTANCES_7ZIP))):
+        poll_result=None
+        try:
+            poll_result=INSTANCES_7ZIP[i]["process"].poll()
+        except:
+            pass
+        if poll_result is not None:
+            del INSTANCES_7ZIP[i]
+
+    LOCK_7ZIP_INSTANCES.release()
+    return
+
+def stop_all_7zip():
+    global LOCK_7ZIP_INSTANCES
+    global INSTANCES_7ZIP
+
+    taskkill_list=[]
+
+    LOCK_7ZIP_INSTANCES.acquire()
+
+    for i in reversed(range(len(INSTANCES_7ZIP))):
+        get_pid=INSTANCES_7ZIP[i]["process"].pid
+        log("Terminating ongoing 7-ZIP instance with PID="+str(get_pid)+" and temp file \""+INSTANCES_7ZIP[i]["temp_file"]+"\".")
+        taskkill_list+=[{"process":subprocess.Popen("taskkill.exe /f /t /pid "+str(get_pid),shell=True,creationflags=subprocess.SW_HIDE),"file":INSTANCES_7ZIP[i]["temp_file"]}]
+
+        del INSTANCES_7ZIP[i]
+
+    for taskkill in taskkill_list:
+        taskkill["process"].wait()
+        try:
+            os.remove(taskkill["file"])
+        except:
+            pass
+
+    LOCK_7ZIP_INSTANCES.release()
+
+    return
 
 
 """
@@ -913,32 +987,19 @@ class User_Message_Handler(object):
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True:
-                try:
-                    if os.path.isfile(newpath):
-                        folder_path=newpath[:newpath.rfind("\\")+1]
-                    else:
-                        folder_path=newpath[:newpath[:-1].rfind("\\")+1]
-                    archive_filename=newpath[newpath.rfind("\\")+1:]
-                    if archive_filename=="":
-                        archive_filename=newpath[newpath[:-1].rfind("\\")+1:]
-                        if archive_filename[-1]=="\\":
-                            archive_filename=archive_filename[:-1]
-                    zip_command="\""+PATH_7ZIP+"7z.exe"+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename+"\""
-                    folder_command="cd /d \""+folder_path+"\""
-                    rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
-                    prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-                    if os.path.exists(folder_path+archive_filename+".7z")==False:
-                        subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
-                        response="Issued zip command."
-                        self.log("Zip command issued on \""+folder_path+archive_filename+"\".")
-                    else:
-                        response="The archive \""+archive_filename+".7z\" already exists at the location."
-                except:
-                    response="Problem getting file."
-                    self.log("Zip \""+command_args+"\" failed.")
+                zip_response=spawn_7zip(newpath)
+                if zip_response["result"]=="SPAWNED":
+                    response="Issued zip command."
+                    self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
+                elif zip_response["result"]=="EXISTS":
+                    response="An archive \""+zip_response["full_target"]+".7z\" already exists."
+                    self.log("Zip \""+command_args+"\" failed because target archive \""+zip_response["full_target"]+".7z\" already exists.")
+                elif zip_response["result"]=="ERROR":
+                    response="Problem running command."
+                    self.log("Zip \""+command_args+"\" command could not be run.")
             else:
                 response="File not found or inaccessible."
-                self.log("[BOTWRK] Zip \""+command_args+"\" file not found or inaccessible.")
+                self.log("Zip \""+command_args+"\" file not found or inaccessible.")
         elif command_type=="lock":
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
@@ -1784,11 +1845,15 @@ qInstallMessageHandler(qtmsg_handler)
 
 environment_info=get_run_environment()
 TIME_DELTA_LOCK=threading.Lock()
+LOCK_7ZIP_INSTANCES=threading.Lock()
+INSTANCES_7ZIP=[]
 
 LOGGER=Logger(os.path.join(environment_info["working_dir"],"log.txt"))
 LOGGER.START()
 
-PATH_7ZIP=environment_info["working_dir"]
+PATH_7ZIP=environment_info["working_dir"].replace("/","\\")
+if PATH_7ZIP.endswith("\\")==False:
+    PATH_7ZIP+="\\"
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 TELEGRAM_SERVER_TIMER_DELTA=-1
 
@@ -1898,7 +1963,7 @@ if fatal_error==False:
 
             log("Startup complete. Waiting for secondary threads to finish...")
 
-            process_total_time=PRIORITY_RECHECK_INTERVAL_SECONDS
+            process_total_time=MAINTHREAD_PERIODIC_CHECKS_SECONDS
             last_server_time_check=time.time()
 
             while Active_UI.IS_RUNNING()==True:
@@ -1909,9 +1974,10 @@ if fatal_error==False:
                 sys.stderr.flush()
 
                 process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
-                if process_total_time>=PRIORITY_RECHECK_INTERVAL_SECONDS:
-                    process_total_time-=PRIORITY_RECHECK_INTERVAL_SECONDS
+                if process_total_time>=MAINTHREAD_PERIODIC_CHECKS_SECONDS:
+                    process_total_time-=MAINTHREAD_PERIODIC_CHECKS_SECONDS
                     set_process_priority_idle()
+                    update_7zip()
 
                 if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or request_sync_time.is_set()==True:
                     time_sync_result=Perform_Time_Sync(UI_SIGNAL)
@@ -1955,6 +2021,9 @@ LOGGER.DETACH_SIGNALLER()
 Active_UI.working_thread.join()
 del Active_UI
 log("Confirm UI exit.")
+
+update_7zip()
+stop_all_7zip()
 
 log("Main thread exit; program has finished.")
 LOGGER.STOP()
