@@ -74,6 +74,11 @@ GetTickCount64=ctypes.windll.kernel32.GetTickCount64
 GetTickCount64.restype=ctypes.c_uint64
 GetTickCount64.argtypes=()
 
+def Flush_Std_Buffers():
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return
+
 def get_run_environment():
     retval={"working_dir":"","process_binary":"","source_mode":False,"arguments":[]}
     sys_exe=sys.executable
@@ -122,7 +127,7 @@ def Current_UTC_Internet_Time():
     quot2+=1
     return int(timestr[quot1:quot2-3])/1000.0
 
-def set_process_priority_idle():
+def Set_Process_Priority_Idle():
     global CURRENT_PROCESS_HANDLE
 
     try:
@@ -190,38 +195,38 @@ def readable_size(input_size):
         return str(round(input_size/1024.0**2,2))+" MB"
     return str(round(input_size/1024.0**3,2))+" GB"
 
-def spawn_7zip(newpath):
+def New_7ZIP_Task(target_path,originating_user):
     global PATH_7ZIP
     global LOCK_7ZIP_INSTANCES
     global INSTANCES_7ZIP
 
-    if os.path.isfile(newpath):
-        folder_path=newpath[:newpath.rfind("\\")+1]
+    if os.path.isfile(target_path):
+        folder_path=target_path[:target_path.rfind("\\")+1]
     else:
-        folder_path=newpath[:newpath[:-1].rfind("\\")+1]
-    archive_filename=newpath[newpath.rfind("\\")+1:]
+        folder_path=target_path[:target_path[:-1].rfind("\\")+1]
+    archive_filename=target_path[target_path.rfind("\\")+1:]
     if archive_filename=="":
-        archive_filename=newpath[newpath[:-1].rfind("\\")+1:]
+        archive_filename=target_path[target_path[:-1].rfind("\\")+1:]
         if archive_filename[-1]=="\\":
             archive_filename=archive_filename[:-1]
     zip_command="\""+PATH_7ZIP+"7z.exe"+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename+"\""
     folder_command="cd /d \""+folder_path+"\""
     rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
     prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-    full_target=folder_path+archive_filename
+    full_target=(folder_path+archive_filename).lower()
     if os.path.exists(full_target+".7z")==False:
         try:
             new_process=subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
             LOCK_7ZIP_INSTANCES.acquire()
-            INSTANCES_7ZIP+=[{"process":new_process,"temp_file":full_target+".7z.TMP"}]
+            INSTANCES_7ZIP+=[{"process":new_process,"temp_file":full_target+".7z.TMP","user":originating_user}]
             LOCK_7ZIP_INSTANCES.release()
-            return {"result":"SPAWNED","full_target":full_target}
+            return {"result":"CREATED","full_target":full_target}
         except:
             return {"result":"ERROR","full_target":full_target}
     else:
         return {"result":"EXISTS","full_target":full_target}
 
-def update_7zip():
+def Update_7ZIP_Running_Tasks():
     global LOCK_7ZIP_INSTANCES
     global INSTANCES_7ZIP
 
@@ -238,7 +243,28 @@ def update_7zip():
     LOCK_7ZIP_INSTANCES.release()
     return
 
-def stop_all_7zip():
+def Get_7ZIP_Running_Tasks():
+    global LOCK_7ZIP_INSTANCES
+    global INSTANCES_7ZIP
+
+    retval=[]
+
+    Update_7ZIP_Running_Tasks()
+
+    LOCK_7ZIP_INSTANCES.acquire()
+    for instance in INSTANCES_7ZIP:
+        target_location=instance["temp_file"]
+        if target_location.lower().endswith(".7z.tmp"):
+            target_location=target_location[:-len(".7z.tmp")]
+        try:
+            retval+=[{"pid":instance["process"].pid,"target":target_location,"user":instance["user"]}]
+        except:
+            pass
+    LOCK_7ZIP_INSTANCES.release()
+
+    return retval
+
+def End_All_7ZIP_Tasks():
     global LOCK_7ZIP_INSTANCES
     global INSTANCES_7ZIP
 
@@ -248,19 +274,24 @@ def stop_all_7zip():
 
     for i in reversed(range(len(INSTANCES_7ZIP))):
         get_pid=INSTANCES_7ZIP[i]["process"].pid
-        log("Terminating ongoing 7-ZIP instance with PID="+str(get_pid)+" and temp file \""+INSTANCES_7ZIP[i]["temp_file"]+"\".")
+        log("Terminating ongoing 7-ZIP batch with PID="+str(get_pid)+" and temporary file \""+INSTANCES_7ZIP[i]["temp_file"]+"\".")
         taskkill_list+=[{"process":subprocess.Popen("taskkill.exe /f /t /pid "+str(get_pid),shell=True,creationflags=subprocess.SW_HIDE),"file":INSTANCES_7ZIP[i]["temp_file"]}]
 
         del INSTANCES_7ZIP[i]
 
+    LOCK_7ZIP_INSTANCES.release()
+
     for taskkill in taskkill_list:
         taskkill["process"].wait()
+
+    for taskkill in taskkill_list:
         try:
             os.remove(taskkill["file"])
         except:
-            pass
-
-    LOCK_7ZIP_INSTANCES.release()
+            try:
+                os.remove(taskkill["file"])
+            except:
+                pass
 
     return
 
@@ -950,10 +981,10 @@ class User_Message_Handler(object):
                         self.log("File sent. Deleting...")
                         os.remove(newpath)
                         self.sendmsg(sid,"File deleted.")
+                        self.log("File delete error.")
                     except:
                         response="Problem deleting file."
                         self.log("File delete error.")
-                        self.log("File deleted.")
             else:
                 response="File not found or inaccessible."
         elif command_type=="del" and self.allow_writing==True:
@@ -987,8 +1018,8 @@ class User_Message_Handler(object):
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True:
-                zip_response=spawn_7zip(newpath)
-                if zip_response["result"]=="SPAWNED":
+                zip_response=New_7ZIP_Task(newpath,self.allowed_user)
+                if zip_response["result"]=="CREATED":
                     response="Issued zip command."
                     self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
                 elif zip_response["result"]=="EXISTS":
@@ -1092,11 +1123,13 @@ class User_Console(object):
                 if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
                     bot_instance.LISTEN(True)
             return True
+
         elif input_command=="stop":
             for bot_instance in self.bot_list:
                 if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
                     bot_instance.LISTEN(False)
             return True
+
         elif input_command=="stats":
             stats_out=""
             for bot_instance in self.bot_list:
@@ -1111,6 +1144,7 @@ class User_Console(object):
                 stats_out="USER STATS:\n"+stats_out
                 self.log(stats_out)
             return True
+
         elif input_command=="list":
             list_out=""
             for bot_instance in self.bot_list:
@@ -1118,11 +1152,13 @@ class User_Console(object):
             list_out=list_out[:-2]+"."
             self.log("Allowed user(s): "+list_out)
             return True
+
         elif input_command=="unlock":
             for bot_instance in self.bot_list:
                 if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
                     bot_instance.pending_lockclear.set()
             return True
+
         elif input_command=="sync":
             if self.request_time_sync.is_set()==False:
                 self.log("Manual Internet time synchronization requested...")
@@ -1130,6 +1166,19 @@ class User_Console(object):
             else:
                 self.log("Manual Internet time synchronization is already in progress.")
             return True
+
+        elif input_command=="zips":
+            tasklist=Get_7ZIP_Running_Tasks()
+            task_data_out=""
+            for entry in tasklist:
+                task_data_out+="TARGET: \""+entry["target"]+"\" USER: \""+entry["user"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
+            if task_data_out=="":
+                self.log("No 7-ZIP tasks running.")
+            else:
+                task_data_out="RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
+                self.log(task_data_out)
+            return True
+                
         elif input_command=="help":
             self.log("AVAILABLE CONSOLE COMMANDS:\n\n"+\
             "start [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
@@ -1138,6 +1187,7 @@ class User_Console(object):
             "stats [USER]: list stats for user; leave blank to list all instances\n"+\
             "list: lists allowed users\n"+\
             "sync: manually re-synchronize bot time with Internet time\n"+\
+            "zips: list all currently running 7-ZIP archival task(s)\n"+\
             "help: display help\n"+\
             "exit: close the program\n")
             return True
@@ -1970,14 +2020,13 @@ if fatal_error==False:
 
                 time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
 
-                sys.stdout.flush()
-                sys.stderr.flush()
+                Flush_Std_Buffers()
 
                 process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
                 if process_total_time>=MAINTHREAD_PERIODIC_CHECKS_SECONDS:
                     process_total_time-=MAINTHREAD_PERIODIC_CHECKS_SECONDS
-                    set_process_priority_idle()
-                    update_7zip()
+                    Set_Process_Priority_Idle()
+                    Update_7ZIP_Running_Tasks()
 
                 if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or request_sync_time.is_set()==True:
                     time_sync_result=Perform_Time_Sync(UI_SIGNAL)
@@ -2022,8 +2071,9 @@ Active_UI.working_thread.join()
 del Active_UI
 log("Confirm UI exit.")
 
-update_7zip()
-stop_all_7zip()
+Update_7ZIP_Running_Tasks()
+End_All_7ZIP_Tasks()
 
 log("Main thread exit; program has finished.")
 LOGGER.STOP()
+Flush_Std_Buffers()
