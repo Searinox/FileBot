@@ -33,8 +33,8 @@ SSL_NOCERT=ssl.create_default_context()
 SSL_NOCERT.check_hostname=False
 SSL_NOCERT.verify_mode=ssl.CERT_NONE
 
-PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.15
-MAINTHREAD_HEARTBEAT_SECONDS=0.04
+MAINTHREAD_HEARTBEAT_SECONDS=0.08
+PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.1
 PRIORITY_RECHECK_INTERVAL_SECONDS=60
 COMMAND_CHECK_INTERVAL_SECONDS=0.2
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
@@ -44,7 +44,7 @@ CLIPBOARD_COPY_TIMEOUT_SECONDS=2
 CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
 LOG_UPDATE_INTERVAL_SECONDS=0.08
 
-BOTS_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
+BOT_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
 
 FONT_POINT_SIZE=8
@@ -271,7 +271,7 @@ class Logger(object):
         return
 
 
-class Bot_Message_Listener(object):
+class User_Message_Listener(object):
     def __init__(self,input_token,username_list,input_listener,input_logger=None):
         self.bot_token=input_token
         self.active_logger=input_logger
@@ -432,6 +432,7 @@ class Bot_Message_Listener(object):
         self.messagelist_lock[input_username].release()
         return get_messages
 
+
 class User_Message_Handler(object):
     def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_logger=None):
         self.active_logger=input_logger
@@ -467,7 +468,7 @@ class User_Message_Handler(object):
 
     def log(self,input_text):
         if self.active_logger is not None:
-            self.active_logger.LOG("MSGHNDLR",input_text)
+            self.active_logger.LOG("MSGHNDLR","<"+self.allowed_user+"> "+input_text)
         return
 
     def sendmsg(self,sid,msg):
@@ -494,7 +495,7 @@ class User_Message_Handler(object):
                 del self.lastsent_timers[0]
             return True
         except:
-            self.log("<"+self.allowed_user+"> "+"Message handler was unable to respond.")
+            self.log("Message handler was unable to respond.")
             return False
 
     def allowed_path(self,input_path):
@@ -536,9 +537,9 @@ class User_Message_Handler(object):
             self.pending_lockclear.clear()
             if self.bot_lock_pass!="":
                 self.bot_lock_pass=""
-                self.log("<"+self.allowed_user+"> "+"Message handler unlocked by console.")
+                self.log("Message handler unlocked by console.")
             else:
-                self.log("<"+self.allowed_user+"> "+"Message handler unlock was requested, but it is not locked.")
+                self.log("Message handler unlock was requested, but it is not locked.")
             self.listener.consume_user_messages(self.allowed_user)
         return
 
@@ -556,13 +557,13 @@ class User_Message_Handler(object):
                 bot_bind_ok=True
             except:
                 if activation_fail_announce==False:
-                    self.log("<"+self.allowed_user+"> "+"Message handler activation error. Will keep trying...")
+                    self.log("Message handler activation error. Will keep trying...")
                     activation_fail_announce=True
                 time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
 
         if self.keep_running.is_set()==True:
             self.listener.consume_user_messages(self.allowed_user)
-            self.log("<"+self.allowed_user+"> "+"Message handler for user \""+self.allowed_user+"\" is now active.")
+            self.log("Message handler for user \""+self.allowed_user+"\" is now active.")
 
         while self.keep_running.is_set()==True:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
@@ -572,11 +573,11 @@ class User_Message_Handler(object):
                 total_new_messages=len(new_messages)
                 if total_new_messages>0:
                     self.processing_messages.set()
-                    self.log("<"+self.allowed_user+"> "+str(total_new_messages)+" new message(s) received.")
+                    self.log(str(total_new_messages)+" new message(s) received.")
                     self.process_messages(new_messages)
                     self.processing_messages.clear()
 
-        self.log("<"+self.allowed_user+"> "+"Message handler exited.")
+        self.log("Message handler exited.")
         self.bot_has_quit.set()
         return
 
@@ -593,7 +594,7 @@ class User_Message_Handler(object):
         return
 
     def START(self):
-        self.log("<"+self.allowed_user+"> "+"User message handler start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
+        self.log("User message handler start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
         self.bot_has_quit.clear()
         self.keep_running.set()
         self.working_thread.start()
@@ -601,16 +602,16 @@ class User_Message_Handler(object):
 
     def LISTEN(self,new_state):
         if new_state==True:
-            self.log("<"+self.allowed_user+"> "+"Listen started.")
+            self.log("Listen started.")
             self.listener.consume_user_messages(self.allowed_user)
             self.listen_flag.set()
         else:
-            self.log("<"+self.allowed_user+"> "+"Listen stopped.")
+            self.log("Listen stopped.")
             self.listen_flag.clear()
         return
 
     def STOP(self):
-        self.log("<"+self.allowed_user+"> "+"Message handler stop issued.")
+        self.log("Message handler stop issued.")
         self.listen_flag.clear()
         self.keep_running.clear()
         return
@@ -665,18 +666,18 @@ class User_Message_Handler(object):
         foldername=self.get_last_folder()
         complete_put_path=foldername+filename
         self.sendmsg(sid,"Putting file \""+filename+"\" at \""+foldername+"\"...")
-        self.log("<"+self.allowed_user+"> "+" Receiving file \""+complete_put_path+"\"...")
+        self.log(" Receiving file \""+complete_put_path+"\"...")
         if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
             try:
                 self.bot_handle.download_file(fid,complete_put_path)
                 self.sendmsg(sid,"Finished putting file \""+complete_put_path+"\".")
-                self.log("<"+self.allowed_user+"> "+" File download complete.")
+                self.log(" File download complete.")
             except:
                 self.sendmsg(sid,"File \""+filename+"\" could not be placed.")
-                self.log("<"+self.allowed_user+"> "+" File download aborted due to unknown issue.")
+                self.log(" File download aborted due to unknown issue.")
         else:
             self.sendmsg(sid,"File \""+filename+"\" already exists at the location.")
-            self.log("<"+self.allowed_user+"> "+" File download aborted due to existing instance.")
+            self.log(" File download aborted due to existing instance.")
         return
 
     def chunkalize(self,input_string,chunksize):
@@ -733,7 +734,7 @@ class User_Message_Handler(object):
         return response
 
     def process_instructions(self,sid,msg,cid):
-        global BOTS_MAX_ALLOWED_FILESIZE_BYTES
+        global BOT_MAX_ALLOWED_FILESIZE_BYTES
         global MAX_IM_SIZE_BYTES
         if self.bot_lock_pass!="":
             if msg.lower().find("/unlock ")==0:
@@ -741,7 +742,7 @@ class User_Message_Handler(object):
                     self.bot_lock_pass=""
                     self.lock_status.clear()
                     self.sendmsg(sid,"Bot unlocked.")
-                    self.log("<"+self.allowed_user+"> "+"Message handler unlocked by user.")
+                    self.log("Message handler unlocked by user.")
                     return
                 else:
                     return
@@ -758,7 +759,7 @@ class User_Message_Handler(object):
         response=""
 
         if command_type=="start":
-            self.log("<"+self.allowed_user+"> "+"Message handler start requested.")
+            self.log("Message handler start requested.")
         elif command_type=="dir":
 
             extra_search=""
@@ -787,7 +788,7 @@ class User_Message_Handler(object):
             else:
                 folders_only=False
 
-            self.log("<"+self.allowed_user+"> "+"Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
+            self.log("Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
 
             if command_args=="":
                 use_folder=self.get_last_folder()
@@ -820,46 +821,46 @@ class User_Message_Handler(object):
                             newpath=newpath[0].upper()+newpath[1:]
                         self.set_last_folder(newpath)
                         response="Current folder changed to \""+newpath+"\"."
-                        self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+newpath+"\".")
+                        self.log("Current folder changed to \""+newpath+"\".")
                 else:
                     response="Bad path."
-                    self.log("<"+self.allowed_user+"> "+"Invalid path provided.")
+                    self.log("Invalid path provided.")
             else:
                 newpath=self.get_last_folder()
                 response="Current folder is \""+newpath+"\"."
-                self.log("<"+self.allowed_user+"> "+"Queried current folder, which is \""+newpath+"\".")
+                self.log("Queried current folder, which is \""+newpath+"\".")
         elif command_type=="get":
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                self.log("<"+self.allowed_user+"> "+"Requested get file \""+newpath+"\". Processing...")
+                self.log("Requested get file \""+newpath+"\". Processing...")
                 self.sendmsg(sid,"Getting file, please wait...")
                 try:
                     fsize=os.path.getsize(newpath)
-                    if fsize<=BOTS_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                    if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
                         self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                     else:
                         if fsize!=0:
-                            response="Bots cannot upload files larger than "+readable_size(BOTS_MAX_ALLOWED_FILESIZE_BYTES)+"."
-                            self.log("<"+self.allowed_user+"> "+"Requested file too large.")
+                            response="Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+"."
+                            self.log("Requested file too large.")
                         else:
                             response="File is empty."
                 except:
                     response="Problem getting file."
-                    self.log("<"+self.allowed_user+"> "+"File send error.")
+                    self.log("File send error.")
             else:
                 response="File not found or inaccessible."
-                self.log("<"+self.allowed_user+"> "+"File not found.")
+                self.log("File not found.")
         elif command_type=="eat" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                self.log("<"+self.allowed_user+"> "+"Requested eat file \""+newpath+"\".")
+                self.log("Requested eat file \""+newpath+"\".")
                 self.sendmsg(sid,"Eating file, please wait...")
                 success=False
                 try:
                     fsize=os.path.getsize(newpath)
-                    if fsize<=BOTS_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                    if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
                         self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                         success=True
                     else:
@@ -869,29 +870,29 @@ class User_Message_Handler(object):
                             response="File is empty."
                 except:
                     response="Problem getting file."
-                    self.log("<"+self.allowed_user+"> "+"File send error.")
+                    self.log("File send error.")
                 if success==True:
                     try:
-                        self.log("<"+self.allowed_user+"> "+"File sent. Deleting...")
+                        self.log("File sent. Deleting...")
                         os.remove(newpath)
                         self.sendmsg(sid,"File deleted.")
                     except:
                         response="Problem deleting file."
-                        self.log("<"+self.allowed_user+"> "+"File delete error.")
-                        self.log("<"+self.allowed_user+"> "+"File deleted.")
+                        self.log("File delete error.")
+                        self.log("File deleted.")
             else:
                 response="File not found or inaccessible."
         elif command_type=="del" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                self.log("<"+self.allowed_user+"> "+"Requested delete file \""+newpath+"\".")
+                self.log("Requested delete file \""+newpath+"\".")
                 try:
                     os.remove(newpath)
                     self.sendmsg(sid,"File deleted.")
                 except:
                     response="Problem deleting file."
-                    self.log("<"+self.allowed_user+"> "+"File delete error.")
+                    self.log("File delete error.")
             else:
                 response="File not found or inaccessible."
         elif command_type=="up":
@@ -902,7 +903,7 @@ class User_Message_Handler(object):
                 if self.allowed_path(newpath)==True:
                     self.set_last_folder(newpath)
                     response="Current folder is now \""+newpath+"\"."
-                    self.log("<"+self.allowed_user+"> "+"Current folder changed to \""+newpath+"\".")
+                    self.log("Current folder changed to \""+newpath+"\".")
                 else:
                     response="Already at top folder."
             else:
@@ -929,21 +930,21 @@ class User_Message_Handler(object):
                     if os.path.exists(folder_path+archive_filename+".7z")==False:
                         subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
                         response="Issued zip command."
-                        self.log("<"+self.allowed_user+"> "+"Zip command issued on \""+folder_path+archive_filename+"\".")
+                        self.log("Zip command issued on \""+folder_path+archive_filename+"\".")
                     else:
                         response="The archive \""+archive_filename+".7z\" already exists at the location."
                 except:
                     response="Problem getting file."
-                    self.log("<"+self.allowed_user+"> "+"Zip \""+command_args+"\" failed.")
+                    self.log("Zip \""+command_args+"\" failed.")
             else:
                 response="File not found or inaccessible."
-                self.log("<"+self.allowed_user+"> "+"[BOTWRK] Zip \""+command_args+"\" file not found or inaccessible.")
+                self.log("[BOTWRK] Zip \""+command_args+"\" file not found or inaccessible.")
         elif command_type=="lock":
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
                 response="Bot locked."
                 self.lock_status.set()
-                self.log("<"+self.allowed_user+"> "+"Message handler was locked down with password.")
+                self.log("Message handler was locked down with password.")
             else:
                 response="Bad password for locking."
         elif command_type=="unlock":
@@ -963,7 +964,7 @@ class User_Message_Handler(object):
             response+="/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+="/unlock <PASSWORD>: unlock the bot\n"
             response+="\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
-            self.log("<"+self.allowed_user+"> "+"Help requested.")
+            self.log("Help requested.")
         else:
             self.sendmsg(sid,"Command unknown. Type \"/help\" for a list of commands.")
 
@@ -1036,9 +1037,18 @@ class User_Console(object):
                     bot_instance.LISTEN(False)
             return True
         elif input_command=="stats":
+            stats_out=""
             for bot_instance in self.bot_list:
                 if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
-                    self.log("Message handler for user \""+bot_instance.allowed_user+"\":\nHome path=\""+bot_instance.allowed_root+"\"\nWrite mode: "+str(bot_instance.allow_writing).upper()+"\nCurrent folder=\""+bot_instance.get_last_folder()+"\"\nLocked: "+str(bot_instance.lock_status.is_set()).upper()+"\nListening: "+str(bot_instance.listen_flag.is_set()).upper()+"\n")
+                    stats_out+="\nMessage handler for user \""+bot_instance.allowed_user+"\":\n"+\
+                             "Home path=\""+bot_instance.allowed_root+"\"\n"+\
+                             "Write mode: "+str(bot_instance.allow_writing).upper()+"\n"+\
+                             "Current folder=\""+bot_instance.get_last_folder()+"\"\n"+\
+                             "Locked: "+str(bot_instance.lock_status.is_set()).upper()+"\n"+\
+                             "Listening: "+str(bot_instance.listen_flag.is_set()).upper()+"\n"
+            if stats_out!="":
+                stats_out="USER STATS:\n"+stats_out
+                self.log(stats_out)
             return True
         elif input_command=="list":
             list_out=""
@@ -1060,15 +1070,15 @@ class User_Console(object):
                 self.log("Manual Internet time synchronization is already in progress.")
             return True
         elif input_command=="help":
-            self.log("AVAILABLE CONSOLE COMMANDS:\n")
-            self.log("start [USER]: start listening to messages for user; leave blank to apply to all instances")
-            self.log("stop [USER]: stop listening to messages for user; leave blank to apply to all instances")
-            self.log("unlock [USER]: unlock the bot for user; leave blank to apply to all instances")
-            self.log("stats [USER]: list bot stats; leave blank to list all instances")
-            self.log("list: lists allowed users")
-            self.log("sync: manually re-synchronize bot time with Internet time")
-            self.log("help: display help")
-            self.log("exit: close the program\n")
+            self.log("AVAILABLE CONSOLE COMMANDS:\n\n"+\
+            "start [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
+            "stop [USER]: stop listening to messages for user; leave blank to apply to all instances\n"+\
+            "unlock [USER]: unlock the bot for user; leave blank to apply to all instances\n"+\
+            "stats [USER]: list stats for user; leave blank to list all instances\n"+\
+            "list: lists allowed users\n"+\
+            "sync: manually re-synchronize bot time with Internet time\n"+\
+            "help: display help\n"+\
+            "exit: close the program\n")
             return True
         else:
             self.log("Unrecognized command. Type \"help\" for a list of commands.")
@@ -1178,6 +1188,7 @@ class User_Entry(object):
                     self.home=self.home[1:]
             if self.home=="":
                 raise ValueError("Home path was empty.")
+            self.home=self.home.replace("/","\\")
         except:
             self.log("m","WARNING: User list \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1]))
             self.username=""
@@ -1403,7 +1414,7 @@ class Main_Window(QMainWindow):
         self.input_commandfield=QLineEdit(self)
         self.input_commandfield.setGeometry(20*UI_SCALE,580*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
         self.input_commandfield.setFont(self.font_cache["log"])
-        self.input_commandfield.setMaxLength(512)
+        self.input_commandfield.setMaxLength(137)
         self.input_commandfield.setAcceptDrops(False)
         self.input_commandfield.returnPressed.connect(self.input_commandfield_onsend)
         self.input_commandfield.installEventFilter(self)
@@ -1769,13 +1780,17 @@ MAIN
 
 
 warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
-TIME_DELTA_LOCK=threading.Lock()
+qInstallMessageHandler(qtmsg_handler)
 
 environment_info=get_run_environment()
-qInstallMessageHandler(qtmsg_handler)
+TIME_DELTA_LOCK=threading.Lock()
 
 LOGGER=Logger(os.path.join(environment_info["working_dir"],"log.txt"))
 LOGGER.START()
+
+PATH_7ZIP=environment_info["working_dir"]
+CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
+TELEGRAM_SERVER_TIMER_DELTA=-1
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
@@ -1788,21 +1803,23 @@ log("============================ FileBot ============================")
 log("Author: "+str(__author__))
 log("Version: "+str(__version__))
 log("=================================================================")
-log("\n\nRequirements:\n-bot token in \"token.txt\"\n"+
-"-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n\n"+
-"Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+
-"If a user has no username, you can add them via first name and last name with a \"#\" before each. Example:\n"+
-"FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+
-"Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n")
-
-PATH_7ZIP=environment_info["working_dir"]
-CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
-TELEGRAM_SERVER_TIMER_DELTA=-1
+log("\n\nREQUIREMENTS:\n"+\
+    "-bot token in \"token.txt\"\n"+\
+    "-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n"+\
+    "-7-ZIP executable \"7z.exe\" present in FileBot's folder\n\n"+\
+    "Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+\
+    "If a user has no username, you can add them via first name and last name with a \"#\" before each. EXAMPLE:\n"+\
+    "FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+\
+    "Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n\n"+\
+    "EXAMPLE ENTRIES:\n"+\
+    "JohnDoe|C:\\MySharedFiles\n"+\
+    "TrustedUser|>*\n")
 
 log("Process ID is "+str(environment_info["process_id"])+".")
 
 fatal_error=False
 collect_api_token=""
+collect_allowed_senders=[]
 
 try:
     file_handle=open(os.path.join(environment_info["working_dir"],"token.txt"),"r")
@@ -1812,11 +1829,10 @@ except:
     log("ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
     fatal_error=True
 
-if len(collect_api_token)==0 and fatal_error==False:
-    log("ERROR: Make sure the token is correctly written in \"token.txt\".")
-    fatal_error=True
-
-collect_allowed_senders=[]
+if fatal_error==False:
+    if len(collect_api_token)==0:
+        log("ERROR: Make sure the token is correctly written in \"token.txt\".")
+        fatal_error=True
 
 if fatal_error==False:
     file_entries=[]
@@ -1829,7 +1845,6 @@ if fatal_error==False:
     except:
         log("ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
-    file_entries=[]
 
 for i in reversed(range(len(collect_allowed_senders))):
     if collect_allowed_senders[i].username=="":
@@ -1842,8 +1857,8 @@ if fatal_error==False:
         fatal_error=True
 
 if fatal_error==False:
-    if os.path.isfile(os.path.join(environment_info["working_dir"],"7z.exe"))==False or os.path.isfile(os.path.join(environment_info["working_dir"],"7z.dll"))==False:
-        log("7-ZIP files are missing. Files \"7z.exe\" and \"7z.dll\" must both be present in FileBot's folder.")
+    if os.path.isfile(os.path.join(environment_info["working_dir"],"7z.exe"))==False:
+        log("The 7-ZIP executable is missing. The file \"7z.exe\" must be present in FileBot's folder.")
         fatal_error=True
 
 if fatal_error==False:
@@ -1860,7 +1875,7 @@ if fatal_error==False:
         for sender in collect_allowed_senders:
             collect_allowed_usernames.append(sender.username)
 
-        ListenerService=Bot_Message_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
+        ListenerService=User_Message_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
         log("Starting Listener...")
         ListenerService.START()
 
