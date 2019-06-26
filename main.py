@@ -815,7 +815,7 @@ class User_Message_Handler(object):
                 del self.lastsent_timers[0]
             return True
         except:
-            self.log("Message handler was unable to respond.")
+            self.log("User Message Handler was unable to respond.")
             return False
 
     def allowed_path(self,input_path):
@@ -863,9 +863,9 @@ class User_Message_Handler(object):
             self.pending_lockclear.clear()
             if self.bot_lock_pass!="":
                 self.bot_lock_pass=""
-                self.log("Message handler unlocked by console.")
+                self.log("User Message Handler unlocked by console.")
             else:
-                self.log("Message handler unlock was requested, but it is not locked.")
+                self.log("User Message Handler unlock was requested, but it is not locked.")
             self.listener.consume_user_messages(self.allowed_user)
         return
 
@@ -883,13 +883,13 @@ class User_Message_Handler(object):
                 bot_bind_ok=True
             except:
                 if activation_fail_announce==False:
-                    self.log("Message handler activation error. Will keep trying...")
+                    self.log("User Message Handler activation error. Will keep trying...")
                     activation_fail_announce=True
                 time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
         if self.keep_running.is_set()==True:
             self.listener.consume_user_messages(self.allowed_user)
-            self.log("Message handler for user \""+self.allowed_user+"\" is now active.")
+            self.log("User Message Handler for \""+self.allowed_user+"\" is now active.")
 
         while self.keep_running.is_set()==True:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
@@ -903,7 +903,7 @@ class User_Message_Handler(object):
                     self.process_messages(new_messages)
                     self.processing_messages.clear()
 
-        self.log("Message handler exited.")
+        self.log("User Message Handler exited.")
         self.bot_has_quit.set()
         return
 
@@ -943,7 +943,6 @@ class User_Message_Handler(object):
         return
 
     def REQUEST_STOP(self):
-        self.log("Message handler stop issued.")
         self.listen_flag.clear()
         self.keep_running.clear()
         return
@@ -1082,7 +1081,7 @@ class User_Message_Handler(object):
                     self.bot_lock_pass=""
                     self.lock_status.clear()
                     self.sendmsg(sid,"Bot unlocked.")
-                    self.log("Message handler unlocked by user.")
+                    self.log("User Message Handler unlocked by user.")
                     return
                 else:
                     return
@@ -1300,7 +1299,7 @@ class User_Message_Handler(object):
                 self.bot_lock_pass=command_args.strip()
                 response="Bot locked."
                 self.lock_status.set()
-                self.log("Message handler was locked down with password.")
+                self.log("User Message Handler was locked with a password.")
             else:
                 response="Bad password for locking."
 
@@ -1591,6 +1590,7 @@ class User_Console(object):
             else:
                 continue_processing=False
 
+                self.log("Requesting stop to Message Handler(s)...")
                 for user_instance in self.user_handler_list:
                     user_instance.REQUEST_STOP()
 
@@ -1598,7 +1598,7 @@ class User_Console(object):
                     user_instance.CONCLUDE()
                 self.log("Confirmed User Message Handler(s) exit.")
 
-        self.log("User console exiting...")
+        self.log("User Console exiting...")
         self.active_UI_signaller.send("detach_console",{})
         self.active_UI_signaller.send("close",{})
         self.has_quit.set()
@@ -2371,21 +2371,24 @@ if fatal_error==False:
             request_sync_time=threading.Event()
             request_sync_time.clear()
 
-            Active_Command_Console=User_Console(UserHandleInstances,UI_SIGNAL,Active_7ZIP_Handler,request_sync_time,LOGGER)
-            log("Starting Command Console...")
-            Active_Command_Console.START()
+            Active_User_Console=User_Console(UserHandleInstances,UI_SIGNAL,Active_7ZIP_Handler,request_sync_time,LOGGER)
+            log("Starting User Console...")
+            Active_User_Console.START()
 
             log("Startup complete. Waiting for UI thread to finish...")
             Wait_For_Finish(Active_UI,request_sync_time)
             log("Left UI thread waiting loop.")
 
+            log("Requesting stop to User Console...")
+            Active_User_Console.REQUEST_STOP()
+            log("Requesting stop to 7-ZIP Task Handler...")
             Active_7ZIP_Handler.REQUEST_STOP()
+            log("Requesting stop to Bot Listener...")
             Active_BotListener.REQUEST_STOP()
-            Active_Command_Console.REQUEST_STOP()
 
-            Active_Command_Console.CONCLUDE()
-            del Active_Command_Console
-            log("Confirm Command Console exit.")
+            Active_User_Console.CONCLUDE()
+            del Active_User_Console
+            log("Confirm User Console exit.")
         else:
             Active_BotListener.STOP()
 
