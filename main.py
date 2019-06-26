@@ -48,7 +48,8 @@ USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
 CLIPBOARD_COPY_TIMEOUT_SECONDS=2
 CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
 TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=2
+TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.5
+TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
 LOG_UPDATE_INTERVAL_SECONDS=0.085
 
 BOT_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
@@ -404,23 +405,33 @@ class Task_Handler_7ZIP(object):
         if self.request_exit.is_set()==True:
             return {"result":"ERROR","full_target":""}
 
-        if os.path.isfile(target_path):
+        if os.path.isfile(target_path)==True:
             folder_path=target_path[:target_path.rfind("\\")+1]
         else:
             folder_path=target_path[:target_path[:-1].rfind("\\")+1]
+            if folder_path=="":
+                folder_path=target_path[:target_path[:-1].rfind(":")+1]
         archive_filename=target_path[target_path.rfind("\\")+1:]
         if archive_filename=="":
             archive_filename=target_path[target_path[:-1].rfind("\\")+1:]
             if archive_filename[-1]=="\\":
                 archive_filename=archive_filename[:-1]
-        zip_command="\""+self.path_7zip_bin+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename+"\""
-        folder_command="cd /d \""+folder_path+"\""
+        archive_filename_path=archive_filename
+        archive_filename=archive_filename.replace(":","")
+        zip_command="\""+self.path_7zip_bin+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename_path+"\""
+        folder_command="cd/ & cd /d \""+folder_path+"\""
         rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
         prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-        full_target=(folder_path+archive_filename).lower()
+        if folder_path.endswith("\\")==False:
+            folder_path+="\\"
+        full_target=folder_path+archive_filename.lower()
         if os.path.exists(full_target+".7z")==False:
             self.lock_instances_7zip.acquire()
-            if sum(1 for _ in self.instances_7zip if self.instances_7zip["user"].lower()==originating_user.lower())==self.max_tasks_per_user:
+            user_task_total=0
+            for instance in self.instances_7zip:
+                if instance["user"]==originating_user:
+                    user_task_total+=1
+            if user_task_total==self.max_tasks_per_user:
                 self.lock_instances_7zip.release()
                 return {"result":"MAXREACHED","full_target":""}
             if self.request_exit.is_set()==True:
@@ -428,6 +439,7 @@ class Task_Handler_7ZIP(object):
                 return {"result":"ERROR","full_target":""}
             try:
                 new_process=subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
+                print prompt_commands
                 self.instances_7zip+=[{"process":new_process,"temp_file":full_target+".7z.TMP","user":originating_user,"new":True}]
                 self.lock_instances_7zip.release()
 
@@ -516,6 +528,8 @@ class Task_Handler_7ZIP(object):
 
     def end_7zip_tasks(self,list_users,list_PIDs=[]):
         global PATH_WINDOWS_SYSTEM32
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+        global TASKS_7ZIP_DELETE_TIMEOUT_SECONDS
 
         taskkill_list=[]
         terminate_all=False
@@ -552,13 +566,14 @@ class Task_Handler_7ZIP(object):
             taskkill["process"].wait()
 
         for taskkill in taskkill_list:
-            try:
-                os.remove(taskkill["file"])
-            except:
+            delete_attempt_made=False
+            start_time=GetTickCount64()
+            while (os.path.isfile(taskkill["file"])==True and GetTickCount64()-start_time<TASKS_7ZIP_DELETE_TIMEOUT_SECONDS*1000) or delete_attempt_made==False:
                 try:
+                    delete_attempt_made=True
                     os.remove(taskkill["file"])
                 except:
-                    pass
+                    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
 
         if terminated_total==0:
             self.log("No 7-ZIP tasks were terminated.")
@@ -827,14 +842,20 @@ class User_Message_Handler(object):
 
     def rel_to_abs(self,raw_command_args,isfile=False):
         command_args=raw_command_args.replace("/","\\")
-        if command_args.find(":")!=-1:
+        if ":" in command_args:
             newpath=command_args
         else:
-            newpath=os.path.join(self.last_folder,command_args)
-        if newpath[-1]!="\\" and isfile==False:
+            try:
+                newpath=os.path.join(self.last_folder,command_args)
+            except:
+                return "<BAD PATH>"
+        if newpath.endswith("\\")==False and isfile==False:
             newpath+="\\"
-        if newpath.find("\\\\")!=-1 or newpath.find("\\.\\")!=-1 or newpath.find("\\..\\")!=-1 or newpath.find("?")!=-1 or newpath.find("*")!=-1:
-            newpath="<BAD PATH>"
+        for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","&","<",">","?","*","^"]:
+            if bad_pattern in newpath:
+                return "<BAD PATH>"
+        if len(newpath)-1>len(newpath.replace(":","")):
+            return "<BAD PATH>"
         return newpath
 
     def check_tasks(self):
@@ -1260,7 +1281,7 @@ class User_Message_Handler(object):
 
             for taskdata in tasks_7zip:
                 if taskdata["user"]==self.allowed_user:
-                    response+=">FILE=\""+taskdata["target"]+"\"\n"
+                    response+=">ARCHIVING \""+taskdata["target"]+"\"\n"
 
             if response=="":
                 response="No archival tasks running."
