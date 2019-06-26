@@ -1,4 +1,4 @@
-__version__="1.50"
+__version__="1.60"
 __author__="Searinox Navras"
 
 
@@ -40,35 +40,36 @@ SSL_NOCERT.verify_mode=ssl.CERT_NONE
 
 MAINTHREAD_HEARTBEAT_SECONDS=0.085
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.1
-MAINTHREAD_PERIODIC_CHECKS_SECONDS=60
+MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
 COMMAND_CHECK_INTERVAL_SECONDS=0.2
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
-LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS=0.8
+BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
 CLIPBOARD_COPY_TIMEOUT_SECONDS=2
 CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
+TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
+TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=2
 LOG_UPDATE_INTERVAL_SECONDS=0.085
 
 BOT_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
+MAX_7ZIP_TASKS_PER_USER=4
 
 FONT_POINT_SIZE=8
-FONTS={"general":{"type":"Monospace","size":1,"properties":[]},"status":{"type":"Monospace","size":1,"properties":["bold"]},"log":{"type":"Consolas","size":1,"properties":["bold"]}}
+FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type":"Monospace","scale":1,"properties":["bold"]},"log":{"type":"Consolas","scale":1,"properties":["bold"]}}
 
 CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=8000
 
+QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
+
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 BINARIES_7ZIP_B64={32:Get_B64_Resource("binaries/7zipx32"),64:Get_B64_Resource("binaries/7zipx64")}
 
-QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
-
 LOG_HANDLE=None
 UI_SIGNAL=None
-BINARY_7ZIP=None
 PATH_WINDOWS_SYSTEM32=""
-PATH_7ZIP=""
 
 
 """
@@ -93,7 +94,7 @@ def Get_Runtime_Environment():
     retval["process_binary"]=os.path.basename(sys_exe).lower()
     retval["working_dir"]=os.path.realpath(os.path.dirname(sys_exe))
     retval["process_id"]=os.getpid()
-    retval["system32"]=os.path.join(os.environ["WINDIR"],"Sysnative")
+    retval["system32"]=os.path.join(os.environ["WINDIR"],"System32")
 
     if ctypes.sizeof(ctypes.c_voidp)==4:
         retval["architecture"]=32
@@ -106,7 +107,39 @@ def Get_Runtime_Environment():
                 retval["working_dir"]=os.path.realpath(os.path.dirname(retval["arguments"][0]))
                 retval["arguments"]=retval["arguments"][1:]
                 retval["running_from_source"]=True
+
     return retval
+
+def Wait_For_Finish(input_object,input_sync_request_event):
+    global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
+    global MAINTHREAD_HEARTBEAT_SECONDS
+
+    process_total_time=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
+    last_server_time_check=time.time()
+
+    while input_object.IS_RUNNING()==True:
+
+        time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
+
+        Flush_Std_Buffers()
+
+        process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
+        if process_total_time>=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS:
+            process_total_time-=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
+            set_process_priority_idle()
+
+        if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_sync_request_event.is_set()==True:
+            time_sync_result=Perform_Time_Sync(UI_SIGNAL)
+            if input_sync_request_event.is_set()==True:
+                input_sync_request_event.clear()
+                if time_sync_result==True:
+                    last_server_time_check=time.time()
+            else:
+                input_sync_request_event.clear()
+                last_server_time_check=time.time()
+
+    return
+
 
 def qtmsg_handler(msg_type,msg_log_context,msg_string):
     global QTMSG_BLACKLIST_STARTSWITH
@@ -140,7 +173,7 @@ def Current_UTC_Internet_Time():
     quot2+=1
     return int(timestr[quot1:quot2-3])/1000.0
 
-def Set_Process_Priority_Idle():
+def set_process_priority_idle():
     global CURRENT_PROCESS_HANDLE
 
     try:
@@ -208,107 +241,6 @@ def readable_size(input_size):
         return str(round(input_size/1024.0**2,2))+" MB"
     return str(round(input_size/1024.0**3,2))+" GB"
 
-def New_7ZIP_Task(target_path,originating_user):
-    global PATH_7ZIP
-    global LOCK_7ZIP_INSTANCES
-    global INSTANCES_7ZIP
-
-    if os.path.isfile(target_path):
-        folder_path=target_path[:target_path.rfind("\\")+1]
-    else:
-        folder_path=target_path[:target_path[:-1].rfind("\\")+1]
-    archive_filename=target_path[target_path.rfind("\\")+1:]
-    if archive_filename=="":
-        archive_filename=target_path[target_path[:-1].rfind("\\")+1:]
-        if archive_filename[-1]=="\\":
-            archive_filename=archive_filename[:-1]
-    zip_command="\""+PATH_7ZIP+"7z.exe"+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename+"\""
-    folder_command="cd /d \""+folder_path+"\""
-    rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
-    prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-    full_target=(folder_path+archive_filename).lower()
-    if os.path.exists(full_target+".7z")==False:
-        try:
-            new_process=subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
-            LOCK_7ZIP_INSTANCES.acquire()
-            INSTANCES_7ZIP+=[{"process":new_process,"temp_file":full_target+".7z.TMP","user":originating_user}]
-            LOCK_7ZIP_INSTANCES.release()
-            return {"result":"CREATED","full_target":full_target}
-        except:
-            return {"result":"ERROR","full_target":full_target}
-    else:
-        return {"result":"EXISTS","full_target":full_target}
-
-def Update_7ZIP_Running_Tasks():
-    global LOCK_7ZIP_INSTANCES
-    global INSTANCES_7ZIP
-
-    LOCK_7ZIP_INSTANCES.acquire()
-    for i in reversed(range(len(INSTANCES_7ZIP))):
-        poll_result=None
-        try:
-            poll_result=INSTANCES_7ZIP[i]["process"].poll()
-        except:
-            pass
-        if poll_result is not None:
-            del INSTANCES_7ZIP[i]
-
-    LOCK_7ZIP_INSTANCES.release()
-    return
-
-def Get_7ZIP_Running_Tasks():
-    global LOCK_7ZIP_INSTANCES
-    global INSTANCES_7ZIP
-
-    retval=[]
-
-    Update_7ZIP_Running_Tasks()
-
-    LOCK_7ZIP_INSTANCES.acquire()
-    for instance in INSTANCES_7ZIP:
-        target_location=instance["temp_file"]
-        if target_location.lower().endswith(".7z.tmp"):
-            target_location=target_location[:-len(".7z.tmp")]
-        try:
-            retval+=[{"pid":instance["process"].pid,"target":target_location,"user":instance["user"]}]
-        except:
-            pass
-    LOCK_7ZIP_INSTANCES.release()
-
-    return retval
-
-def End_All_7ZIP_Tasks():
-    global PATH_WINDOWS_SYSTEM32
-    global LOCK_7ZIP_INSTANCES
-    global INSTANCES_7ZIP
-
-    taskkill_list=[]
-
-    LOCK_7ZIP_INSTANCES.acquire()
-
-    for i in reversed(range(len(INSTANCES_7ZIP))):
-        get_pid=INSTANCES_7ZIP[i]["process"].pid
-        log("Terminating ongoing 7-ZIP batch with PID="+str(get_pid)+" and temporary file \""+INSTANCES_7ZIP[i]["temp_file"]+"\".")
-        taskkill_list+=[{"process":subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32+"taskkill.exe\" /f /t /pid "+str(get_pid),shell=True,creationflags=subprocess.SW_HIDE),"file":INSTANCES_7ZIP[i]["temp_file"]}]
-
-        del INSTANCES_7ZIP[i]
-
-    LOCK_7ZIP_INSTANCES.release()
-
-    for taskkill in taskkill_list:
-        taskkill["process"].wait()
-
-    for taskkill in taskkill_list:
-        try:
-            os.remove(taskkill["file"])
-        except:
-            try:
-                os.remove(taskkill["file"])
-            except:
-                pass
-
-    return
-
 
 """
 OBJS
@@ -325,16 +257,20 @@ class Logger(object):
         self.active_signaller=None
         compact_log=subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32+"compact.exe\" /a /c \""+input_path+"\"",shell=True,creationflags=subprocess.SW_HIDE)
         compact_log.wait()
+        self.is_active=threading.Event()
+        self.is_active.clear()
         return
 
-    def BEGIN(self):
+    def ACTIVATE(self):
         try:
             self.log_handle=open(self.logging_path,"a")
         except:
             pass
+        self.is_active.set()
         return
 
-    def END(self):
+    def DEACTIVATE(self):
+        self.is_active.clear()
         try:
             if self.log_handle is not None:
                 self.log_handle.close()
@@ -356,7 +292,10 @@ class Logger(object):
 
     def LOG(self,source,input_data=""):
         global UI_SIGNAL
-    
+
+        if self.is_active.is_set()==False:
+            return
+
         if input_data!="":
             source_literal=str(source)
             input_literal=str(input_data)
@@ -394,8 +333,241 @@ class Logger(object):
         return
 
 
-class User_Message_Listener(object):
-    def __init__(self,input_token,username_list,input_listener,input_logger=None):
+class Task_Handler_7ZIP(object):
+    def __init__(self,input_path_7zip,input_7zip_binary_base64,input_max_per_user,input_logger=None):
+        self.instances_7zip=[]
+        self.lock_instances_7zip=threading.Lock()
+        self.lock_list_end_tasks=threading.Lock()
+        self.active_logger=input_logger
+        self.working_thread=threading.Thread(target=self.work_loop)
+        self.working_thread.daemon=True
+        self.binary_7zip_read=None
+        self.has_quit=threading.Event()
+        self.has_quit.clear()
+        self.request_exit=threading.Event()
+        self.request_exit.clear()
+        self.max_tasks_per_user=input_max_per_user
+        self.list_end_tasks_PIDs=[]
+        self.list_end_tasks_users=[]
+
+        input_path_7zip=input_path_7zip.replace("/","\\")
+        if input_path_7zip.endswith("\\")==False:
+            input_path_7zip+="\\"
+        self.path_7zip_bin=os.path.join(input_path_7zip,"7z.exe")
+        write_7z_binary=None
+
+        try:
+            write_7z_binary=open(self.path_7zip_bin,"w+b")
+            write_7z_binary.write(base64.decodestring(input_7zip_binary_base64))
+            self.binary_7zip_read=open(self.path_7zip_bin,"rb")
+            write_7z_binary.close()
+        except:
+            for close_binary in [write_7z_binary,self.binary_7z_read]:
+                if close_binary is not None:
+                    try:
+                        write_7z_binary.close()
+                    except:
+                        pass
+            raise Exception("The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
+
+        return
+
+    def log(self,input_text):
+        if self.active_logger is not None:
+            self.active_logger.LOG("7ZTSKHND",input_text)
+        return
+
+    def START(self):
+        self.working_thread.start()
+        return
+
+    def REQUEST_STOP(self):
+        self.request_exit.set()
+        return
+
+    def CONCLUDE(self):
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+
+        while self.IS_RUNNING()==True:
+            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+        self.working_thread.join()
+        try:
+            Active_7ZIP_Handler.binary_7zip_read.close()
+        except:
+            pass
+        return
+    
+    def IS_RUNNING(self):
+        return self.has_quit.is_set()==False    
+
+    def NEW_TASK(self,target_path,originating_user):
+        if self.request_exit.is_set()==True:
+            return {"result":"ERROR","full_target":""}
+
+        if os.path.isfile(target_path):
+            folder_path=target_path[:target_path.rfind("\\")+1]
+        else:
+            folder_path=target_path[:target_path[:-1].rfind("\\")+1]
+        archive_filename=target_path[target_path.rfind("\\")+1:]
+        if archive_filename=="":
+            archive_filename=target_path[target_path[:-1].rfind("\\")+1:]
+            if archive_filename[-1]=="\\":
+                archive_filename=archive_filename[:-1]
+        zip_command="\""+self.path_7zip_bin+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename+"\""
+        folder_command="cd /d \""+folder_path+"\""
+        rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
+        prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
+        full_target=(folder_path+archive_filename).lower()
+        if os.path.exists(full_target+".7z")==False:
+            self.lock_instances_7zip.acquire()
+            if sum(1 for _ in self.instances_7zip if self.instances_7zip["user"].lower()==originating_user.lower())==self.max_tasks_per_user:
+                self.lock_instances_7zip.release()
+                return {"result":"MAXREACHED","full_target":""}
+            if self.request_exit.is_set()==True:
+                self.lock_instances_7zip.release()
+                return {"result":"ERROR","full_target":""}
+            try:
+                new_process=subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
+                self.instances_7zip+=[{"process":new_process,"temp_file":full_target+".7z.TMP","user":originating_user,"new":True}]
+                self.lock_instances_7zip.release()
+
+                return {"result":"CREATED","full_target":full_target}
+            except:
+                return {"result":"ERROR","full_target":""}
+        else:
+            return {"result":"EXISTS","full_target":full_target}
+
+    def GET_TASKS(self):
+        retval=[]
+
+        self.lock_instances_7zip.acquire()
+        for instance in self.instances_7zip:
+            target_location=instance["temp_file"]
+            if target_location.lower().endswith(".7z.tmp"):
+                target_location=target_location[:-len(".7z.tmp")]
+            try:
+                retval+=[{"pid":instance["process"].pid,"target":target_location,"user":instance["user"]}]
+            except:
+                pass
+        self.lock_instances_7zip.release()
+
+        return retval
+
+    def END_TASKS(self,input_users,input_PIDs=[]):
+        self.lock_list_end_tasks.acquire()
+        self.list_end_tasks_users+=input_users
+        self.list_end_tasks_PIDs+=input_PIDs
+        self.lock_list_end_tasks.release()
+        return
+
+    def work_loop(self):
+        global TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS
+        global TASKS_7ZIP_UPDATE_INTERVAL_SECONDS
+
+        get_end_task_list_PIDs=[]
+        get_end_task_list_users=[]
+
+        last_update=GetTickCount64()-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000
+        while self.request_exit.is_set()==False:
+            time.sleep(TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS)
+
+            if GetTickCount64()-last_update>=TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000:
+                self.update_7zip_tasks()
+                last_update=GetTickCount64()
+
+            self.lock_list_end_tasks.acquire()
+            if len(self.list_end_tasks_PIDs)+len(self.list_end_tasks_users)>0:
+                get_end_task_list_PIDs=self.list_end_tasks_PIDs[:]
+                self.list_end_tasks_PIDs=[]
+                get_end_task_list_users=self.list_end_tasks_users[:]
+                self.list_end_tasks_users=[]
+            self.lock_list_end_tasks.release()
+
+            if len(get_end_task_list_PIDs)+len(get_end_task_list_users)>0:
+                self.end_7zip_tasks(get_end_task_list_users,get_end_task_list_PIDs)
+                get_end_task_list_PIDs=[]
+                get_end_task_list_users=[]
+
+        self.update_7zip_tasks()
+        self.end_7zip_tasks(["*"])
+
+        self.log("7-ZIP Task Handler has exited.")
+        self.has_quit.set()
+        return
+
+    def update_7zip_tasks(self):
+        self.lock_instances_7zip.acquire()
+
+        for i in reversed(range(len(self.instances_7zip))):
+            if self.instances_7zip[i]["new"]==True:
+                self.instances_7zip[i]["new"]=False
+                self.log("Task with PID="+str(self.instances_7zip[i]["process"].pid)+" TEMP=\""+self.instances_7zip[i]["temp_file"]+"\" has been added.")
+            poll_result=None
+            try:
+                poll_result=self.instances_7zip[i]["process"].poll()
+            except:
+                pass
+            if poll_result is not None:
+                self.log("Task with PID="+str(self.instances_7zip[i]["process"].pid)+" TEMP=\""+self.instances_7zip[i]["temp_file"]+"\" has finished.")
+                del self.instances_7zip[i]
+
+        self.lock_instances_7zip.release()
+        return
+
+    def end_7zip_tasks(self,list_users,list_PIDs=[]):
+        global PATH_WINDOWS_SYSTEM32
+
+        taskkill_list=[]
+        terminate_all=False
+        terminated_total=0
+
+        if len(list_users)==1:
+            if list_users[0]=="*":
+                terminate_all=True
+
+        self.lock_instances_7zip.acquire()
+
+        for i in reversed(range(len(self.instances_7zip))):
+            get_PID=self.instances_7zip[i]["process"].pid
+            get_user=self.instances_7zip[i]["user"].lower()
+            terminate=False
+
+            if terminate_all==True:
+                terminate=True
+            elif any(username.lower()==get_user for username in list_users):
+                terminate=True
+            elif any(pid==get_PID for pid in list_PIDs):
+                terminate=True
+
+            if terminate==True:
+                self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
+                taskkill_list+=[{"process":subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32+"taskkill.exe\" /f /t /pid "+str(get_PID),shell=True,creationflags=subprocess.SW_HIDE),"file":self.instances_7zip[i]["temp_file"]}]
+                del self.instances_7zip[i]
+                terminated_total+=1
+
+        self.lock_instances_7zip.release()
+
+        for taskkill in taskkill_list:
+            print PATH_WINDOWS_SYSTEM32+"taskkill.exe"
+            taskkill["process"].wait()
+
+        for taskkill in taskkill_list:
+            try:
+                os.remove(taskkill["file"])
+            except:
+                try:
+                    os.remove(taskkill["file"])
+                except:
+                    pass
+
+        if terminated_total==0:
+            self.log("No 7-ZIP tasks were terminated.")
+
+        return
+
+
+class Bot_Listener(object):
+    def __init__(self,input_token,username_list,input_signaller,input_logger=None):
         self.bot_token=input_token
         self.active_logger=input_logger
         self.keep_running=threading.Event()
@@ -406,7 +578,7 @@ class User_Message_Listener(object):
         self.is_ready.clear()
         self.last_ID_checked=-1
         self.start_time=0
-        self.active_UI_signaller=input_listener
+        self.active_UI_signaller=input_signaller
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
         self.listen_users=username_list
@@ -420,19 +592,28 @@ class User_Message_Listener(object):
 
     def log(self,input_text):
         if self.active_logger is not None:
-            self.active_logger.LOG("LSTNSRVC",input_text)
+            self.active_logger.LOG("BOTLSTNR",input_text)
+        return
 
     def START(self):
         self.has_quit.clear()
         self.keep_running.set()
         self.working_thread.start()
 
-    def STOP(self):
+    def REQUEST_STOP(self):
         self.keep_running.clear()
         return
 
     def IS_RUNNING(self):
         return self.has_quit.is_set()==False
+
+    def CONCLUDE(self):
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+
+        while self.IS_RUNNING()==True:
+            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+        self.working_thread.join()
+        return
 
     def IS_READY(self):
         return self.is_ready.is_set()==True
@@ -449,18 +630,18 @@ class User_Message_Listener(object):
                 bot_bind_ok=True
             except:
                 if activation_fail_announce==False:
-                    self.log("Listener service activation error. Will keep trying...")
+                    self.log("Bot Listener activation error. Will keep trying...")
                     activation_fail_announce=True
-                time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+                time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
         if self.keep_running.is_set()==True:
             self.catch_up_IDs()
-            self.log("Listener service for bot \""+self.name+"\" is now active.")
+            self.log("Bot Listener for \""+self.name+"\" is now active.")
             self.active_UI_signaller.send("bot_name",self.name)
             self.is_ready.set()
 
         while self.keep_running.is_set()==True:
-            time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+            time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
             response=[]
 
             try:
@@ -481,7 +662,7 @@ class User_Message_Listener(object):
             self.organize_messages(response)
 
         self.is_ready.clear()
-        self.log("Listener has exited.")
+        self.log("Bot Listener has exited.")
         self.has_quit.set()
         return
 
@@ -498,7 +679,7 @@ class User_Message_Listener(object):
                 if announced_fail==False:
                     self.log("Failed to catch up with messages. Will keep trying...")
                     announced_fail=True
-                time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+                time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
         responses=[]
@@ -557,8 +738,9 @@ class User_Message_Listener(object):
 
 
 class User_Message_Handler(object):
-    def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_logger=None):
+    def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_7zip_task_handler,input_logger=None):
         self.active_logger=input_logger
+        self.active_7zip_task_handler=input_7zip_task_handler
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
         self.bot_token=input_token
@@ -612,7 +794,7 @@ class User_Message_Handler(object):
         try:
             self.last_send_time=OS_uptime()
             self.bot_handle.sendMessage(sid,msg)
-            self.lastsent_timers.append(self.last_send_time)
+            self.lastsent_timers+=[self.last_send_time]
             excess_entries=max(0,len(self.lastsent_timers)-40)
             for _ in range(excess_entries):
                 del self.lastsent_timers[0]
@@ -667,7 +849,7 @@ class User_Message_Handler(object):
         return
 
     def work_loop(self):
-        global LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS
+        global BOT_LISTENER_THREAD_HEARTBEAT_SECONDS
         global USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS
 
         self.bot_handle=telepot.Bot(self.bot_token)
@@ -682,7 +864,7 @@ class User_Message_Handler(object):
                 if activation_fail_announce==False:
                     self.log("Message handler activation error. Will keep trying...")
                     activation_fail_announce=True
-                time.sleep(LISTENER_SERVICE_THREAD_HEARTBEAT_SECONDS)
+                time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
         if self.keep_running.is_set()==True:
             self.listener.consume_user_messages(self.allowed_user)
@@ -725,18 +907,32 @@ class User_Message_Handler(object):
 
     def LISTEN(self,new_state):
         if new_state==True:
-            self.log("Listen started.")
-            self.listener.consume_user_messages(self.allowed_user)
-            self.listen_flag.set()
+            if self.listen_flag.is_set()==False:
+                self.log("Listen started.")
+                self.listener.consume_user_messages(self.allowed_user)
+                self.listen_flag.set()
+            else:
+                self.log("Listen start was requested, but it is already listening.")
         else:
-            self.log("Listen stopped.")
-            self.listen_flag.clear()
+            if self.listen_flag.is_set()==True:
+                self.log("Listen stopped.")
+                self.listen_flag.clear()
+            else:
+                self.log("Listen stop was requested, but it is not currently listening.")
         return
 
-    def STOP(self):
+    def REQUEST_STOP(self):
         self.log("Message handler stop issued.")
         self.listen_flag.clear()
         self.keep_running.clear()
+        return
+
+    def CONCLUDE(self):
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+
+        while self.IS_RUNNING()==True:
+            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+        self.working_thread.join()
         return
 
     def IS_RUNNING(self):
@@ -808,7 +1004,7 @@ class User_Message_Handler(object):
         start=0
         while start<len(input_string):
             end=start+min(chunksize,len(input_string)-start)
-            retval.append(input_string[start:end])
+            retval+=[input_string[start:end]]
             start=end
         return retval
 
@@ -832,10 +1028,10 @@ class User_Message_Handler(object):
                 if os.path.isfile(path):
                     if folders_only==False:
                         if name.lower().find(search)!=-1 or search=="":
-                            filelist.append(name+" [Size: "+readable_size(os.path.getsize(path))+"]")
+                            filelist+=[name+" [Size: "+readable_size(os.path.getsize(path))+"]"]
                 else:
                     if name.lower().find(search)!=-1 or search=="":
-                        folderlist.append(name)
+                        folderlist+=[name]
 
             if len(folderlist)>0:
                 response+="<FOLDERS:>\n"
@@ -882,9 +1078,9 @@ class User_Message_Handler(object):
         response=""
 
         if command_type=="start":
-            self.log("Message handler start requested.")
-        elif command_type=="dir":
+            self.log("User has sent a start request.")
 
+        elif command_type=="dir":
             extra_search=""
 
             if command_args.lower().find("?f:")!=-1:
@@ -952,6 +1148,7 @@ class User_Message_Handler(object):
                 newpath=self.get_last_folder()
                 response="Current folder is \""+newpath+"\"."
                 self.log("Queried current folder, which is \""+newpath+"\".")
+
         elif command_type=="get":
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -974,6 +1171,7 @@ class User_Message_Handler(object):
             else:
                 response="File not found or inaccessible."
                 self.log("File not found.")
+
         elif command_type=="eat" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -1005,6 +1203,7 @@ class User_Message_Handler(object):
                         self.log("File delete error.")
             else:
                 response="File not found or inaccessible."
+
         elif command_type=="del" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args,True)
             if self.usable_path(newpath)==True:
@@ -1018,6 +1217,7 @@ class User_Message_Handler(object):
                     self.log("File delete error.")
             else:
                 response="File not found or inaccessible."
+
         elif command_type=="up":
             if self.last_folder.count("\\")>1:
                 newpath=self.get_last_folder()
@@ -1031,12 +1231,13 @@ class User_Message_Handler(object):
                     response="Already at top folder."
             else:
                 response="Already at top folder."
+
         elif command_type=="zip" and self.allow_writing==True:
             newpath=self.rel_to_abs(command_args)
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True:
-                zip_response=New_7ZIP_Task(newpath,self.allowed_user)
+                zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.allowed_user)
                 if zip_response["result"]=="CREATED":
                     response="Issued zip command."
                     self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
@@ -1046,9 +1247,33 @@ class User_Message_Handler(object):
                 elif zip_response["result"]=="ERROR":
                     response="Problem running command."
                     self.log("Zip \""+command_args+"\" command could not be run.")
+                elif zip_response["result"]=="MAXREACHED":
+                    response="Maximum concurrent archival tasks reached."
+                    self.log("Zip \""+command_args+"\" rejected due to max concurrent tasks per user limit.")
             else:
                 response="File not found or inaccessible."
                 self.log("Zip \""+command_args+"\" file not found or inaccessible.")
+
+        elif command_type=="listzips" and self.allow_writing==True:
+            response=""
+            tasks_7zip=self.active_7zip_task_handler.GET_TASKS()
+
+            for taskdata in tasks_7zip:
+                if taskdata["user"]==self.allowed_user:
+                    response+=">FILE=\""+taskdata["target"]+"\"\n"
+
+            if response=="":
+                response="No archival tasks running."
+            else:
+                response="Ongoing archival tasks:\n\n"+response
+
+            self.log("Requested list of running 7-ZIP archival tasks for user.")
+
+        elif command_type=="stopzips" and self.allow_writing==True:
+            response="All running archival tasks will be stopped."
+            self.active_7zip_task_handler.END_TASKS([self.allowed_user])
+            self.log("Requested stop of any running 7-ZIP archival tasks.")
+
         elif command_type=="lock":
             if command_args.strip()!="" and len(command_args.strip())<=32:
                 self.bot_lock_pass=command_args.strip()
@@ -1057,15 +1282,19 @@ class User_Message_Handler(object):
                 self.log("Message handler was locked down with password.")
             else:
                 response="Bad password for locking."
+
         elif command_type=="unlock":
             response="The bot is already unlocked."
+
         elif command_type=="help":
             response="AVAILABLE BOT COMMANDS:\n\n"
             response+="/help: display this help screen\n"
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+="/zip <PATH[FILE]>: make a 7-ZIP archive, extension will be .7z.TMP until finished\n"
+                response+="/zip <PATH[FILE]>: make a 7-ZIP archive; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.max_tasks_per_user)+" simultaneous tasks\n"
+                response+="/listzips: list all running 7-ZIP archival tasks\n"
+                response+="/stopzips: stop all running 7-ZIP archival tasks\n"
             response+="/up: move up one folder from current path\n"
             response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram\n"
             if self.allow_writing==True:
@@ -1082,49 +1311,67 @@ class User_Message_Handler(object):
             self.sendmsg(sid,response)
         return
 
+
 class User_Console(object):
-    def __init__(self,bot_list,input_signaller,input_time_sync,input_logger=None):
+    def __init__(self,input_user_handler_list,input_signaller,input_7zip_taskhandler,input_time_sync,input_logger=None):
         self.active_logger=input_logger
         self.working_thread=threading.Thread(target=self.process_input)
         self.working_thread.daemon=True
         self.active_UI_signaller=input_signaller
         self.is_exiting=threading.Event()
         self.is_exiting.clear()
-        self.bot_list=bot_list
+        self.user_handler_list=input_user_handler_list
         self.has_quit=threading.Event()
         self.has_quit.clear()
         self.request_exit=threading.Event()
         self.request_exit.clear()
         self.lock_command=threading.Lock()
         self.request_time_sync=input_time_sync
+        self.active_7zip_task_handler=input_7zip_taskhandler
         self.pending_command=""
         return
 
     def log(self,input_text):
         if self.active_logger is not None:
             self.active_logger.LOG("UCONSOLE",input_text)
+        return
 
     def START(self):
         self.working_thread.start()
         return
 
-    def STOP(self):
+    def REQUEST_STOP(self):
         self.request_exit.set()
         return
 
     def IS_RUNNING(self):
         return self.has_quit.is_set()==False
 
-    def bots_running(self):
+    def CONCLUDE(self):
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+
+        while self.IS_RUNNING()==True:
+            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+        self.working_thread.join()
+        return
+
+    def COMMAND_SEND(self,input_command):
+        if self.request_exit.is_set()==False:
+            self.lock_command.acquire()
+            self.pending_command=input_command
+            self.lock_command.release()
+        return
+
+    def user_handlers_running(self):
         total=0
-        for bot_instance in self.bot_list:
-            if bot_instance.IS_RUNNING()==True:
+        for user_instance in self.user_handler_list:
+            if user_instance.IS_RUNNING()==True:
                 total+=1
         return total
 
-    def any_bots_busy(self):
-        for bot_instance in self.bot_list:
-            if bot_instance.processing_messages.is_set()==True:
+    def any_user_handlers_busy(self):
+        for user_instance in self.user_handler_list:
+            if user_instance.processing_messages.is_set()==True:
                 return True
         return False
 
@@ -1132,52 +1379,57 @@ class User_Console(object):
         user_data=user_input.split(" ")
         input_command=user_data[0].lower().strip()
         if len(user_data)>1:
-            input_argument=user_data[1].strip()
+            content=""
+            for i in range(len(user_data)):
+                content+=user_data[i].strip()+" "
+            if content.endswith(" "):
+                content=content[:-1]
+            input_arguments=content
         else:
-            input_argument=""
+            input_arguments=""
 
-        if input_command=="start":
-            for bot_instance in self.bot_list:
-                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
-                    bot_instance.LISTEN(True)
+        if input_command=="startlisten":
+            for user_instance in self.user_handler_list:
+                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
+                    user_instance.LISTEN(True)
             return True
 
-        elif input_command=="stop":
-            for bot_instance in self.bot_list:
-                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
-                    bot_instance.LISTEN(False)
+        elif input_command=="stoplisten":
+            for user_instance in self.user_handler_list:
+                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
+                    user_instance.LISTEN(False)
             return True
 
-        elif input_command=="stats":
+        elif input_command=="userstats":
             stats_out=""
-            for bot_instance in self.bot_list:
-                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
-                    stats_out+="\nMessage handler for user \""+bot_instance.allowed_user+"\":\n"+\
-                             "Home path=\""+bot_instance.allowed_root+"\"\n"+\
-                             "Write mode: "+str(bot_instance.allow_writing).upper()+"\n"+\
-                             "Current folder=\""+bot_instance.get_last_folder()+"\"\n"+\
-                             "Locked: "+str(bot_instance.lock_status.is_set()).upper()+"\n"+\
-                             "Listening: "+str(bot_instance.listen_flag.is_set()).upper()+"\n"
+            for user_instance in self.user_handler_list:
+                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
+                    stats_out+="\nMessage handler for user \""+user_instance.allowed_user+"\":\n"+\
+                             "Home path=\""+user_instance.allowed_root+"\"\n"+\
+                             "Write mode: "+str(user_instance.allow_writing).upper()+"\n"+\
+                             "Current folder=\""+user_instance.get_last_folder()+"\"\n"+\
+                             "Locked: "+str(user_instance.lock_status.is_set()).upper()+"\n"+\
+                             "Listening: "+str(user_instance.listen_flag.is_set()).upper()+"\n"
             if stats_out!="":
                 stats_out="USER STATS:\n"+stats_out
                 self.log(stats_out)
             return True
 
-        elif input_command=="list":
+        elif input_command=="listusers":
             list_out=""
-            for bot_instance in self.bot_list:
-                list_out+=bot_instance.allowed_user+", "
+            for user_instance in self.user_handler_list:
+                list_out+=user_instance.allowed_user+", "
             list_out=list_out[:-2]+"."
             self.log("Allowed user(s): "+list_out)
             return True
 
-        elif input_command=="unlock":
-            for bot_instance in self.bot_list:
-                if bot_instance.allowed_user.lower()==input_argument or input_argument=="":
-                    bot_instance.pending_lockclear.set()
+        elif input_command=="unlockusers":
+            for user_instance in self.user_handler_list:
+                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
+                    user_instance.pending_lockclear.set()
             return True
 
-        elif input_command=="sync":
+        elif input_command=="synctime":
             if self.request_time_sync.is_set()==False:
                 self.log("Manual Internet time synchronization requested...")
                 self.request_time_sync.set()
@@ -1185,8 +1437,8 @@ class User_Console(object):
                 self.log("Manual Internet time synchronization is already in progress.")
             return True
 
-        elif input_command=="zips":
-            tasklist=Get_7ZIP_Running_Tasks()
+        elif input_command=="listzips":
+            tasklist=self.active_7zip_task_handler.GET_TASKS()
             task_data_out=""
             for entry in tasklist:
                 task_data_out+="TARGET: \""+entry["target"]+"\" USER: \""+entry["user"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
@@ -1197,15 +1449,62 @@ class User_Console(object):
                 self.log(task_data_out)
             return True
                 
+        elif input_command=="stopzips":
+            list_args=input_arguments.split(" ")
+            usernames=[]
+            pids=[]
+
+            for arg in list_args:
+                arg=arg.strip()
+                if arg!="":
+                    new_pid=-1
+                    new_username=""
+
+                    try:
+                        new_pid=int(arg)
+                        if new_pid<=4 or new_pid>2**32:
+                            new_pid=-1
+                    except:
+                        invalid=False
+                        if len(arg)>=5 and len(arg)<=32:
+                            if arg[0] in ["0","1","2","3","4","5","6","7","8","9","_"]:
+                                invalid=True
+                            else:
+                                for c in arg:
+                                    c=c.lower()
+                                    if c not in ["0","1","2","3","4","5","6","7","8","9","_","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","#"]:
+                                        invalid=True
+                                        break
+                        else:
+                            invalid=True
+
+                        if invalid==False:
+                            new_username=arg
+
+                    if new_username!="":
+                        usernames+=[new_username]
+                    elif new_pid!=-1:
+                        pids+=[new_pid]
+                    else:
+                        self.log("One or more PIDs or users were incorrect.")
+                        return False
+
+            if len(pids)+len(usernames)>0:
+                self.active_7zip_task_handler.END_TASKS(usernames,pids)
+            else:
+                self.active_7zip_task_handler.END_TASKS(["*"])
+            return True
+
         elif input_command=="help":
             self.log("AVAILABLE CONSOLE COMMANDS:\n\n"+\
-            "start [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
-            "stop [USER]: stop listening to messages for user; leave blank to apply to all instances\n"+\
-            "unlock [USER]: unlock the bot for user; leave blank to apply to all instances\n"+\
-            "stats [USER]: list stats for user; leave blank to list all instances\n"+\
-            "list: lists allowed users\n"+\
-            "sync: manually re-synchronize bot time with Internet time\n"+\
-            "zips: list all currently running 7-ZIP archival task(s)\n"+\
+            "startlisten [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
+            "stoplisten [USER]: stop listening to messages for user; leave blank to apply to all instances\n"+\
+            "unlockusers [USER]: unlock the bot for user; leave blank to apply to all instances\n"+\
+            "userstats [USER]: list stats for user; leave blank to list all instances\n"+\
+            "listusers: lists allowed users\n"+\
+            "synctime: manually re-synchronize bot time with Internet time\n"+\
+            "listzips: list all running 7-ZIP archival tasks\n"+\
+            "stopzips [PID | USER]: stop running 7-ZIP archival tasks by user or PID; leave blank to apply to all instances\n"+\
             "help: display help\n"+\
             "exit: close the program\n")
             return True
@@ -1213,13 +1512,6 @@ class User_Console(object):
             self.log("Unrecognized command. Type \"help\" for a list of commands.")
             return False
         return False
-
-    def COMMAND_SEND(self,input_command):
-        if self.request_exit.is_set()==False:
-            self.lock_command.acquire()
-            self.pending_command=input_command
-            self.lock_command.release()
-        return
 
     def retrieve_command(self):
         retval=""
@@ -1233,14 +1525,16 @@ class User_Console(object):
     def process_input(self):
         global COMMAND_CHECK_INTERVAL_SECONDS
 
-        for bot_instance in self.bot_list:
-            bot_instance.START()
-            bot_instance.LISTEN(True)
+        self.log("Starting User Message Handler(s)...")
+        for user_instance in self.user_handler_list:
+            user_instance.START()
+            user_instance.LISTEN(True)
+
         self.log("User console activated.")
         self.log("Type \"help\" in the console for available commands.")
         self.active_UI_signaller.send("attach_console",self)
 
-        if self.bots_running()==0:
+        if self.user_handlers_running()==0:
             self.is_exiting.set()
 
         continue_processing=True
@@ -1249,7 +1543,7 @@ class User_Console(object):
 
         while continue_processing==True:
             time.sleep(COMMAND_CHECK_INTERVAL_SECONDS)
-            if last_busy_state!=self.any_bots_busy():
+            if last_busy_state!=self.any_user_handlers_busy():
                 last_busy_state=not last_busy_state
                 UI_SIGNAL.send("bots_busy",last_busy_state)
 
@@ -1274,11 +1568,14 @@ class User_Console(object):
                 if command!="":
                     self.active_UI_signaller.send("commandfield_failed",{})
             else:
-                for bot_instance in self.bot_list:
-                    bot_instance.STOP()
-                while self.bots_running()>0:
-                    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
                 continue_processing=False
+
+                for user_instance in self.user_handler_list:
+                    user_instance.REQUEST_STOP()
+
+                for user_instance in self.user_handler_list:
+                    user_instance.CONCLUDE()
+                self.log("Confirmed User Message Handler(s) exit.")
 
         self.log("User console exiting...")
         self.active_UI_signaller.send("detach_console",{})
@@ -1399,7 +1696,7 @@ class Main_Window(QMainWindow):
         self.font_cache={}
         for fontname in FONTS:
             self.font_cache[fontname]=QFont(FONTS[fontname]["type"])
-            self.font_cache[fontname].setPointSize(FONT_POINT_SIZE*FONTS[fontname]["size"]*CUSTOM_UI_SCALING)
+            self.font_cache[fontname].setPointSize(FONT_POINT_SIZE*FONTS[fontname]["scale"]*CUSTOM_UI_SCALING)
             for fontproperty in FONTS[fontname]["properties"]:
                 if fontproperty=="bold":
                     self.font_cache[fontname].setBold(True)
@@ -1931,8 +2228,6 @@ qInstallMessageHandler(qtmsg_handler)
 
 environment_info=Get_Runtime_Environment()
 TIME_DELTA_LOCK=threading.Lock()
-LOCK_7ZIP_INSTANCES=threading.Lock()
-INSTANCES_7ZIP=[]
 
 start_minimized=False
 
@@ -1943,15 +2238,12 @@ for argument in environment_info["arguments"]:
         start_minimized=True
 
 LOGGER=Logger(os.path.join(environment_info["working_dir"],"log.txt"))
-LOGGER.BEGIN()
+LOGGER.ACTIVATE()
 
 PATH_WINDOWS_SYSTEM32=environment_info["system32"]
 if PATH_WINDOWS_SYSTEM32.endswith("\\")==False:
     PATH_WINDOWS_SYSTEM32+="\\"
 
-PATH_7ZIP=environment_info["working_dir"].replace("/","\\")
-if PATH_7ZIP.endswith("\\")==False:
-    PATH_7ZIP+="\\"
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 TELEGRAM_SERVER_TIMER_DELTA=-1
 
@@ -1980,7 +2272,7 @@ log("\n\nREQUIREMENTS:\n"+\
     "COMMAND LINE:\n"+\
     "/minimized: starts the application minimized to system tray\n")
 
-log("Process ID is "+str(environment_info["process_id"])+".")
+log("Process ID is "+str(environment_info["process_id"])+". FileBot architecture is "+str(environment_info["architecture"])+"-bit.")
 
 fatal_error=False
 collect_api_token=""
@@ -2006,36 +2298,29 @@ if fatal_error==False:
         file_entries=file_handle.readlines()
         for entry in file_entries:
             if entry.encode("utf-8").strip()!="":
-                collect_allowed_senders.append(User_Entry(entry.strip()))
+                new_user=User_Entry(entry.strip())
+                if new_user.username!="":
+                    collect_allowed_senders+=[new_user]
     except:
         log("ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
 
-for i in reversed(range(len(collect_allowed_senders))):
-    if collect_allowed_senders[i].username=="":
-        del collect_allowed_senders[i]
-
 if fatal_error==False:
     log("Number of users to listen for: "+str(len(collect_allowed_senders))+".")
     if len(collect_allowed_senders)==0:
-        log("ERROR: There were no valid user lists to add.")
+        log("ERROR: There were no valid user entries to add.")
         fatal_error=True
 
 if fatal_error==False:
-    exe_path_7z=os.path.join(PATH_7ZIP,"7z.exe")
     try:
-        write_7z_binary=open(exe_path_7z,"w+b")
-        write_7z_binary.write(base64.decodestring(BINARIES_7ZIP_B64[environment_info["architecture"]]))
-        BINARY_7ZIP=open(exe_path_7z,"rb")
-        write_7z_binary.close()
+        Active_7ZIP_Handler=Task_Handler_7ZIP(environment_info["working_dir"],Get_B64_Resource("binaries/7zipx"+str(environment_info["architecture"])),MAX_7ZIP_TASKS_PER_USER,LOGGER)
     except:
         log("The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
         fatal_error=True
 
-    del BINARIES_7ZIP_B64
-    BINARIES_7ZIP=None
-
 if fatal_error==False:
+    log("Starting 7-ZIP Task Handler...")
+    Active_7ZIP_Handler.START()
 
     log("Obtaining local machine clock bias info...")
     time_synced=False
@@ -2047,79 +2332,52 @@ if fatal_error==False:
 
         collect_allowed_usernames=[]
         for sender in collect_allowed_senders:
-            collect_allowed_usernames.append(sender.username)
+            collect_allowed_usernames+=[sender.username]
 
-        ListenerService=User_Message_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
-        log("Starting Listener...")
-        ListenerService.START()
+        Active_BotListener=Bot_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
+        log("Starting Bot Listener...")
+        Active_BotListener.START()
 
-        while ListenerService.IS_READY()==False and Active_UI.IS_RUNNING()==True:
+        while Active_BotListener.IS_READY()==False and Active_UI.IS_RUNNING()==True:
             time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
 
         if Active_UI.IS_RUNNING()==True:
 
             log("User message handler(s) starting up...")
-
             for sender in collect_allowed_senders:
-                UserHandleInstances.append(User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,ListenerService,LOGGER))
+                UserHandleInstances+=[User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,Active_BotListener,Active_7ZIP_Handler,LOGGER)]
 
             request_sync_time=threading.Event()
             request_sync_time.clear()
 
-            Command_Console=User_Console(UserHandleInstances,UI_SIGNAL,request_sync_time,LOGGER)
-            log("Starting Console...")
-            Command_Console.START()
+            Active_Command_Console=User_Console(UserHandleInstances,UI_SIGNAL,Active_7ZIP_Handler,request_sync_time,LOGGER)
+            log("Starting Command Console...")
+            Active_Command_Console.START()
 
-            log("Startup complete. Waiting for secondary threads to finish...")
+            log("Startup complete. Waiting for UI thread to finish...")
+            Wait_For_Finish(Active_UI,request_sync_time)
+            log("Left UI thread waiting loop.")
 
-            process_total_time=MAINTHREAD_PERIODIC_CHECKS_SECONDS
-            last_server_time_check=time.time()
+            Active_7ZIP_Handler.REQUEST_STOP()
+            Active_BotListener.REQUEST_STOP()
+            Active_Command_Console.REQUEST_STOP()
 
-            while Active_UI.IS_RUNNING()==True:
-
-                time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-
-                Flush_Std_Buffers()
-
-                process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
-                if process_total_time>=MAINTHREAD_PERIODIC_CHECKS_SECONDS:
-                    process_total_time-=MAINTHREAD_PERIODIC_CHECKS_SECONDS
-                    Set_Process_Priority_Idle()
-                    Update_7ZIP_Running_Tasks()
-
-                if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or request_sync_time.is_set()==True:
-                    time_sync_result=Perform_Time_Sync(UI_SIGNAL)
-                    if request_sync_time.is_set()==True:
-                        request_sync_time.clear()
-                        if time_sync_result==True:
-                            last_server_time_check=time.time()
-                    else:
-                        request_sync_time.clear()
-                        last_server_time_check=time.time()
-
-            log("Left thread waiting loop.")
-
-            ListenerService.STOP()
-            Command_Console.STOP()
-
-            while Command_Console.IS_RUNNING()==True:
-                time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
-            Command_Console.working_thread.join()
-            del Command_Console
-            log("Confirm Console exit.")
+            Active_Command_Console.CONCLUDE()
+            del Active_Command_Console
+            log("Confirm Command Console exit.")
         else:
-            ListenerService.STOP()
+            Active_BotListener.STOP()
 
-        while ListenerService.IS_RUNNING()==True:
-            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
-        ListenerService.working_thread.join()
-        del ListenerService
-        log("Confirm Listener exit.")
+        Active_BotListener.CONCLUDE()
+        del Active_BotListener
+        log("Confirm Bot Listener exit.")
+
+        Active_7ZIP_Handler.CONCLUDE()
+        del Active_7ZIP_Handler
+        log("Confirm 7-ZIP Task Handler exit.")
 
         while len(UserHandleInstances)>0:
-            UserHandleInstances[0].working_thread.join()
             del UserHandleInstances[0]
-        log("Confirm Message Handler(s) exit.")
 
 else:
 
@@ -2130,11 +2388,6 @@ Active_UI.working_thread.join()
 del Active_UI
 log("Confirm UI exit.")
 
-Update_7ZIP_Running_Tasks()
-End_All_7ZIP_Tasks()
-if BINARY_7ZIP is not None:
-    BINARY_7ZIP.close()
-
 log("Main thread exit; program has finished.")
-LOGGER.END()
+LOGGER.DEACTIVATE()
 Flush_Std_Buffers()
