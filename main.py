@@ -66,7 +66,6 @@ OUTPUT_ENTRIES_MAX=8000
 QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
-BINARIES_7ZIP_B64={32:Get_B64_Resource("binaries/7zipx32"),64:Get_B64_Resource("binaries/7zipx64")}
 
 LOG_HANDLE=None
 UI_SIGNAL=None
