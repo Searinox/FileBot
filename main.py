@@ -54,7 +54,7 @@ LOG_UPDATE_INTERVAL_SECONDS=0.085
 
 BOT_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
-MAX_7ZIP_TASKS_PER_USER=4
+MAX_7ZIP_TASKS_PER_USER=3
 
 FONT_POINT_SIZE=8
 FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type":"Monospace","scale":1,"properties":["bold"]},"log":{"type":"Consolas","scale":1,"properties":["bold"]}}
@@ -401,6 +401,9 @@ class Task_Handler_7ZIP(object):
     def IS_RUNNING(self):
         return self.has_quit.is_set()==False    
 
+    def GET_MAX_TASKS_PER_USER(self):
+        return self.max_tasks_per_user
+
     def NEW_TASK(self,target_path,originating_user):
         if self.request_exit.is_set()==True:
             return {"result":"ERROR","full_target":""}
@@ -550,8 +553,12 @@ class Task_Handler_7ZIP(object):
                 terminate=True
             elif any(username.lower()==get_user for username in list_users):
                 terminate=True
-            elif any(pid==get_PID for pid in list_PIDs):
-                terminate=True
+            else:
+                for i in range(len(list_PIDs)):
+                    if list_PIDs[i]==get_PID:
+                        terminate=True
+                        del list_PIDs[i]
+                        break
 
             if terminate==True:
                 self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
@@ -1312,7 +1319,7 @@ class User_Message_Handler(object):
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+="/zip <PATH[FILE]>: make a 7-ZIP archive; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.max_tasks_per_user)+" simultaneous tasks\n"
+                response+="/zip <PATH[FILE]>: make a 7-ZIP archive; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+" simultaneous tasks\n"
                 response+="/listzips: list all running 7-ZIP archival tasks\n"
                 response+="/stopzips: stop all running 7-ZIP archival tasks\n"
             response+="/up: move up one folder from current path\n"
