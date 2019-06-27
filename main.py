@@ -1,4 +1,4 @@
-__version__="1.60"
+__version__="1.61"
 __author__="Searinox Navras"
 
 
@@ -61,7 +61,7 @@ FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type"
 
 CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
-OUTPUT_ENTRIES_MAX=8000
+OUTPUT_ENTRIES_MAX=5000
 
 QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 
@@ -591,10 +591,10 @@ class Bot_Listener(object):
     def __init__(self,input_token,username_list,input_signaller,input_logger=None):
         self.bot_token=input_token
         self.active_logger=input_logger
-        self.keep_running=threading.Event()
-        self.keep_running.clear()
+        self.request_exit=threading.Event()
+        self.request_exit.clear()
         self.has_quit=threading.Event()
-        self.has_quit.set()
+        self.has_quit.clear()
         self.is_ready=threading.Event()
         self.is_ready.clear()
         self.last_ID_checked=-1
@@ -617,12 +617,10 @@ class Bot_Listener(object):
         return
 
     def START(self):
-        self.has_quit.clear()
-        self.keep_running.set()
         self.working_thread.start()
 
     def REQUEST_STOP(self):
-        self.keep_running.clear()
+        self.request_exit.set()
         return
 
     def IS_RUNNING(self):
@@ -645,7 +643,7 @@ class Bot_Listener(object):
         bot_bind_ok=False
         activation_fail_announce=False
 
-        while bot_bind_ok==False and self.keep_running.is_set()==True:
+        while bot_bind_ok==False and self.request_exit.is_set()==False:
             try:
                 self.name=self.bot_handle.getMe()[u"username"]
                 bot_bind_ok=True
@@ -655,13 +653,13 @@ class Bot_Listener(object):
                     activation_fail_announce=True
                 time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
-        if self.keep_running.is_set()==True:
+        if self.request_exit.is_set()==False:
             self.catch_up_IDs()
             self.log("Bot Listener for \""+self.name+"\" is now active.")
             self.active_UI_signaller.send("bot_name",self.name)
             self.is_ready.set()
 
-        while self.keep_running.is_set()==True:
+        while self.request_exit.is_set()==False:
             time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
             response=[]
 
@@ -766,17 +764,17 @@ class User_Message_Handler(object):
         self.working_thread.daemon=True
         self.bot_token=input_token
         self.listener=input_listener_service
-        self.keep_running=threading.Event()
-        self.keep_running.clear()
-        self.bot_has_quit=threading.Event()
-        self.bot_has_quit.set()
+        self.request_exit=threading.Event()
+        self.request_exit.clear()
+        self.has_quit=threading.Event()
+        self.has_quit.clear()
         self.lock_last_folder=threading.Lock()
         self.last_folder=""
         self.allow_writing=input_write
         self.listen_flag=threading.Event()
         self.listen_flag.clear()
         self.last_send_time=0
-        self.allowed_user=input_user
+        self.account_username=input_user
         self.lastsent_timers=[]
         self.bot_lock_pass=""
         self.allowed_root=input_root
@@ -786,6 +784,7 @@ class User_Message_Handler(object):
         self.lock_status.clear()
         self.processing_messages=threading.Event()
         self.processing_messages.clear()
+        self.bot_handle=None
         if self.allowed_root=="*":
             self.set_last_folder("C:\\")
         else:
@@ -794,10 +793,13 @@ class User_Message_Handler(object):
 
     def log(self,input_text):
         if self.active_logger is not None:
-            self.active_logger.LOG("MSGHNDLR","<"+self.allowed_user+"> "+input_text)
+            self.active_logger.LOG("MSGHNDLR","<"+self.account_username+"> "+input_text)
         return
 
     def sendmsg(self,sid,msg):
+        if self.request_exit.is_set()==True:
+            return True
+
         for i in reversed(range(len(self.lastsent_timers))):
             if OS_uptime()-self.lastsent_timers[i]>=60:
                 del self.lastsent_timers[i]
@@ -807,7 +809,7 @@ class User_Message_Handler(object):
         else:
             second_delay=0
         if len(self.lastsent_timers)>0:
-            extra_sleep=(len(self.lastsent_timers)**1.8)/25.5
+            extra_sleep=(len(self.lastsent_timers)**1.9)/35.69
         else:
             extra_sleep=0
         throttle_time=second_delay+max(extra_sleep-second_delay,0)
@@ -872,18 +874,20 @@ class User_Message_Handler(object):
                 self.log("User Message Handler unlocked by console.")
             else:
                 self.log("User Message Handler unlock was requested, but it is not locked.")
-            self.listener.consume_user_messages(self.allowed_user)
+            self.listener.consume_user_messages(self.account_username)
         return
 
     def work_loop(self):
         global BOT_LISTENER_THREAD_HEARTBEAT_SECONDS
         global USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS
 
+        self.log("User Message Handler started, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
+
         self.bot_handle=telepot.Bot(self.bot_token)
 
         bot_bind_ok=False
         activation_fail_announce=False
-        while bot_bind_ok==False and self.keep_running.is_set()==True:
+        while bot_bind_ok==False and self.request_exit.is_set()==False:
             try:
                 self.bot_handle.getMe()[u"username"]
                 bot_bind_ok=True
@@ -893,15 +897,15 @@ class User_Message_Handler(object):
                     activation_fail_announce=True
                 time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
-        if self.keep_running.is_set()==True:
-            self.listener.consume_user_messages(self.allowed_user)
-            self.log("User Message Handler for \""+self.allowed_user+"\" is now active.")
+        if self.request_exit.is_set()==False:
+            self.listener.consume_user_messages(self.account_username)
+            self.log("User Message Handler for \""+self.account_username+"\" is now active.")
 
-        while self.keep_running.is_set()==True:
+        while self.request_exit.is_set()==False:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
             self.check_tasks()
             if self.listen_flag.is_set()==True:
-                new_messages=self.listener.consume_user_messages(self.allowed_user)
+                new_messages=self.listener.consume_user_messages(self.account_username)
                 total_new_messages=len(new_messages)
                 if total_new_messages>0:
                     self.processing_messages.set()
@@ -910,7 +914,7 @@ class User_Message_Handler(object):
                     self.processing_messages.clear()
 
         self.log("User Message Handler exited.")
-        self.bot_has_quit.set()
+        self.has_quit.set()
         return
 
     def get_last_folder(self):
@@ -926,9 +930,6 @@ class User_Message_Handler(object):
         return
 
     def START(self):
-        self.log("User message handler start issued, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
-        self.bot_has_quit.clear()
-        self.keep_running.set()
         self.working_thread.start()
         return
 
@@ -936,7 +937,7 @@ class User_Message_Handler(object):
         if new_state==True:
             if self.listen_flag.is_set()==False:
                 self.log("Listen started.")
-                self.listener.consume_user_messages(self.allowed_user)
+                self.listener.consume_user_messages(self.account_username)
                 self.listen_flag.set()
             else:
                 self.log("Listen start was requested, but it is already listening.")
@@ -950,7 +951,7 @@ class User_Message_Handler(object):
 
     def REQUEST_STOP(self):
         self.listen_flag.clear()
-        self.keep_running.clear()
+        self.request_exit.set()
         return
 
     def CONCLUDE(self):
@@ -962,7 +963,7 @@ class User_Message_Handler(object):
         return
 
     def IS_RUNNING(self):
-        return self.bot_has_quit.is_set()==False
+        return self.has_quit.is_set()==False
 
     def process_messages(self,input_msglist):
         for m in input_msglist:
@@ -1025,13 +1026,25 @@ class User_Message_Handler(object):
             self.log(" File download aborted due to existing instance.")
         return
 
-    def chunkalize(self,input_string,chunksize):
+    def segment_file_list_string(self,input_string):
+        global MAX_IM_SIZE_BYTES
+
         retval=[]
-        start=0
-        while start<len(input_string):
-            end=start+min(chunksize,len(input_string)-start)
-            retval+=[input_string[start:end]]
-            start=end
+        input_list=input_string.split("\n")
+        current_message=""
+
+        for file_listing in input_list:
+            new_entry=file_listing.strip()+"\n"
+            if len(new_entry)+len(current_message)<=MAX_IM_SIZE_BYTES+1:
+                current_message+=new_entry
+            else:
+                current_message=current_message[:-1]
+                retval+=[current_message]
+                current_message=""
+
+        if current_message!="":
+            retval+=[current_message[:-1]]
+
         return retval
 
     def folder_list_string(self,input_folder,search_in,folders_only):
@@ -1080,7 +1093,7 @@ class User_Message_Handler(object):
 
     def process_instructions(self,sid,msg,cid):
         global BOT_MAX_ALLOWED_FILESIZE_BYTES
-        global MAX_IM_SIZE_BYTES
+
         if self.bot_lock_pass!="":
             if msg.lower().find("/unlock ")==0:
                 if msg[len("/unlock "):].strip()==self.bot_lock_pass:
@@ -1144,8 +1157,9 @@ class User_Message_Handler(object):
                 dirlist=self.folder_list_string(use_folder,extra_search,folders_only)
             else:
                 dirlist="<Bad dir path.>"
-            for chunk in self.chunkalize(dirlist,MAX_IM_SIZE_BYTES):
-                if self.sendmsg(sid,chunk)==False:
+            segment_list=self.segment_file_list_string(dirlist)
+            for segment in segment_list:
+                if self.sendmsg(sid,segment)==False:
                     response="<Listing interrupted.>"
                     break
             if response=="":
@@ -1263,7 +1277,7 @@ class User_Message_Handler(object):
             if os.path.exists(newpath)==False and newpath[-1]=="\\":
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True:
-                zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.allowed_user)
+                zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
                 if zip_response["result"]=="CREATED":
                     response="Issued zip command."
                     self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
@@ -1285,7 +1299,7 @@ class User_Message_Handler(object):
             tasks_7zip=self.active_7zip_task_handler.GET_TASKS()
 
             for taskdata in tasks_7zip:
-                if taskdata["user"]==self.allowed_user:
+                if taskdata["user"]==self.account_username:
                     response+=">ARCHIVING \""+taskdata["target"]+"\"\n"
 
             if response=="":
@@ -1297,7 +1311,7 @@ class User_Message_Handler(object):
 
         elif command_type=="stopzips" and self.allow_writing==True:
             response="All running archival tasks will be stopped."
-            self.active_7zip_task_handler.END_TASKS([self.allowed_user])
+            self.active_7zip_task_handler.END_TASKS([self.account_username])
             self.log("Requested stop of any running 7-ZIP archival tasks.")
 
         elif command_type=="lock":
@@ -1390,14 +1404,14 @@ class User_Console(object):
 
     def user_handlers_running(self):
         total=0
-        for user_instance in self.user_handler_list:
-            if user_instance.IS_RUNNING()==True:
+        for user_handler_instance in self.user_handler_list:
+            if user_handler_instance.IS_RUNNING()==True:
                 total+=1
         return total
 
     def any_user_handlers_busy(self):
-        for user_instance in self.user_handler_list:
-            if user_instance.processing_messages.is_set()==True:
+        for user_handler_instance in self.user_handler_list:
+            if user_handler_instance.processing_messages.is_set()==True:
                 return True
         return False
 
@@ -1415,27 +1429,27 @@ class User_Console(object):
             input_arguments=""
 
         if input_command=="startlisten":
-            for user_instance in self.user_handler_list:
-                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
-                    user_instance.LISTEN(True)
+            for user_handler_instance in self.user_handler_list:
+                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                    user_handler_instance.LISTEN(True)
             return True
 
         elif input_command=="stoplisten":
-            for user_instance in self.user_handler_list:
-                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
-                    user_instance.LISTEN(False)
+            for user_handler_instance in self.user_handler_list:
+                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                    user_handler_instance.LISTEN(False)
             return True
 
         elif input_command=="userstats":
             stats_out=""
-            for user_instance in self.user_handler_list:
-                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
-                    stats_out+="\nMessage handler for user \""+user_instance.allowed_user+"\":\n"+\
-                             "Home path=\""+user_instance.allowed_root+"\"\n"+\
-                             "Write mode: "+str(user_instance.allow_writing).upper()+"\n"+\
-                             "Current folder=\""+user_instance.get_last_folder()+"\"\n"+\
-                             "Locked: "+str(user_instance.lock_status.is_set()).upper()+"\n"+\
-                             "Listening: "+str(user_instance.listen_flag.is_set()).upper()+"\n"
+            for user_handler_instance in self.user_handler_list:
+                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                    stats_out+="\nMessage handler for user \""+user_handler_instance.account_username+"\":\n"+\
+                             "Home path=\""+user_handler_instance.allowed_root+"\"\n"+\
+                             "Write mode: "+str(user_handler_instance.allow_writing).upper()+"\n"+\
+                             "Current folder=\""+user_handler_instance.get_last_folder()+"\"\n"+\
+                             "Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+"\n"+\
+                             "Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+"\n"
             if stats_out!="":
                 stats_out="USER STATS:\n"+stats_out
                 self.log(stats_out)
@@ -1443,16 +1457,16 @@ class User_Console(object):
 
         elif input_command=="listusers":
             list_out=""
-            for user_instance in self.user_handler_list:
-                list_out+=user_instance.allowed_user+", "
+            for user_handler_instance in self.user_handler_list:
+                list_out+=user_handler_instance.account_username+", "
             list_out=list_out[:-2]+"."
             self.log("Allowed user(s): "+list_out)
             return True
 
         elif input_command=="unlockusers":
-            for user_instance in self.user_handler_list:
-                if user_instance.allowed_user.lower()==input_arguments or input_arguments=="":
-                    user_instance.pending_lockclear.set()
+            for user_handler_instance in self.user_handler_list:
+                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                    user_handler_instance.pending_lockclear.set()
             return True
 
         elif input_command=="synctime":
@@ -1552,11 +1566,11 @@ class User_Console(object):
         global COMMAND_CHECK_INTERVAL_SECONDS
 
         self.log("Starting User Message Handler(s)...")
-        for user_instance in self.user_handler_list:
-            user_instance.START()
-            user_instance.LISTEN(True)
+        for user_handler_instance in self.user_handler_list:
+            user_handler_instance.START()
+            user_handler_instance.LISTEN(True)
 
-        self.log("User console activated.")
+        self.log("User Console activated.")
         self.log("Type \"help\" in the console for available commands.")
         self.active_UI_signaller.send("attach_console",self)
 
@@ -1564,7 +1578,6 @@ class User_Console(object):
             self.is_exiting.set()
 
         continue_processing=True
-
         last_busy_state=False
 
         while continue_processing==True:
@@ -1597,11 +1610,11 @@ class User_Console(object):
                 continue_processing=False
 
                 self.log("Requesting stop to Message Handler(s)...")
-                for user_instance in self.user_handler_list:
-                    user_instance.REQUEST_STOP()
+                for user_handler_instance in self.user_handler_list:
+                    user_handler_instance.REQUEST_STOP()
 
-                for user_instance in self.user_handler_list:
-                    user_instance.CONCLUDE()
+                for user_handler_instance in self.user_handler_list:
+                    user_handler_instance.CONCLUDE()
                 self.log("Confirmed User Message Handler(s) exit.")
 
         self.log("User Console exiting...")
