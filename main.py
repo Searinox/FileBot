@@ -1452,6 +1452,8 @@ class User_Console(object):
                              "Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+"\n"+\
                              "Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+"\n"
             if stats_out!="":
+                if stats_out.endswith("\n")==True:
+                    stats_out=stats_out[:-1]
                 stats_out="USER STATS:\n"+stats_out
                 self.log(stats_out)
             return True
@@ -1480,12 +1482,23 @@ class User_Console(object):
 
         elif input_command=="listzips":
             tasklist=self.active_7zip_task_handler.GET_TASKS()
-            task_data_out=""
+            user_task_dict={}
             for entry in tasklist:
-                task_data_out+="TARGET: \""+entry["target"]+"\" USER: \""+entry["user"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
+                if entry["user"] not in user_task_dict.keys():
+                    user_task_dict[entry["user"]]=[]
+                user_task_dict[entry["user"]]+=[{"target":entry["target"],"pid":entry["pid"]}]
+            task_data_out=""
+            for username in user_task_dict:
+                if username.lower() in input_arguments or input_arguments=="":
+                    task_data_out+="USER \""+username+"\":\n"
+                    for entry in user_task_dict[username]:
+                        task_data_out+=">TARGET: \""+entry["target"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
+                    task_data_out+="\n"
             if task_data_out=="":
                 self.log("No 7-ZIP tasks running.")
             else:
+                if task_data_out.endswith("\n")==True:
+                    task_data_out=task_data_out[:-1]
                 task_data_out="RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
                 self.log(task_data_out)
             return True
@@ -1538,14 +1551,14 @@ class User_Console(object):
 
         elif input_command=="help":
             self.log("AVAILABLE CONSOLE COMMANDS:\n\n"+\
+            "listusers: lists all allowed users\n"+\
             "startlisten [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
             "stoplisten [USER]: stop listening to messages for user; leave blank to apply to all instances\n"+\
             "unlockusers [USER]: unlock the bot for user; leave blank to apply to all instances\n"+\
             "userstats [USER]: list stats for user; leave blank to list all instances\n"+\
-            "listusers: lists allowed users\n"+\
-            "synctime: manually re-synchronize bot time with Internet time\n"+\
-            "listzips: list all running 7-ZIP archival tasks\n"+\
+            "listzips: [USER] list running 7-ZIP archival tasks for user; leave blank to list all instances\n"+\
             "stopzips [PID | USER]: stop running 7-ZIP archival tasks by user or PID; leave blank to apply to all instances\n"+\
+            "synctime: manually re-synchronize bot time with Internet time\n"+\
             "help: display help\n"+\
             "exit: close the program\n")
             return True
