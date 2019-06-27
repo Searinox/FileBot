@@ -638,11 +638,12 @@ class Bot_Listener(object):
         return self.is_ready.is_set()==True
 
     def work_loop(self):
-        self.bot_handle=telepot.Bot(self.bot_token)
         last_check_status=False
+
+        self.bot_handle=telepot.Bot(self.bot_token)
+
         bot_bind_ok=False
         activation_fail_announce=False
-
         while bot_bind_ok==False and self.request_exit.is_set()==False:
             try:
                 self.name=self.bot_handle.getMe()[u"username"]
@@ -913,7 +914,7 @@ class User_Message_Handler(object):
                     self.process_messages(new_messages)
                     self.processing_messages.clear()
 
-        self.log("User Message Handler exited.")
+        self.log("User Message Handler has exited.")
         self.has_quit.set()
         return
 
@@ -1012,18 +1013,18 @@ class User_Message_Handler(object):
         foldername=self.get_last_folder()
         complete_put_path=foldername+filename
         self.sendmsg(sid,"Putting file \""+filename+"\" at \""+foldername+"\"...")
-        self.log(" Receiving file \""+complete_put_path+"\"...")
+        self.log("Receiving file \""+complete_put_path+"\"...")
         if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
             try:
                 self.bot_handle.download_file(fid,complete_put_path)
                 self.sendmsg(sid,"Finished putting file \""+complete_put_path+"\".")
-                self.log(" File download complete.")
+                self.log("File download complete.")
             except:
                 self.sendmsg(sid,"File \""+filename+"\" could not be placed.")
-                self.log(" File download aborted due to unknown issue.")
+                self.log("File download aborted due to unknown issue.")
         else:
             self.sendmsg(sid,"File \""+filename+"\" already exists at the location.")
-            self.log(" File download aborted due to existing instance.")
+            self.log("File download aborted due to existing instance.")
         return
 
     def segment_file_list_string(self,input_string):
@@ -2285,7 +2286,7 @@ if PATH_WINDOWS_SYSTEM32.endswith("\\")==False:
     PATH_WINDOWS_SYSTEM32+="\\"
 
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
-TELEGRAM_SERVER_TIMER_DELTA=-1
+TELEGRAM_SERVER_TIMER_DELTA=0
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
