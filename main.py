@@ -70,6 +70,8 @@ APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64
 LOG_HANDLE=None
 UI_SIGNAL=None
 PATH_WINDOWS_SYSTEM32=""
+TIME_DELTA_LOCK=threading.Lock()
+TELEGRAM_SERVER_TIME_DELTA=0
 
 
 """
@@ -198,7 +200,7 @@ def Perform_Time_Sync(input_signaller=None):
 
 def Sync_Server_Time():
     global TIME_DELTA_LOCK
-    global TELEGRAM_SERVER_TIMER_DELTA
+    global TELEGRAM_SERVER_TIME_DELTA
 
     update_success=False
 
@@ -210,17 +212,17 @@ def Sync_Server_Time():
 
     if update_success==True:
         TIME_DELTA_LOCK.acquire()
-        TELEGRAM_SERVER_TIMER_DELTA=get_new_delta
+        TELEGRAM_SERVER_TIME_DELTA=get_new_delta
         TIME_DELTA_LOCK.release()
 
     return update_success
 
 def server_time():
     global TIME_DELTA_LOCK
-    global TELEGRAM_SERVER_TIMER_DELTA
+    global TELEGRAM_SERVER_TIME_DELTA
 
     TIME_DELTA_LOCK.acquire()
-    get_delta=TELEGRAM_SERVER_TIMER_DELTA
+    get_delta=TELEGRAM_SERVER_TIME_DELTA
     TIME_DELTA_LOCK.release()
     return round(OS_uptime()+get_delta,3)
 
@@ -2289,10 +2291,8 @@ warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
 qInstallMessageHandler(qtmsg_handler)
 
 environment_info=Get_Runtime_Environment()
-TIME_DELTA_LOCK=threading.Lock()
 
 start_minimized=False
-
 for argument in environment_info["arguments"]:
     argument=argument.lower().strip()
 
@@ -2307,7 +2307,6 @@ if PATH_WINDOWS_SYSTEM32.endswith("\\")==False:
     PATH_WINDOWS_SYSTEM32+="\\"
 
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
-TELEGRAM_SERVER_TIMER_DELTA=0
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
