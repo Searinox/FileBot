@@ -1419,32 +1419,35 @@ class User_Console(object):
     def process_command(self,user_input):
         user_data=user_input.split(" ")
         input_command=user_data[0].lower().strip()
+        input_arguments=[]
         if len(user_data)>1:
-            content=""
-            for i in range(len(user_data)):
-                content+=user_data[i].strip()+" "
-            if content.endswith(" "):
-                content=content[:-1]
-            input_arguments=content
-        else:
-            input_arguments=""
+            for i in range(1,len(user_data)):
+                input_arguments+=[user_data[i].lower().strip()]
 
         if input_command=="startlisten":
+            has_acted=False
             for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
                     user_handler_instance.LISTEN(True)
+                    has_acted=True
+            if has_acted==False:
+                self.log("No matching users were found.")
             return True
 
         elif input_command=="stoplisten":
+            has_acted=False
             for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
                     user_handler_instance.LISTEN(False)
+                    has_acted=True
+            if has_acted==False:
+                self.log("No matching users were found.")
             return True
 
         elif input_command=="userstats":
             stats_out=""
             for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
                     stats_out+="\nMessage handler for user \""+user_handler_instance.account_username+"\":\n"+\
                              "Home path=\""+user_handler_instance.allowed_root+"\"\n"+\
                              "Write mode: "+str(user_handler_instance.allow_writing).upper()+"\n"+\
@@ -1456,6 +1459,8 @@ class User_Console(object):
                     stats_out=stats_out[:-1]
                 stats_out="USER STATS:\n"+stats_out
                 self.log(stats_out)
+            else:
+                self.log("No matching users were found.")
             return True
 
         elif input_command=="listusers":
@@ -1467,9 +1472,13 @@ class User_Console(object):
             return True
 
         elif input_command=="unlockusers":
+            has_acted=False
             for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower()==input_arguments or input_arguments=="":
+                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
                     user_handler_instance.pending_lockclear.set()
+                    has_acted=True
+            if has_acted==False:
+                self.log("No matching users were found.")
             return True
 
         elif input_command=="synctime":
@@ -1489,13 +1498,13 @@ class User_Console(object):
                 user_task_dict[entry["user"]]+=[{"target":entry["target"],"pid":entry["pid"]}]
             task_data_out=""
             for username in user_task_dict:
-                if username.lower() in input_arguments or input_arguments=="":
+                if username.lower() in input_arguments or input_arguments==[]:
                     task_data_out+="USER \""+username+"\":\n"
                     for entry in user_task_dict[username]:
                         task_data_out+=">TARGET: \""+entry["target"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
                     task_data_out+="\n"
             if task_data_out=="":
-                self.log("No 7-ZIP tasks running.")
+                self.log("Found no 7-ZIP tasks running.")
             else:
                 if task_data_out.endswith("\n")==True:
                     task_data_out=task_data_out[:-1]
@@ -1504,11 +1513,10 @@ class User_Console(object):
             return True
                 
         elif input_command=="stopzips":
-            list_args=input_arguments.split(" ")
             usernames=[]
             pids=[]
 
-            for arg in list_args:
+            for arg in input_arguments:
                 arg=arg.strip()
                 if arg!="":
                     new_pid=-1
@@ -1550,7 +1558,7 @@ class User_Console(object):
             return True
 
         elif input_command=="help":
-            self.log("AVAILABLE CONSOLE COMMANDS:\n\n"+\
+            self.log("AVAILABLE CONSOLE COMMANDS:\n"+\
             "listusers: lists all allowed users\n"+\
             "startlisten [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
             "stoplisten [USER]: stop listening to messages for user; leave blank to apply to all instances\n"+\
