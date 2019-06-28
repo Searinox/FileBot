@@ -2423,6 +2423,7 @@ if fatal_error==False:
             del Active_User_Console
             log("Confirm User Console exit.")
         else:
+            log("Requesting stop to Bot Listener...")
             Active_BotListener.REQUEST_STOP()
 
         Active_BotListener.CONCLUDE()
