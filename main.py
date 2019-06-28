@@ -2423,7 +2423,7 @@ if fatal_error==False:
             del Active_User_Console
             log("Confirm User Console exit.")
         else:
-            Active_BotListener.STOP()
+            Active_BotListener.REQUEST_STOP()
 
         Active_BotListener.CONCLUDE()
         del Active_BotListener
