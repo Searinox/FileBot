@@ -34,10 +34,6 @@ def Get_B64_Resource(input_path):
     import resources_base64
     return resources_base64.Get_Resource(input_path)
 
-SSL_NOCERT=ssl.create_default_context()
-SSL_NOCERT.check_hostname=False
-SSL_NOCERT.verify_mode=ssl.CERT_NONE
-
 MAINTHREAD_HEARTBEAT_SECONDS=0.085
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.1
 MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
@@ -67,12 +63,6 @@ QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplicatio
 
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 
-LOG_HANDLE=None
-UI_SIGNAL=None
-PATH_WINDOWS_SYSTEM32=""
-TIME_DELTA_LOCK=threading.Lock()
-TELEGRAM_SERVER_TIME_DELTA=0
-
 
 """
 DEFS
@@ -82,6 +72,16 @@ DEFS
 GetTickCount64=ctypes.windll.kernel32.GetTickCount64
 GetTickCount64.restype=ctypes.c_uint64
 GetTickCount64.argtypes=()
+
+def qtmsg_handler(msg_type,msg_log_context,msg_string):
+    global QTMSG_BLACKLIST_STARTSWITH
+
+    for entry in QTMSG_BLACKLIST_STARTSWITH:
+        if msg_string.startswith(entry):
+            return
+
+    sys.stderr.write(msg_string+"\n")
+    return
 
 def Flush_Std_Buffers():
     sys.stdout.flush()
@@ -112,14 +112,21 @@ def Get_Runtime_Environment():
 
     return retval
 
-def Wait_For_Finish(input_object,input_sync_request_event):
+def log(input_text):
+    global LOGGER
+
+    if LOGGER is not None:
+        LOGGER.LOG("MAINTHRD",input_text)
+    return
+
+def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_event):
     global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
     global MAINTHREAD_HEARTBEAT_SECONDS
 
     process_total_time=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
     last_server_time_check=time.time()
 
-    while input_object.IS_RUNNING()==True:
+    while input_waitobject.IS_RUNNING()==True:
 
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
 
@@ -128,111 +135,28 @@ def Wait_For_Finish(input_object,input_sync_request_event):
         process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
         if process_total_time>=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS:
             process_total_time-=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
-            set_process_priority_idle()
+            try:
+                if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
+                    win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
+                    log("Idle process priority set.")
+            except:
+                log("Error managing process priority.")
 
-        if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_sync_request_event.is_set()==True:
-            time_sync_result=Perform_Time_Sync(UI_SIGNAL)
-            if input_sync_request_event.is_set()==True:
-                input_sync_request_event.clear()
-                if time_sync_result==True:
-                    last_server_time_check=time.time()
+        if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
+            log("Performing time synchronization via Internet...")
+            sync_result=input_timeobject.SYNC()
+            if sync_result["success"]==True:
+                log("Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+" second(s).")
             else:
-                input_sync_request_event.clear()
-                last_server_time_check=time.time()
-
-    return
-
-
-def qtmsg_handler(msg_type,msg_log_context,msg_string):
-    global QTMSG_BLACKLIST_STARTSWITH
-
-    for entry in QTMSG_BLACKLIST_STARTSWITH:
-        if msg_string.startswith(entry):
-            return
-
-    sys.stderr.write(msg_string+"\n")
-    return
-
-def log(input_text):
-    global LOGGER
-
-    if LOGGER is not None:
-        LOGGER.LOG("MAINTHRD",input_text)
+                log("Time synchronization failed.")
+            if input_timesync_request_event.is_set()==True:
+                input_timesync_request_event.clear()
+            last_server_time_check=time.time()
 
     return
 
 def OS_uptime():
     return GetTickCount64()/1000.0
-
-def Current_UTC_Internet_Time():
-    global SSL_NOCERT
-
-    response=urllib2.urlopen("https://time.gov/actualtime.cgi",context=SSL_NOCERT)
-    timestr=response.read()
-    quot1=timestr.find("time=\"")
-    quot1+=len("time=\"")
-    quot2=quot1+timestr[quot1+1:].find("\"")
-    quot2+=1
-    return int(timestr[quot1:quot2-3])/1000.0
-
-def set_process_priority_idle():
-    global CURRENT_PROCESS_HANDLE
-
-    try:
-        if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
-            win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
-            log("Idle process priority set.")
-    except:
-        log("Error managing process priority.")
-    return
-
-def Perform_Time_Sync(input_signaller=None):
-    log("Performing time synchronization via Internet...")
-    if Sync_Server_Time()==True:
-        get_time_diff=local_machine_time_delta_str()
-        log("Time synchronization complete. Local clock bias is "+get_time_diff+" second(s).")
-        if input_signaller is not None:
-            input_signaller.send("clock_bias",get_time_diff)
-    else:
-        log("Time synchronization failed.")
-        return False
-    return True
-
-def Sync_Server_Time():
-    global TIME_DELTA_LOCK
-    global TELEGRAM_SERVER_TIME_DELTA
-
-    update_success=False
-
-    try:
-        get_new_delta=Current_UTC_Internet_Time()-OS_uptime()
-        update_success=True
-    except:
-        pass
-
-    if update_success==True:
-        TIME_DELTA_LOCK.acquire()
-        TELEGRAM_SERVER_TIME_DELTA=get_new_delta
-        TIME_DELTA_LOCK.release()
-
-    return update_success
-
-def server_time():
-    global TIME_DELTA_LOCK
-    global TELEGRAM_SERVER_TIME_DELTA
-
-    TIME_DELTA_LOCK.acquire()
-    get_delta=TELEGRAM_SERVER_TIME_DELTA
-    TIME_DELTA_LOCK.release()
-    return round(OS_uptime()+get_delta,3)
-
-def local_machine_time_delta_str():
-    time_difference=round(time.time()-server_time(),3)
-    if time_difference>0:
-        retval="+"+str(time_difference)
-    else:
-        retval=str(time_difference)
-    return retval
 
 def readable_size(input_size):
     if input_size<1024:
@@ -333,6 +257,85 @@ class Logger(object):
 
         self.log_lock.release()
         return
+
+
+class Time_Provider(object):
+    def __init__(self):
+        self.lock_time_delta=threading.Lock()
+        self.time_delta=0
+        self.context_SSL_NOCERT=ssl.create_default_context()
+        self.context_SSL_NOCERT.check_hostname=False
+        self.context_SSL_NOCERT.verify_mode=ssl.CERT_NONE
+        self.lock_subscribers=threading.Lock()
+        self.signal_subscribers=[]
+        return
+
+    def ADD_SUBSCRIBER(self,input_subscriber):
+        self.lock_subscribers.acquire()
+        if input_subscriber not in self.signal_subscribers:
+            self.signal_subscribers+=[input_subscriber]
+        self.lock_subscribers.release()
+        return
+
+    def REMOVE_SUBSCRIBER(self,input_subscriber):
+        self.lock_subscribers.acquire()
+        for i in range(len(self.signal_subscribers)):
+            if self.signal_subscribers[i]==input_subscriber:
+                del self.signal_subscribers[i]
+                break
+        self.lock_subscribers.release()
+        return
+
+    def GET_SERVER_TIME(self):
+        self.lock_time_delta.acquire()
+        get_delta=self.time_delta
+        self.lock_time_delta.release()
+        return round(OS_uptime()+get_delta,3)
+
+    def SYNC(self,input_signaller=None):
+        if self.sync_server_time()==True:
+            get_time_diff=self.local_machine_time_delta_str()
+            
+            self.lock_subscribers.acquire()
+            for subscriber in self.signal_subscribers:
+                subscriber.send("timesync_clock_bias",get_time_diff)
+            self.lock_subscribers.release()
+        else:
+            return {"success":False}
+        return {"success":True,"time_difference":get_time_diff}
+
+    def current_UTC_internet_time(self):
+        response=urllib2.urlopen("https://time.gov/actualtime.cgi",context=self.context_SSL_NOCERT)
+        timestr=response.read()
+        quot1=timestr.find("time=\"")
+        quot1+=len("time=\"")
+        quot2=quot1+timestr[quot1+1:].find("\"")
+        quot2+=1
+        return int(timestr[quot1:quot2-3])/1000.0
+
+    def sync_server_time(self):
+        update_success=False
+
+        try:
+            get_new_delta=self.current_UTC_internet_time()-OS_uptime()
+            update_success=True
+        except:
+            pass
+
+        if update_success==True:
+            self.lock_time_delta.acquire()
+            self.time_delta=get_new_delta
+            self.lock_time_delta.release()
+
+        return update_success
+
+    def local_machine_time_delta_str(self):
+        time_difference=round(time.time()-self.GET_SERVER_TIME(),3)
+        if time_difference>0:
+            retval="+"+str(time_difference)
+        else:
+            retval=str(time_difference)
+        return retval
 
 
 class Task_Handler_7ZIP(object):
@@ -590,7 +593,7 @@ class Task_Handler_7ZIP(object):
 
 
 class Bot_Listener(object):
-    def __init__(self,input_token,username_list,input_signaller,input_logger=None):
+    def __init__(self,input_token,username_list,input_timeprovider,input_signaller,input_logger=None):
         self.bot_token=input_token
         self.active_logger=input_logger
         self.request_exit=threading.Event()
@@ -601,6 +604,7 @@ class Bot_Listener(object):
         self.is_ready.clear()
         self.last_ID_checked=-1
         self.start_time=0
+        self.active_time_provider=input_timeprovider
         self.active_UI_signaller=input_signaller
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
@@ -705,7 +709,7 @@ class Bot_Listener(object):
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
         responses=[]
-        self.start_time=server_time()
+        self.start_time=self.active_time_provider.GET_SERVER_TIME()
         return
 
     def organize_messages(self,input_msglist):
@@ -724,7 +728,7 @@ class Bot_Listener(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if server_time()-msg_send_time<=30:
+                    if self.active_time_provider.server_time()-msg_send_time<=30:
                         if u"username" in input_msglist[i][u"message"][u"from"]:
                             msg_user=input_msglist[i][u"message"][u"from"][u"username"]
                         else:
@@ -746,7 +750,7 @@ class Bot_Listener(object):
             if len(collect_new_messages[message])>0:
                 self.user_messages[message]+=collect_new_messages[message]
             for i in reversed(range(len(self.user_messages[message]))):
-                if server_time()-self.user_messages[message][i][u"date"]>30:
+                if self.active_time_provider.server_time()-self.user_messages[message][i][u"date"]>30:
                     del self.user_messages[message][i]
             self.messagelist_lock[message].release()
         return
@@ -760,7 +764,7 @@ class Bot_Listener(object):
 
 
 class User_Message_Handler(object):
-    def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_7zip_task_handler,input_logger=None):
+    def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_timeprovider,input_7zip_task_handler,input_logger=None):
         self.active_logger=input_logger
         self.active_7zip_task_handler=input_7zip_task_handler
         self.working_thread=threading.Thread(target=self.work_loop)
@@ -785,6 +789,7 @@ class User_Message_Handler(object):
         self.pending_lockclear.clear()
         self.lock_status=threading.Event()
         self.lock_status.clear()
+        self.active_time_provider=input_timeprovider
         self.processing_messages=threading.Event()
         self.processing_messages.clear()
         self.bot_handle=None
@@ -970,7 +975,7 @@ class User_Message_Handler(object):
 
     def process_messages(self,input_msglist):
         for m in input_msglist:
-            if server_time()-m[u"date"]<=30:
+            if self.active_time_provider.server_time()-m[u"date"]<=30:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
@@ -2206,7 +2211,7 @@ class Main_Window(QMainWindow):
                 self.online_state=False
                 self.update_tray_icon()
 
-        elif event_type=="clock_bias":
+        elif event_type=="timesync_clock_bias":
             self.label_clock_bias_value.setText(event_data)
             get_number=float(event_data.replace("+","").replace("-",""))
             self.label_clock_bias_value.setStyleSheet("QLabel {color: #009900}")
@@ -2312,6 +2317,10 @@ qInstallMessageHandler(qtmsg_handler)
 
 environment_info=Get_Runtime_Environment()
 
+PATH_WINDOWS_SYSTEM32=environment_info["system32"]
+if PATH_WINDOWS_SYSTEM32.endswith("\\")==False:
+    PATH_WINDOWS_SYSTEM32+="\\"
+
 start_minimized=False
 for argument in environment_info["arguments"]:
     argument=argument.lower().strip()
@@ -2322,9 +2331,6 @@ for argument in environment_info["arguments"]:
 LOGGER=Logger(os.path.join(environment_info["working_dir"],"log.txt"))
 LOGGER.ACTIVATE()
 
-PATH_WINDOWS_SYSTEM32=environment_info["system32"]
-if PATH_WINDOWS_SYSTEM32.endswith("\\")==False:
-    PATH_WINDOWS_SYSTEM32+="\\"
 
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 
@@ -2394,13 +2400,11 @@ if fatal_error==False:
 
 if fatal_error==False:
     for entry in collect_user_file_entries:
-        entry=entry.encode("utf-8").strip()
-        if entry!="":
-            new_user=User_Entry(entry)
-            if new_user.error_message=="":
-                collect_allowed_users+=[new_user]
-            else:
-                log("WARNING: "+new_user.error_message)
+        new_user=User_Entry(entry)
+        if new_user.error_message=="":
+            collect_allowed_users+=[new_user]
+        else:
+            log("WARNING: "+new_user.error_message)
 
     collect_user_file_entries=[]
     if len(collect_allowed_users)>0:
@@ -2417,22 +2421,28 @@ if fatal_error==False:
         fatal_error=True
 
 if fatal_error==False:
+    Active_Time_Provider=Time_Provider()
+    Active_Time_Provider.ADD_SUBSCRIBER(UI_SIGNAL)
+
     log("Starting 7-ZIP Task Handler...")
     Active_7ZIP_Handler.START()
 
     log("Obtaining local machine clock bias info...")
-    time_synced=False
-    while time_synced==False and Active_UI.IS_RUNNING()==True:
-        time_synced=Perform_Time_Sync(UI_SIGNAL)
+    sync_result={"success":False}
+    while sync_result["success"]==False and Active_UI.IS_RUNNING()==True:
+        log("Performing initial time synchronization via Internet...")
+        sync_result=Active_Time_Provider.SYNC()
 
-    if time_synced==True:
+    if sync_result["success"]==True:
+        log("Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+" second(s).")
+
         UserHandleInstances=[]
 
         collect_allowed_usernames=[]
         for sender in collect_allowed_users:
             collect_allowed_usernames+=[sender.username]
 
-        Active_BotListener=Bot_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
+        Active_BotListener=Bot_Listener(collect_api_token,collect_allowed_usernames,Active_Time_Provider,UI_SIGNAL,LOGGER)
         log("Starting Bot Listener...")
         Active_BotListener.START()
 
@@ -2443,7 +2453,7 @@ if fatal_error==False:
 
             log("User message handler(s) starting up...")
             for sender in collect_allowed_users:
-                UserHandleInstances+=[User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,Active_BotListener,Active_7ZIP_Handler,LOGGER)]
+                UserHandleInstances+=[User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
 
             request_sync_time=threading.Event()
             request_sync_time.clear()
@@ -2453,22 +2463,23 @@ if fatal_error==False:
             Active_User_Console.START()
 
             log("Startup complete. Waiting for UI thread to finish...")
-            Wait_For_Finish(Active_UI,request_sync_time)
+            Main_Wait_Loop(Active_Time_Provider,Active_UI,request_sync_time)
             log("Left UI thread waiting loop.")
+
+            Active_Time_Provider.REMOVE_SUBSCRIBER(UI_SIGNAL)
 
             log("Requesting stop to User Console...")
             Active_User_Console.REQUEST_STOP()
-            log("Requesting stop to 7-ZIP Task Handler...")
-            Active_7ZIP_Handler.REQUEST_STOP()
-            log("Requesting stop to Bot Listener...")
-            Active_BotListener.REQUEST_STOP()
 
             Active_User_Console.CONCLUDE()
             del Active_User_Console
             log("Confirm User Console exit.")
-        else:
-            log("Requesting stop to Bot Listener...")
-            Active_BotListener.REQUEST_STOP()
+
+        log("Requesting stop to 7-ZIP Task Handler...")
+        Active_7ZIP_Handler.REQUEST_STOP()
+
+        log("Requesting stop to Bot Listener...")
+        Active_BotListener.REQUEST_STOP()
 
         Active_BotListener.CONCLUDE()
         del Active_BotListener
