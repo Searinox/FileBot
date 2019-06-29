@@ -1424,7 +1424,9 @@ class User_Console(object):
         input_arguments=[]
         if len(user_data)>1:
             for i in range(1,len(user_data)):
-                input_arguments+=[user_data[i].lower().strip()]
+                new_arg=user_data[i].lower().strip()
+                if new_arg!="":
+                    input_arguments+=[new_arg]
 
         if input_command=="startlisten":
             has_acted=False
@@ -1562,20 +1564,20 @@ class User_Console(object):
         elif input_command=="help":
             self.log("AVAILABLE CONSOLE COMMANDS:\n"+\
             "listusers: lists all allowed users\n"+\
-            "startlisten [USER]: start listening to messages for user; leave blank to apply to all instances\n"+\
-            "stoplisten [USER]: stop listening to messages for user; leave blank to apply to all instances\n"+\
-            "unlockusers [USER]: unlock the bot for user; leave blank to apply to all instances\n"+\
-            "userstats [USER]: list stats for user; leave blank to list all instances\n"+\
-            "listzips: [USER] list running 7-ZIP archival tasks for user; leave blank to list all instances\n"+\
-            "stopzips [PID | USER]: stop running 7-ZIP archival tasks by user or PID; leave blank to apply to all instances\n"+\
+            "startlisten [USERS]: start listening to messages for listed users; leave blank to apply to all instances\n"+\
+            "stoplisten [USERS]: stop listening to messages for listed users; leave blank to apply to all instances\n"+\
+            "unlockusers [USERS]: unlock the bot for listed users; leave blank to apply to all instances\n"+\
+            "userstats [USERS]: list stats for listed users; leave blank to list all instances\n"+\
+            "listzips: [USERS] list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
+            "stopzips [PID | USERS]: stop running 7-ZIP archival tasks by listed userss or PID; leave blank to apply to all instances\n"+\
             "synctime: manually re-synchronize bot time with Internet time\n"+\
             "help: display help\n"+\
             "exit: close the program\n")
             return True
+
         else:
             self.log("Unrecognized command. Type \"help\" for a list of commands.")
             return False
-        return False
 
     def retrieve_command(self):
         retval=""
@@ -1650,13 +1652,18 @@ class User_Console(object):
 
 class User_Entry(object):
     def __init__(self,from_string):
+        self.username=""
+        self.home=""
+        self.allow_write=""
+        self.error_message=""
+
         segments=[]
 
         try:
             segments=from_string.split("|")
             for i in range(len(segments)):
                 segments[i]=segments[i].strip()
-        
+
             if len(segments)==1:
                 raise ValueError("Home path was not present.")
             if len(segments)>2:
@@ -1669,8 +1676,17 @@ class User_Entry(object):
             if self.username.count("#")!=2 and self.username.count("#")!=0:
                 raise ValueError("Username contained an incorrect number of \"#\" characters.")
 
-            if self.username=="##" or self.username=="":
+            username_nohashes=self.username.replace("#","")
+
+            if username_nohashes=="":
                 raise ValueError("Username was empty.")
+
+            if username_nohashes[0] in ["_","0","1","2","3","4","5","6","7","8","9"]:
+                raise ValueError("Username cannot begin with a number or underscore.")
+            
+            for c in username_nohashes:
+                if c.lower() not in ["_","0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]:
+                    raise ValueError("Username contains invalid characters.")
 
             if len(self.home)>0:
                 if self.home[0]==">":
@@ -1679,8 +1695,9 @@ class User_Entry(object):
             if self.home=="":
                 raise ValueError("Home path was empty.")
             self.home=self.home.replace("/","\\")
+
         except:
-            self.log("m","WARNING: User list \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1]))
+            self.error_message="User entry \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1])
             self.username=""
             self.home=""
             self.allow_write=False
@@ -1722,6 +1739,9 @@ class UI(object):
     def IS_READY(self):
         return self.is_ready.is_set()==True
 
+    def CONCLUDE(self):
+        self.working_thread.join()
+        return
 
 class UI_Signaller(QObject):
     active_signal=pyqtSignal(object)
@@ -2337,7 +2357,8 @@ log("Process ID is "+str(environment_info["process_id"])+". FileBot architecture
 
 fatal_error=False
 collect_api_token=""
-collect_allowed_senders=[]
+collect_user_file_entries=[]
+collect_allowed_users=[]
 
 try:
     file_handle=open(os.path.join(environment_info["working_dir"],"token.txt"),"r")
@@ -2353,22 +2374,38 @@ if fatal_error==False:
         fatal_error=True
 
 if fatal_error==False:
-    file_entries=[]
+    file_handle=None
     try:
         file_handle=open(os.path.join(environment_info["working_dir"],"userlist.txt"),"r")
-        file_entries=file_handle.readlines()
-        for entry in file_entries:
-            if entry.encode("utf-8").strip()!="":
-                new_user=User_Entry(entry.strip())
-                if new_user.username!="":
-                    collect_allowed_senders+=[new_user]
+        all_lines=file_handle.readlines()
+        for line in all_lines:
+            new_line=line.encode("utf-8").strip()
+            if new_line!="":
+                collect_user_file_entries+=[new_line]
+        file_handle.close()
     except:
+        if file_handle is not None:
+            try:
+                file_handle.close()
+            except:
+                pass
         log("ERROR: Could not read entries from \"userlist.txt\".")
         fatal_error=True
 
 if fatal_error==False:
-    log("Number of users to listen for: "+str(len(collect_allowed_senders))+".")
-    if len(collect_allowed_senders)==0:
+    for entry in collect_user_file_entries:
+        entry=entry.encode("utf-8").strip()
+        if entry!="":
+            new_user=User_Entry(entry)
+            if new_user.error_message=="":
+                collect_allowed_users+=[new_user]
+            else:
+                log("WARNING: "+new_user.error_message)
+
+    collect_user_file_entries=[]
+    if len(collect_allowed_users)>0:
+        log("Number of users to listen for: "+str(len(collect_allowed_users))+".")
+    else:
         log("ERROR: There were no valid user entries to add.")
         fatal_error=True
 
@@ -2392,7 +2429,7 @@ if fatal_error==False:
         UserHandleInstances=[]
 
         collect_allowed_usernames=[]
-        for sender in collect_allowed_senders:
+        for sender in collect_allowed_users:
             collect_allowed_usernames+=[sender.username]
 
         Active_BotListener=Bot_Listener(collect_api_token,collect_allowed_usernames,UI_SIGNAL,LOGGER)
@@ -2405,7 +2442,7 @@ if fatal_error==False:
         if Active_UI.IS_RUNNING()==True:
 
             log("User message handler(s) starting up...")
-            for sender in collect_allowed_senders:
+            for sender in collect_allowed_users:
                 UserHandleInstances+=[User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,Active_BotListener,Active_7ZIP_Handler,LOGGER)]
 
             request_sync_time=threading.Event()
@@ -2449,7 +2486,7 @@ else:
     UI_SIGNAL.send("close_standby")
 
 LOGGER.DETACH_SIGNALLER()
-Active_UI.working_thread.join()
+Active_UI.CONCLUDE()
 del Active_UI
 log("Confirm UI exit.")
 
