@@ -155,7 +155,7 @@ def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_even
 
     return
 
-def OS_uptime():
+def OS_Uptime_Seconds():
     return GetTickCount64()/1000.0
 
 def readable_size(input_size):
@@ -290,11 +290,11 @@ class Time_Provider(object):
         self.lock_time_delta.acquire()
         get_delta=self.time_delta
         self.lock_time_delta.release()
-        return round(OS_uptime()+get_delta,3)
+        return round(OS_Uptime_Seconds()+get_delta,3)
 
     def SYNC(self,input_signaller=None):
-        if self.sync_server_time()==True:
-            get_time_diff=self.local_machine_time_delta_str()
+        if self.update_server_time()==True:
+            get_time_diff=self.get_local_machine_time_delta_str()
             
             self.lock_subscribers.acquire()
             for subscriber in self.signal_subscribers:
@@ -304,7 +304,7 @@ class Time_Provider(object):
             return {"success":False}
         return {"success":True,"time_difference":get_time_diff}
 
-    def current_UTC_internet_time(self):
+    def retrieve_current_UTC_internet_time(self):
         response=urllib2.urlopen("https://time.gov/actualtime.cgi",context=self.context_SSL_NOCERT)
         timestr=response.read()
         quot1=timestr.find("time=\"")
@@ -313,11 +313,11 @@ class Time_Provider(object):
         quot2+=1
         return int(timestr[quot1:quot2-3])/1000.0
 
-    def sync_server_time(self):
+    def update_server_time(self):
         update_success=False
 
         try:
-            get_new_delta=self.current_UTC_internet_time()-OS_uptime()
+            get_new_delta=self.retrieve_current_UTC_internet_time()-OS_Uptime_Seconds()
             update_success=True
         except:
             pass
@@ -329,7 +329,7 @@ class Time_Provider(object):
 
         return update_success
 
-    def local_machine_time_delta_str(self):
+    def get_local_machine_time_delta_str(self):
         time_difference=round(time.time()-self.GET_SERVER_TIME(),3)
         if time_difference>0:
             retval="+"+str(time_difference)
@@ -728,7 +728,7 @@ class Bot_Listener(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if self.active_time_provider.server_time()-msg_send_time<=30:
+                    if self.active_time_provider.GET_SERVER_TIME()-msg_send_time<=30:
                         if u"username" in input_msglist[i][u"message"][u"from"]:
                             msg_user=input_msglist[i][u"message"][u"from"][u"username"]
                         else:
@@ -750,7 +750,7 @@ class Bot_Listener(object):
             if len(collect_new_messages[message])>0:
                 self.user_messages[message]+=collect_new_messages[message]
             for i in reversed(range(len(self.user_messages[message]))):
-                if self.active_time_provider.server_time()-self.user_messages[message][i][u"date"]>30:
+                if self.active_time_provider.GET_SERVER_TIME()-self.user_messages[message][i][u"date"]>30:
                     del self.user_messages[message][i]
             self.messagelist_lock[message].release()
         return
@@ -809,9 +809,9 @@ class User_Message_Handler(object):
             return True
 
         for i in reversed(range(len(self.lastsent_timers))):
-            if OS_uptime()-self.lastsent_timers[i]>=60:
+            if OS_Uptime_Seconds()-self.lastsent_timers[i]>=60:
                 del self.lastsent_timers[i]
-        second_delay=OS_uptime()-self.last_send_time
+        second_delay=OS_Uptime_Seconds()-self.last_send_time
         if second_delay<1:
             second_delay=1-second_delay
         else:
@@ -823,7 +823,7 @@ class User_Message_Handler(object):
         throttle_time=second_delay+max(extra_sleep-second_delay,0)
         time.sleep(throttle_time)
         try:
-            self.last_send_time=OS_uptime()
+            self.last_send_time=OS_Uptime_Seconds()
             self.bot_handle.sendMessage(sid,msg)
             self.lastsent_timers+=[self.last_send_time]
             excess_entries=max(0,len(self.lastsent_timers)-40)
@@ -975,7 +975,7 @@ class User_Message_Handler(object):
 
     def process_messages(self,input_msglist):
         for m in input_msglist:
-            if self.active_time_provider.server_time()-m[u"date"]<=30:
+            if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=30:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
