@@ -1571,7 +1571,7 @@ class User_Console(object):
             "stoplisten [USERS]: stop listening to messages for listed users; leave blank to apply to all instances\n"+\
             "unlockusers [USERS]: unlock the bot for listed users; leave blank to apply to all instances\n"+\
             "userstats [USERS]: list stats for listed users; leave blank to list all instances\n"+\
-            "listzips: [USERS] list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
+            "listzips [USERS]: list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
             "stopzips [PID | USERS]: stop running 7-ZIP archival tasks by listed userss or PID; leave blank to apply to all instances\n"+\
             "synctime: manually re-synchronize bot time with Internet time\n"+\
             "help: display help\n"+\
