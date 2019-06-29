@@ -446,7 +446,6 @@ class Task_Handler_7ZIP(object):
                 return {"result":"ERROR","full_target":""}
             try:
                 new_process=subprocess.Popen(prompt_commands,shell=True,creationflags=subprocess.SW_HIDE)
-                print prompt_commands
                 self.instances_7zip+=[{"process":new_process,"temp_file":full_target+".7z.TMP","user":originating_user,"new":True}]
                 self.lock_instances_7zip.release()
 
@@ -573,7 +572,6 @@ class Task_Handler_7ZIP(object):
         self.lock_instances_7zip.release()
 
         for taskkill in taskkill_list:
-            print PATH_WINDOWS_SYSTEM32+"taskkill.exe"
             taskkill["process"].wait()
 
         for taskkill in taskkill_list:
