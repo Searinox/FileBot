@@ -1125,6 +1125,10 @@ class User_Message_Handler(object):
         if command_type=="start":
             self.log("User has sent a start request.")
 
+        elif command_type=="root":
+            response="Root folder path is \""+self.allowed_root+"\"."
+            self.log("Root folder path requested(\""+self.allowed_root+"\").")
+
         elif command_type=="dir":
             extra_search=""
 
@@ -1335,6 +1339,7 @@ class User_Message_Handler(object):
         elif command_type=="help":
             response="AVAILABLE BOT COMMANDS:\n\n"
             response+="/help: display this help screen\n"
+            response+="/root: display the root access folder\n"
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
