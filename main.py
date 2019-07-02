@@ -156,6 +156,19 @@ def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_even
 
     return
 
+def terminate_with_backslash(input_string):
+    if input_string.endswith("\\")==False:
+        return input_string+"\\"
+    return input_string
+
+def sanitize_path(input_path):
+    for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","&","<",">","?","*","^"]:
+        if bad_pattern in input_path:
+            return "<BAD PATH>"
+    if len(input_path)-1>len(input_path.replace(":","")):
+        return "<BAD PATH>"
+    return input_path
+
 def OS_Uptime_Seconds():
     return GetTickCount64()/1000.0
 
@@ -357,8 +370,7 @@ class Task_Handler_7ZIP(object):
         self.list_end_tasks_users=[]
 
         input_path_7zip=input_path_7zip.replace("/","\\")
-        if input_path_7zip.endswith("\\")==False:
-            input_path_7zip+="\\"
+        input_path_7zip=terminate_with_backslash(input_path_7zip)
         self.path_7zip_bin=os.path.join(input_path_7zip,"7z.exe")
         write_7z_binary=None
 
@@ -422,7 +434,7 @@ class Task_Handler_7ZIP(object):
         archive_filename=target_path[target_path.rfind("\\")+1:]
         if archive_filename=="":
             archive_filename=target_path[target_path[:-1].rfind("\\")+1:]
-            if archive_filename[-1]=="\\":
+            if archive_filename[-1].endswith("\\")==True:
                 archive_filename=archive_filename[:-1]
         archive_filename_path=archive_filename
         archive_filename=archive_filename.replace(":","")
@@ -430,8 +442,7 @@ class Task_Handler_7ZIP(object):
         folder_command="cd/ & cd /d \""+folder_path+"\""
         rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
         prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-        if folder_path.endswith("\\")==False:
-            folder_path+="\\"
+        folder_path=terminate_with_backslash(folder_path)
         full_target=folder_path+archive_filename.lower()
         if os.path.exists(full_target+".7z")==False:
             self.lock_instances_7zip.acquire()
@@ -845,11 +856,18 @@ class User_Message_Handler(object):
                 return True
         return False
 
+    def proper_caps_path(self,input_path):
+        retval=str(win32api.GetLongPathNameW(win32api.GetShortPathName(input_path)))
+        if len(retval)>1:
+            if retval[1]==":":
+                retval=retval[0].upper()+retval[1:]
+        return retval
+
     def usable_path(self,newpath):
         if self.allowed_path(newpath)==True:
             if os.path.exists(newpath)==True:
                 try:
-                    win32api.GetLongPathNameW(win32api.GetShortPathName(newpath))
+                    newpath=self.proper_caps_path(newpath)
                     return True
                 except:
                     return False
@@ -865,13 +883,8 @@ class User_Message_Handler(object):
             except:
                 return "<BAD PATH>"
         if newpath.endswith("\\")==False and isfile==False:
-            newpath+="\\"
-        for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","&","<",">","?","*","^"]:
-            if bad_pattern in newpath:
-                return "<BAD PATH>"
-        if len(newpath)-1>len(newpath.replace(":","")):
-            return "<BAD PATH>"
-        return newpath
+            newpath=terminate_with_backslash(newpath)
+        return sanitize_path(newpath)
 
     def check_tasks(self):
         if self.pending_lockclear.is_set()==True:
@@ -954,6 +967,10 @@ class User_Message_Handler(object):
                 self.listen_flag.clear()
             else:
                 self.log("Listen stop was requested, but it is not currently listening.")
+        return
+
+    def UNLOCK(self):
+        self.pending_lockclear.set()
         return
 
     def REQUEST_STOP(self):
@@ -1068,8 +1085,7 @@ class User_Message_Handler(object):
         filelist=[]
         folderlist=[]
 
-        if foldername[-1]!="\\":
-            foldername+="\\"
+        foldername=terminate_with_backslash(foldername)
 
         try:
             for name in os.listdir(foldername):
@@ -1106,13 +1122,18 @@ class User_Message_Handler(object):
         global BOT_MAX_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!="":
-            if msg.lower().find("/unlock ")==0:
-                if msg[len("/unlock "):].strip()==self.bot_lock_pass:
-                    self.bot_lock_pass=""
-                    self.lock_status.clear()
-                    self.sendmsg(sid,"Bot unlocked.")
-                    self.log("User Message Handler unlocked by user.")
-                    return
+            if msg.lower().startswith("/unlock ")==True:
+                attempted_pass=msg[len("/unlock "):].strip()
+                attempted_pass_len=len(attempted_pass)
+                if attempted_pass_len>=4 and attempted_pass_len<=32:
+                    if attempted_pass==self.bot_lock_pass:
+                        self.bot_lock_pass=""
+                        self.lock_status.clear()
+                        self.sendmsg(sid,"Bot unlocked.")
+                        self.log("User Message Handler unlocked by user.")
+                        return
+                    else:
+                        return
                 else:
                     return
             else:
@@ -1129,6 +1150,9 @@ class User_Message_Handler(object):
 
         if command_type=="start":
             self.log("User has sent a start request.")
+
+        elif command_type=="stop":
+            self.log("User has sent a stop request.")
 
         elif command_type=="root":
             response="Root folder path is \""+self.allowed_root+"\"."
@@ -1184,18 +1208,15 @@ class User_Message_Handler(object):
                 response="<Listing finished.>"
 
         elif command_type=="cd":
-            if command_args.strip()!="":
+            if command_args!="":
                 newpath=self.rel_to_abs(command_args)
                 if self.usable_dir(newpath)==True:
                     if os.path.exists(newpath)==True:
                         try:
-                            newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
+                            newpath=self.proper_caps_path(newpath)
                         except:
                             pass
-                        if newpath[-1]!="\\":
-                            newpath+="\\"
-                        if len(newpath)>0:
-                            newpath=newpath[0].upper()+newpath[1:]
+                        newpath=self.proper_caps_path(terminate_with_backslash(newpath))
                         self.set_last_folder(newpath)
                         response="Current folder changed to \""+newpath+"\"."
                         self.log("Current folder changed to \""+newpath+"\".")
@@ -1208,97 +1229,115 @@ class User_Message_Handler(object):
                 self.log("Queried current folder, which is \""+newpath+"\".")
 
         elif command_type=="get":
-            newpath=self.rel_to_abs(command_args,True)
-            if self.usable_path(newpath)==True:
-                newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                self.log("Requested get file \""+newpath+"\". Processing...")
-                self.sendmsg(sid,"Getting file, please wait...")
-                try:
-                    fsize=os.path.getsize(newpath)
-                    if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                        self.bot_handle.sendDocument(cid,open(newpath,"rb"))
-                    else:
-                        if fsize!=0:
-                            response="Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+"."
-                            self.log("Requested file too large.")
+            if command_args!="":
+                newpath=self.rel_to_abs(command_args,True)
+                if self.usable_path(newpath)==True:
+                    newpath=self.proper_caps_path(newpath)
+                    self.log("Requested get file \""+newpath+"\". Processing...")
+                    self.sendmsg(sid,"Getting file, please wait...")
+                    try:
+                        fsize=os.path.getsize(newpath)
+                        if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                            self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                         else:
-                            response="File is empty."
-                except:
-                    response="Problem getting file."
-                    self.log("File send error.")
+                            if fsize!=0:
+                                response="Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+"."
+                                self.log("Requested file too large.")
+                            else:
+                                response="File is empty."
+                    except:
+                        response="Problem getting file."
+                        self.log("File send error.")
+                else:
+                    response="File not found or inaccessible."
+                    self.log("File not found.")
             else:
-                response="File not found or inaccessible."
-                self.log("File not found.")
+                response="A file name or path must be provided."
+                self.log("Attempted to use get without a filename.")
 
         elif command_type=="eat" and self.allow_writing==True:
-            newpath=self.rel_to_abs(command_args,True)
-            if self.usable_path(newpath)==True:
-                newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                self.log("Requested eat file \""+newpath+"\".")
-                self.sendmsg(sid,"Eating file, please wait...")
-                success=False
-                try:
-                    fsize=os.path.getsize(newpath)
-                    if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                        self.bot_handle.sendDocument(cid,open(newpath,"rb"))
-                        success=True
-                    else:
-                        if fsize!=0:
-                            response="Bots cannot upload files larger than 50MB."
-                        else:
-                            response="File is empty."
-                except:
-                    response="Problem getting file."
-                    self.log("File send error.")
-                if success==True:
+            if command_args!="":
+                newpath=self.rel_to_abs(command_args,True)
+                if self.usable_path(newpath)==True:
+                    newpath=self.proper_caps_path(newpath)
+                    self.log("Requested eat file \""+newpath+"\".")
+                    self.sendmsg(sid,"Eating file, please wait...")
+                    success=False
                     try:
-                        self.log("File sent. Deleting...")
+                        fsize=os.path.getsize(newpath)
+                        if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                            self.bot_handle.sendDocument(cid,open(newpath,"rb"))
+                            success=True
+                        else:
+                            if fsize!=0:
+                                response="Bots cannot upload files larger than 50MB."
+                            else:
+                                response="File is empty."
+                    except:
+                        response="Problem getting file."
+                        self.log("File send error.")
+                    if success==True:
+                        try:
+                            self.log("File sent. Deleting...")
+                            os.remove(newpath)
+                            response="File deleted."
+                            self.log("File deleted.")
+                        except:
+                            response="Problem deleting file."
+                            self.log("File delete error.")
+                else:
+                    response="File not found or inaccessible."
+                    self.log("File to eat not found.")
+            else:
+                response="A file name or path must be provided."
+                self.log("Attempted to eat file without specifying name.")
+
+        elif command_type=="del" and self.allow_writing==True:
+            if command_args!="":
+                newpath=self.rel_to_abs(command_args,True)
+                if self.usable_path(newpath)==True:
+                    newpath=self.proper_caps_path(newpath)
+                    self.log("Requested delete file \""+newpath+"\".")
+                    try:
+                        self.sendmsg(sid,"Deleting file...")
                         os.remove(newpath)
                         response="File deleted."
-                        self.log("File deleted.")
                     except:
                         response="Problem deleting file."
                         self.log("File delete error.")
+                else:
+                    response="File not found or inaccessible."
+                    self.log("File to delete not found.")
             else:
-                response="File not found or inaccessible."
-
-        elif command_type=="del" and self.allow_writing==True:
-            newpath=self.rel_to_abs(command_args,True)
-            if self.usable_path(newpath)==True:
-                newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
-                self.log("Requested delete file \""+newpath+"\".")
-                try:
-                    self.sendmsg(sid,"Deleting file...")
-                    os.remove(newpath)
-                    response="File deleted."
-                except:
-                    response="Problem deleting file."
-                    self.log("File delete error.")
-            else:
-                response="File not found or inaccessible."
+                response="A file name or path must be provided."
+                self.log("Attempted to delete file without specifying name.")
 
         elif command_type=="mkdir" and self.allow_writing==True:
-            newpath=self.rel_to_abs(command_args,True)
-            upper_folder=newpath
-            if upper_folder.endswith("\\"):
-                upper_folder=upper_folder[:-1]
-            if upper_folder.count("\\")>0:
-                upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
-            if self.usable_dir(upper_folder)==True:
-                if os.path.isdir(newpath)==False:
-                    try:
-                        os.mkdir(newpath)
-                        response="Folder created."
-                        self.log("Folder created at \""+newpath+"\".")
-                    except:
-                        response="Problem creating folder."
-                        self.log("Folder create error at \""+newpath+"\".")
+            if command_args.lower()!="":
+                newpath=self.rel_to_abs(command_args,True)
+                upper_folder=newpath
+                if upper_folder.endswith("\\"):
+                    upper_folder=upper_folder[:-1]
+                if upper_folder.count("\\")>0:
+                    upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
+                if self.usable_dir(upper_folder)==True:
+                    if os.path.isdir(newpath)==False:
+                        try:
+                            os.mkdir(newpath)
+                            response="Folder created."
+                            self.log("Folder created at \""+newpath+"\".")
+                        except:
+                            response="Problem creating folder."
+                            self.log("Folder create error at \""+newpath+"\".")
+                    else:
+                        response="Folder already exists."
+                        self.log("Attempted to create already existing folder at \""+newpath+"\".")
                 else:
-                    response="Folder already exists."
-                    self.log("Attempted to create already existing folder at \""+newpath+"\".")
+                    response="Path is not usable."
+                    self.log("Attempted to create folder at unusable path \""+newpath+"\".")
             else:
-                response="Path is not usable."
-                self.log("Attempted to create folder at unusable path \""+newpath+"\".")
+                response="A folder name or path must be provided."
+                self.log("Attempted to create folder without specifying name.")
 
         elif command_type=="rmdir" and self.allow_writing==True:
             if command_args!="":
@@ -1310,17 +1349,16 @@ class User_Message_Handler(object):
                     if upper_folder.count("\\")>0:
                         upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
                     if self.usable_dir(upper_folder)==True:
-                        newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
+                        newpath=self.proper_caps_path(newpath)
                         self.log("Requested delete folder \""+newpath+"\".")
                         try:
                             self.sendmsg(sid,"Deleting folder...")
                             shutil.rmtree(newpath)
                             moved_up=""
-                            if newpath.endswith("\\")==False:
-                                newpath+="\\"
-                            if newpath.lower() in self.get_last_folder().lower():
+                            newpath=terminate_with_backslash(newpath)
+                            if self.get_last_folder().lower().endswith(newpath.lower())==True:
                                 self.set_last_folder(upper_folder)
-                                moved_up=" Current folder is now \""+upper_folder+"\"."
+                                moved_up=" Current folder is now \""+self.proper_caps_path(upper_folder)+"\"."
                             response="Folder deleted."+moved_up
                             self.log("Folder deleted at \""+newpath+"\".")
                         except:
@@ -1333,7 +1371,7 @@ class User_Message_Handler(object):
                     response="Folder not found or inaccessible."
                     self.log("Folder to delete not found at \""+newpath+"\".")
             else:
-                response="A folder name or path is required."
+                response="A folder name or path must be provided."
                 self.log("No folder name provided for deletion.")
 
         elif command_type=="up":
@@ -1347,30 +1385,36 @@ class User_Message_Handler(object):
                     self.log("Current folder changed to \""+newpath+"\".")
                 else:
                     response="Already at top folder."
+                    self.log("Attempted to go up while at top folder.")
             else:
                 response="Already at top folder."
+                self.log("Attempted to go up while at top folder.")
 
         elif command_type=="zip" and self.allow_writing==True:
-            newpath=self.rel_to_abs(command_args)
-            if os.path.exists(newpath)==False and newpath[-1]=="\\":
-                newpath=newpath[:-1]
-            if self.usable_path(newpath)==True:
-                zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
-                if zip_response["result"]=="CREATED":
-                    response="Issued zip command."
-                    self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
-                elif zip_response["result"]=="EXISTS":
-                    response="An archive \""+zip_response["full_target"]+".7z\" already exists."
-                    self.log("Zip \""+command_args+"\" failed because target archive \""+zip_response["full_target"]+".7z\" already exists.")
-                elif zip_response["result"]=="ERROR":
-                    response="Problem running command."
-                    self.log("Zip \""+command_args+"\" command could not be run.")
-                elif zip_response["result"]=="MAXREACHED":
-                    response="Maximum concurrent archival tasks reached."
-                    self.log("Zip \""+command_args+"\" rejected due to max concurrent tasks per user limit.")
+            if command_args!="":
+                newpath=self.rel_to_abs(command_args)
+                if os.path.exists(newpath)==False and newpath.endswith("\\")==True:
+                    newpath=newpath[:-1]
+                if self.usable_path(newpath)==True:
+                    zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
+                    if zip_response["result"]=="CREATED":
+                        response="Issued zip command."
+                        self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
+                    elif zip_response["result"]=="EXISTS":
+                        response="An archive \""+zip_response["full_target"]+".7z\" already exists."
+                        self.log("Zip \""+command_args+"\" failed because target archive \""+zip_response["full_target"]+".7z\" already exists.")
+                    elif zip_response["result"]=="ERROR":
+                        response="Problem running command."
+                        self.log("Zip \""+command_args+"\" command could not be run.")
+                    elif zip_response["result"]=="MAXREACHED":
+                        response="Maximum concurrent archival tasks reached."
+                        self.log("Zip \""+command_args+"\" rejected due to max concurrent tasks per user limit.")
+                else:
+                    response="File not found or inaccessible."
+                    self.log("Zip \""+command_args+"\" file not found or inaccessible.")
             else:
-                response="File not found or inaccessible."
-                self.log("Zip \""+command_args+"\" file not found or inaccessible.")
+                response="A file or folder name or path must be provided."
+                self.log("Attempted to zip without any name or path.")
 
         elif command_type=="listzips" and self.allow_writing==True:
             response=""
@@ -1393,13 +1437,15 @@ class User_Message_Handler(object):
             self.log("Requested stop of any running 7-ZIP archival tasks.")
 
         elif command_type=="lock":
-            if command_args.strip()!="" and len(command_args.strip())<=32:
-                self.bot_lock_pass=command_args.strip()
+            cmdlen=len(command_args)
+            if cmdlen>=4 and cmdlen<=32:
+                self.bot_lock_pass=command_args
                 response="Bot locked."
                 self.lock_status.set()
                 self.log("User Message Handler was locked with a password.")
             else:
-                response="Bad password for locking."
+                response="Lock password must be between 4 and 32 characters long."
+                self.log("Attempted to lock the bot with a password of invalid length.")
 
         elif command_type=="unlock":
             response="The bot is already unlocked."
@@ -1557,7 +1603,7 @@ class User_Console(object):
             has_acted=False
             for user_handler_instance in self.user_handler_list:
                 if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                    user_handler_instance.pending_lockclear.set()
+                    user_handler_instance.UNLOCK()
                     has_acted=True
             if has_acted==False:
                 self.log("No matching users were found.")
@@ -2390,9 +2436,7 @@ qInstallMessageHandler(qtmsg_handler)
 
 environment_info=Get_Runtime_Environment()
 
-PATH_WINDOWS_SYSTEM32=environment_info["system32"]
-if PATH_WINDOWS_SYSTEM32.endswith("\\")==False:
-    PATH_WINDOWS_SYSTEM32+="\\"
+PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
 
 start_minimized=False
 for argument in environment_info["arguments"]:
