@@ -1155,8 +1155,11 @@ class User_Message_Handler(object):
             self.log("User has sent a stop request.")
 
         elif command_type=="root":
-            response="Root folder path is \""+self.allowed_root+"\"."
-            self.log("Root folder path requested(\""+self.allowed_root+"\").")
+            if self.allowed_root!="*":
+                response="Root folder path is \""+self.allowed_root+"\"."
+            else:
+                response="This user is allowed to access all host system drives."
+            self.log("Root folder path requested, which is \""+self.allowed_root+"\".")
 
         elif command_type=="dir":
             extra_search=""
@@ -1242,81 +1245,95 @@ class User_Message_Handler(object):
                         else:
                             if fsize!=0:
                                 response="Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+"."
-                                self.log("Requested file too large.")
+                                self.log("Requested file \""+newpath+"\" too large to get.")
                             else:
                                 response="File is empty."
+                                self.log("Get file \""+newpath+"\" failed because the file is empty.")
                     except:
                         response="Problem getting file."
-                        self.log("File send error.")
+                        self.log("Get File error for \""+newpath+"\".")
                 else:
                     response="File not found or inaccessible."
-                    self.log("File not found.")
+                    self.log("Get file \""+newpath+"\" was not found.")
             else:
                 response="A file name or path must be provided."
-                self.log("Attempted to use get without a filename.")
+                self.log("Attempted to use get without a file name or path.")
 
         elif command_type=="eat" and self.allow_writing==True:
-            if command_args!="":
-                newpath=self.rel_to_abs(command_args,True)
-                if self.usable_path(newpath)==True:
-                    newpath=self.proper_caps_path(newpath)
-                    self.log("Requested eat file \""+newpath+"\".")
-                    self.sendmsg(sid,"Eating file, please wait...")
-                    success=False
-                    try:
-                        fsize=os.path.getsize(newpath)
-                        if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                            self.bot_handle.sendDocument(cid,open(newpath,"rb"))
-                            success=True
-                        else:
-                            if fsize!=0:
-                                response="Bots cannot upload files larger than 50MB."
-                            else:
-                                response="File is empty."
-                    except:
-                        response="Problem getting file."
-                        self.log("File send error.")
-                    if success==True:
+            if command_args.endswith(" ?confirm")==True:
+                command_args=command_args[:-len(" ?confirm")].strip()
+                if command_args!="":
+                    newpath=self.rel_to_abs(command_args,True)
+                    if self.usable_path(newpath)==True:
+                        newpath=self.proper_caps_path(newpath)
+                        self.log("Requested eat file \""+newpath+"\".")
+                        self.sendmsg(sid,"Eating file, please wait...")
+                        success=False
                         try:
-                            self.log("File sent. Deleting...")
-                            os.remove(newpath)
-                            response="File deleted."
-                            self.log("File deleted.")
+                            fsize=os.path.getsize(newpath)
+                            if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                                self.bot_handle.sendDocument(cid,open(newpath,"rb"))
+                                success=True
+                            else:
+                                if fsize!=0:
+                                    response="Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+"."
+                                    self.log("Requested file \""+newpath+"\" too large to eat.")
+                                else:
+                                    response="File is empty."
+                                    self.log("Eat file \""+newpath+"\" failed because the file is empty.")
                         except:
-                            response="Problem deleting file."
-                            self.log("File delete error.")
+                            response="Problem getting file."
+                            self.log("File \""+newpath+"\" send error.")
+                        if success==True:
+                            try:
+                                self.log("File \""+newpath+"\" sent. Deleting...")
+                                os.remove(newpath)
+                                response="File deleted."
+                                self.log("File \""+newpath+"\" deleted.")
+                            except:
+                                response="Problem deleting file."
+                                self.log("File delete error for \""+newpath+"\".")
+                    else:
+                        response="File not found or inaccessible."
+                        self.log("File to eat at \""+newpath+"\" not found.")
                 else:
-                    response="File not found or inaccessible."
-                    self.log("File to eat not found.")
+                    response="A file name or path must be provided."
+                    self.log("Attempted to eat file without specifying a name or path.")
             else:
-                response="A file name or path must be provided."
-                self.log("Attempted to eat file without specifying name.")
+                response="This command must end in \" ?confirm\"."
+                self.log("Attempted to delete file without confirmation.")
 
         elif command_type=="del" and self.allow_writing==True:
-            if command_args!="":
-                newpath=self.rel_to_abs(command_args,True)
-                if self.usable_path(newpath)==True:
-                    newpath=self.proper_caps_path(newpath)
-                    self.log("Requested delete file \""+newpath+"\".")
-                    try:
-                        self.sendmsg(sid,"Deleting file...")
-                        os.remove(newpath)
-                        response="File deleted."
-                    except:
-                        response="Problem deleting file."
-                        self.log("File delete error.")
+            if command_args.endswith(" ?confirm")==True:
+                command_args=command_args[:-len(" ?confirm")].strip()
+                if command_args!="":
+                    newpath=self.rel_to_abs(command_args,True)
+                    if self.usable_path(newpath)==True:
+                        newpath=self.proper_caps_path(newpath)
+                        self.log("Requested delete file \""+newpath+"\".")
+                        try:
+                            self.sendmsg(sid,"Deleting file...")
+                            os.remove(newpath)
+                            response="File deleted."
+                            self.log("File \""+newpath+"\" deleted.")
+                        except:
+                            response="Problem deleting file."
+                            self.log("File \""+newpath+"\" delete error.")
+                    else:
+                        response="File not found or inaccessible."
+                        self.log("File to delete \""+newpath+"\" not found.")
                 else:
-                    response="File not found or inaccessible."
-                    self.log("File to delete not found.")
+                    response="A file name or path must be provided."
+                    self.log("Attempted to delete file without specifying a name or path.")
             else:
-                response="A file name or path must be provided."
-                self.log("Attempted to delete file without specifying name.")
+                response="This command must end in \" ?confirm\"."
+                self.log("Attempted to delete file without confirmation.")
 
         elif command_type=="mkdir" and self.allow_writing==True:
-            if command_args.lower()!="":
+            if command_args!="":
                 newpath=self.rel_to_abs(command_args,True)
                 upper_folder=newpath
-                if upper_folder.endswith("\\"):
+                if upper_folder.endswith("\\")==True:
                     upper_folder=upper_folder[:-1]
                 if upper_folder.count("\\")>0:
                     upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
@@ -1337,42 +1354,47 @@ class User_Message_Handler(object):
                     self.log("Attempted to create folder at unusable path \""+newpath+"\".")
             else:
                 response="A folder name or path must be provided."
-                self.log("Attempted to create folder without specifying name.")
+                self.log("Attempted to create folder without specifying a name or path.")
 
         elif command_type=="rmdir" and self.allow_writing==True:
-            if command_args!="":
-                newpath=self.rel_to_abs(command_args,True)
-                if self.usable_dir(newpath)==True:
-                    upper_folder=newpath
-                    if upper_folder.endswith("\\"):
-                        upper_folder=upper_folder[:-1]
-                    if upper_folder.count("\\")>0:
-                        upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
-                    if self.usable_dir(upper_folder)==True:
-                        newpath=self.proper_caps_path(newpath)
-                        self.log("Requested delete folder \""+newpath+"\".")
-                        try:
-                            self.sendmsg(sid,"Deleting folder...")
-                            shutil.rmtree(newpath)
-                            moved_up=""
-                            newpath=terminate_with_backslash(newpath)
-                            if self.get_last_folder().lower().endswith(newpath.lower())==True:
-                                self.set_last_folder(upper_folder)
-                                moved_up=" Current folder is now \""+self.proper_caps_path(upper_folder)+"\"."
-                            response="Folder deleted."+moved_up
-                            self.log("Folder deleted at \""+newpath+"\".")
-                        except:
-                            response="Problem deleting folder."
-                            self.log("Folder delete error at \""+newpath+"\".")
+            if command_args.endswith(" ?confirm")==True:
+                command_args=command_args[:-len(" ?confirm")].strip()
+                if command_args!="":
+                    newpath=self.rel_to_abs(command_args,True)
+                    if self.usable_dir(newpath)==True:
+                        upper_folder=newpath
+                        if upper_folder.endswith("\\")==True:
+                            upper_folder=upper_folder[:-1]
+                        if upper_folder.count("\\")>0:
+                            upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
+                        if self.usable_dir(upper_folder)==True:
+                            newpath=self.proper_caps_path(newpath)
+                            self.log("Requested delete folder \""+newpath+"\".")
+                            try:
+                                self.sendmsg(sid,"Deleting folder...")
+                                shutil.rmtree(newpath)
+                                moved_up=""
+                                newpath=terminate_with_backslash(newpath)
+                                if self.get_last_folder().lower().endswith(newpath.lower())==True:
+                                    self.set_last_folder(upper_folder)
+                                    moved_up=" Current folder is now \""+self.proper_caps_path(upper_folder)+"\"."
+                                response="Folder deleted."+moved_up
+                                self.log("Folder deleted at \""+newpath+"\".")
+                            except:
+                                response="Problem deleting folder."
+                                self.log("Folder delete error at \""+newpath+"\".")
+                        else:
+                            response="No upper folder to switch to after removal."
+                            self.log("Attempted to delete \""+newpath+"\" at top folder.")
                     else:
-                        response="No upper folder to switch to after removal."
-                        self.log("Attempted to delete top folder.")
+                        response="Folder \""+newpath+"\" not found or inaccessible."
+                        self.log("Folder to delete not found at \""+newpath+"\".")
                 else:
-                    response="Folder not found or inaccessible."
-                    self.log("Folder to delete not found at \""+newpath+"\".")
+                    response="A folder name or path must be provided."
+                    self.log("No folder name or path provided for deletion.")
             else:
-                response="A folder name or path must be provided."
-                self.log("No folder name provided for deletion.")
+                response="This command must end in \" ?confirm\"."
+                self.log("Attempted to delete folder without confirmation.")
 
         elif command_type=="up":
             if self.last_folder.count("\\")>1:
@@ -1414,7 +1436,7 @@ class User_Message_Handler(object):
                     self.log("Zip \""+command_args+"\" file not found or inaccessible.")
             else:
                 response="A file or folder name or path must be provided."
-                self.log("Attempted to zip without any name or path.")
+                self.log("Attempted to zip without a name or path.")
 
         elif command_type=="listzips" and self.allow_writing==True:
             response=""
@@ -1470,9 +1492,11 @@ class User_Message_Handler(object):
             response+="/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+="/unlock <PASSWORD>: unlock the bot\n"
             response+="\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
+            if self.allow_writing==True:
+                response+="\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
             self.log("Help requested.")
         else:
-            self.sendmsg(sid,"Command unknown. Type \"/help\" for a list of commands.")
+            response="Unrecognized command. Type \"/help\" for a list of commands."
 
         if response!="":
             self.sendmsg(sid,response)
