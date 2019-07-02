@@ -1,4 +1,4 @@
-__version__="1.61"
+__version__="1.70"
 __author__="Searinox Navras"
 
 
@@ -13,6 +13,7 @@ except:
     pass
 import base64
 import os
+import shutil
 import ctypes
 import sys
 import time
@@ -1051,6 +1052,10 @@ class User_Message_Handler(object):
         if current_message!="":
             retval+=[current_message[:-1]]
 
+        if len(retval)==1:
+            if retval[0]=="":
+                retval=[]
+
         return retval
 
     def folder_list_string(self,input_folder,search_in,folders_only):
@@ -1168,10 +1173,13 @@ class User_Message_Handler(object):
             else:
                 dirlist="<Bad dir path.>"
             segment_list=self.segment_file_list_string(dirlist)
-            for segment in segment_list:
-                if self.sendmsg(sid,segment)==False:
-                    response="<Listing interrupted.>"
-                    break
+            if len(segment_list)>0:
+                for segment in segment_list:
+                    if self.sendmsg(sid,segment)==False:
+                        response="<Listing interrupted.>"
+                        break
+            else:
+                response="<Folder is empty.>"
             if response=="":
                 response="<Listing finished.>"
 
@@ -1246,8 +1254,8 @@ class User_Message_Handler(object):
                     try:
                         self.log("File sent. Deleting...")
                         os.remove(newpath)
-                        self.sendmsg(sid,"File deleted.")
-                        self.log("File delete error.")
+                        response="File deleted."
+                        self.log("File deleted.")
                     except:
                         response="Problem deleting file."
                         self.log("File delete error.")
@@ -1260,13 +1268,73 @@ class User_Message_Handler(object):
                 newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
                 self.log("Requested delete file \""+newpath+"\".")
                 try:
+                    self.sendmsg(sid,"Deleting file...")
                     os.remove(newpath)
-                    self.sendmsg(sid,"File deleted.")
+                    response="File deleted."
                 except:
                     response="Problem deleting file."
                     self.log("File delete error.")
             else:
                 response="File not found or inaccessible."
+
+        elif command_type=="mkdir" and self.allow_writing==True:
+            newpath=self.rel_to_abs(command_args,True)
+            upper_folder=newpath
+            if upper_folder.endswith("\\"):
+                upper_folder=upper_folder[:-1]
+            if upper_folder.count("\\")>0:
+                upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
+            if self.usable_dir(upper_folder)==True:
+                if os.path.isdir(newpath)==False:
+                    try:
+                        os.mkdir(newpath)
+                        response="Folder created."
+                        self.log("Folder created at \""+newpath+"\".")
+                    except:
+                        response="Problem creating folder."
+                        self.log("Folder create error at \""+newpath+"\".")
+                else:
+                    response="Folder already exists."
+                    self.log("Attempted to create already existing folder at \""+newpath+"\".")
+            else:
+                response="Path is not usable."
+                self.log("Attempted to create folder at unusable path \""+newpath+"\".")
+
+        elif command_type=="rmdir" and self.allow_writing==True:
+            if command_args!="":
+                newpath=self.rel_to_abs(command_args,True)
+                if self.usable_dir(newpath)==True:
+                    upper_folder=newpath
+                    if upper_folder.endswith("\\"):
+                        upper_folder=upper_folder[:-1]
+                    if upper_folder.count("\\")>0:
+                        upper_folder=upper_folder[:upper_folder.rfind("\\")+1]
+                    if self.usable_dir(upper_folder)==True:
+                        newpath=str(win32api.GetLongPathNameW(win32api.GetShortPathName(newpath)))
+                        self.log("Requested delete folder \""+newpath+"\".")
+                        try:
+                            self.sendmsg(sid,"Deleting folder...")
+                            shutil.rmtree(newpath)
+                            moved_up=""
+                            if newpath.endswith("\\")==False:
+                                newpath+="\\"
+                            if newpath.lower() in self.get_last_folder().lower():
+                                self.set_last_folder(upper_folder)
+                                moved_up=" Current folder is now \""+upper_folder+"\"."
+                            response="Folder deleted."+moved_up
+                            self.log("Folder deleted at \""+newpath+"\".")
+                        except:
+                            response="Problem deleting folder."
+                            self.log("Folder delete error at \""+newpath+"\".")
+                    else:
+                        response="No upper folder to switch to after removal."
+                        self.log("Attempted to delete top folder.")
+                else:
+                    response="Folder not found or inaccessible."
+                    self.log("Folder to delete not found at \""+newpath+"\".")
+            else:
+                response="A folder name or path is required."
+                self.log("No folder name provided for deletion.")
 
         elif command_type=="up":
             if self.last_folder.count("\\")>1:
@@ -1343,14 +1411,16 @@ class User_Message_Handler(object):
             response+="/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+="/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+="/zip <PATH[FILE]>: make a 7-ZIP archive; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+" simultaneous tasks\n"
+                response+="/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+" simultaneous tasks\n"
                 response+="/listzips: list all running 7-ZIP archival tasks\n"
                 response+="/stopzips: stop all running 7-ZIP archival tasks\n"
             response+="/up: move up one folder from current path\n"
-            response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram\n"
+            response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram chat\n"
             if self.allow_writing==True:
                 response+="/eat <[PATH]FILE>: upload the file at the location to Telegram, then delete it from its original location\n"
                 response+="/del <[PATH]FILE>: delete the file at the location\n"
+                response+="/mkdir <[PATH]FOLDER>: create the folder at the location\n"
+                response+="/rmdir <[PATH]FOLDER>: delete the folder at the location\n"
             response+="/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+="/unlock <PASSWORD>: unlock the bot\n"
             response+="\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
