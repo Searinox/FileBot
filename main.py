@@ -845,15 +845,16 @@ class User_Message_Handler(object):
             return False
 
     def allowed_path(self,input_path):
-        if input_path.lower().find(self.allowed_root.lower())==0 or self.allowed_root=="*":
+        if input_path.lower().startswith(self.allowed_root.lower())==True or self.allowed_root=="*":
             return True
         else:
             return False
 
     def usable_dir(self,newpath):
         if self.allowed_path(newpath)==True:
-            if os.path.exists(newpath)==True:
-                return True
+            if os.path.isdir(newpath)==True:
+                if os.access(newpath,os.R_OK)==True:
+                    return True
         return False
 
     def proper_caps_path(self,input_path):
@@ -1114,7 +1115,7 @@ class User_Message_Handler(object):
             for filename in filelist:
                 response+="\n"+filename
         except:
-            response="<Bad dir path.>"
+            response="<BAD_PATH>"
 
         return response
 
@@ -1198,34 +1199,41 @@ class User_Message_Handler(object):
             if self.allowed_path(use_folder)==True:
                 dirlist=self.folder_list_string(use_folder,extra_search,folders_only)
             else:
-                dirlist="<Bad dir path.>"
-            segment_list=self.segment_file_list_string(dirlist)
-            if len(segment_list)>0:
-                for segment in segment_list:
-                    if self.sendmsg(sid,segment)==False:
-                        response="<Listing interrupted.>"
-                        break
+                dirlist=""
+                response="<Path is inaccessible.>"
+                self.log("Folder path \""+command_args+"\" was not accessible for listing.")
+            if dirlist!="<BAD_PATH>":
+                segment_list=self.segment_file_list_string(dirlist)
+                if len(segment_list)>0:
+                    for segment in segment_list:
+                        if self.sendmsg(sid,segment)==False:
+                            response="<Listing interrupted.>"
+                            self.log("Listing for folder path \""+command_args+"\" was interrupted.")
+                            break
+                else:
+                    response="<Folder is empty.>"
+                    self.log("Folder path \""+command_args+"\" was empty.")
+                if response=="":
+                    response="<Listing finished.>"
             else:
-                response="<Folder is empty.>"
-            if response=="":
-                response="<Listing finished.>"
+                response="<Path is inaccessible.>"
+                self.log("Folder path \""+command_args+"\" was not accessible for listing.")
 
         elif command_type=="cd":
             if command_args!="":
                 newpath=self.rel_to_abs(command_args)
                 if self.usable_dir(newpath)==True:
-                    if os.path.exists(newpath)==True:
-                        try:
-                            newpath=self.proper_caps_path(newpath)
-                        except:
-                            pass
-                        newpath=self.proper_caps_path(terminate_with_backslash(newpath))
-                        self.set_last_folder(newpath)
-                        response="Current folder changed to \""+newpath+"\"."
-                        self.log("Current folder changed to \""+newpath+"\".")
+                    try:
+                        newpath=self.proper_caps_path(newpath)
+                    except:
+                        pass
+                    newpath=self.proper_caps_path(terminate_with_backslash(newpath))
+                    self.set_last_folder(newpath)
+                    response="Current folder changed to \""+newpath+"\"."
+                    self.log("Current folder changed to \""+newpath+"\".")
                 else:
-                    response="Bad path."
-                    self.log("Invalid path provided.")
+                    response="Path could not be accessed."
+                    self.log("Path provided \""+newpath+"\" could not be accessed.")
             else:
                 newpath=self.get_last_folder()
                 response="Current folder is \""+newpath+"\"."
