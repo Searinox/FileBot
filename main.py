@@ -162,7 +162,7 @@ def terminate_with_backslash(input_string):
     return input_string
 
 def sanitize_path(input_path):
-    for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","&","<",">","?","*","^"]:
+    for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","<",">","?","*","^","\""]:
         if bad_pattern in input_path:
             return "<BAD PATH>"
     if len(input_path)-1>len(input_path.replace(":","")):
@@ -195,7 +195,7 @@ class Logger(object):
         self.log_handle=None
         self.log_lock=threading.Lock()
         self.active_signaller=None
-        compact_log=subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32+"compact.exe\" /a /c \""+input_path+"\"",shell=True,creationflags=subprocess.SW_HIDE)
+        compact_log=subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32.replace("^","^^").replace("&","^&")+"compact.exe\" /a /c \""+input_path+"\"",shell=True,creationflags=subprocess.SW_HIDE)
         compact_log.wait()
         self.is_active=threading.Event()
         self.is_active.clear()
@@ -438,9 +438,9 @@ class Task_Handler_7ZIP(object):
                 archive_filename=archive_filename[:-1]
         archive_filename_path=archive_filename
         archive_filename=archive_filename.replace(":","")
-        zip_command="\""+self.path_7zip_bin+"\" a -mx9 -t7z \""+archive_filename+".7z.TMP\" \""+archive_filename_path+"\""
-        folder_command="cd/ & cd /d \""+folder_path+"\""
-        rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
+        zip_command="\""+self.path_7zip_bin.replace("^","^^").replace("&","^&")+"\" a -mx9 -t7z \""+archive_filename.replace("^","^^").replace("&","^&")+".7z.TMP\" \""+archive_filename_path.replace("^","^^").replace("&","^&")+"\""
+        folder_command="cd/ & cd /d \""+folder_path.replace("^","^^").replace("&","^&")+"\""
+        rename_command="ren \""+archive_filename.replace("^","^^").replace("&","^&")+".7z.TMP\" \""+archive_filename.replace("^","^^").replace("&","^&")+".7z\""
         prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
         folder_path=terminate_with_backslash(folder_path)
         full_target=folder_path+archive_filename.lower()
@@ -577,7 +577,7 @@ class Task_Handler_7ZIP(object):
 
             if terminate==True:
                 self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
-                taskkill_list+=[{"process":subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32+"taskkill.exe\" /f /t /pid "+str(get_PID),shell=True,creationflags=subprocess.SW_HIDE),"file":self.instances_7zip[i]["temp_file"]}]
+                taskkill_list+=[{"process":subprocess.Popen("\""+PATH_WINDOWS_SYSTEM32.replace("^","^^").replace("&","^&")+"taskkill.exe\" /f /t /pid "+str(get_PID),shell=True,creationflags=subprocess.SW_HIDE),"file":self.instances_7zip[i]["temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
