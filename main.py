@@ -162,7 +162,7 @@ def terminate_with_backslash(input_string):
     return input_string
 
 def sanitize_path(input_path):
-    for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","<",">","?","*","\""]:
+    for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","<",">","\""]:
         if bad_pattern in input_path:
             return "<BAD PATH>"
     if len(input_path)-1>len(input_path.replace(":","")):
