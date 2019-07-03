@@ -442,7 +442,6 @@ class Task_Handler_7ZIP(object):
         folder_command="cd/ & cd /d \""+folder_path+"\""
         rename_command="ren \""+archive_filename+".7z.TMP\" \""+archive_filename+".7z\""
         prompt_commands=folder_command+" & "+zip_command+" & "+rename_command
-        print prompt_commands
         folder_path=terminate_with_backslash(folder_path)
         full_target=folder_path+archive_filename.lower()
         if os.path.exists(full_target+".7z")==False:
