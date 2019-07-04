@@ -1288,13 +1288,18 @@ class User_Message_Handler(object):
                         if end!=-1:
                             foldername=terminate_with_backslash(newpath[:end])
                             self.log("Requested rename \""+newpath+"\" to \""+newname+"\".")
-                            try:
-                                os.rename(newpath,foldername+newname)
-                                response="Renamed \""+newpath+"\" to \""+newname+"\"."
-                                self.log("Renamed \""+newpath+"\" to \""+newname+"\".")
-                            except:
-                                response="Problem renaming."
-                                self.log("File/folder \""+newpath+"\" rename error.")
+                            newtarget=foldername+newname
+                            if os.path.exists(newtarget)==False:
+                                try:
+                                    os.rename(newpath,newtarget)
+                                    response="Renamed \""+newpath+"\" to \""+newname+"\"."
+                                    self.log("Renamed \""+newpath+"\" to \""+newname+"\".")
+                                except:
+                                    response="Problem renaming."
+                                    self.log("File/folder \""+newpath+"\" rename error.")
+                            else:
+                                response="A file or folder with the new name already exists."
+                                self.log("File/folder rename of \""+newpath+"\" failed because the new target \""+newtarget+"\" already exists.")
                         else:
                             response="Problem with path."
                             self.log("File/folder rename \""+newpath+"\" path error.")
