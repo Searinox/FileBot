@@ -1165,7 +1165,7 @@ class User_Message_Handler(object):
         elif command_type=="dir":
             extra_search=""
 
-            if command_args.lower().find("?f:")!=-1:
+            if "?f:" in command_args.lower():
                 start=command_args.lower().find("?f:")
                 end=command_args[start:].find(" ")
                 if end==-1:
@@ -1178,7 +1178,7 @@ class User_Message_Handler(object):
                 else:
                     command_args=command_args[end:].strip()
 
-            if command_args.lower().find("?d")!=-1:
+            if "?d" in command_args.lower():
                 folders_only=True
                 start=command_args.lower().find("?d")
                 end=start+len("?d")
@@ -1266,6 +1266,47 @@ class User_Message_Handler(object):
             else:
                 response="A file name or path must be provided."
                 self.log("Attempted to use get without a file name or path.")
+
+        elif command_type=="ren" and self.allow_writing==True:
+            newname=""
+            if "?to:" in command_args.lower():
+                end=command_args.lower().find("?to:")
+                newname=command_args[end+len("?to:"):].strip()
+                command_args=command_args[:end].strip()
+
+            if command_args!="" and newname!="":
+                newname_ok=True
+                for c in ["|","<",">","\"",":","\\","/","*","?"]:
+                    if c in newname:
+                        newname_ok=False
+                        break
+                if newname_ok==True:
+                    newpath=self.rel_to_abs(command_args,True)
+                    if self.usable_path(newpath)==True:
+                        newpath=self.proper_caps_path(newpath)
+                        end=newpath.rfind("\\")
+                        if end!=-1:
+                            foldername=terminate_with_backslash(newpath[:end])
+                            self.log("Requested rename \""+newpath+"\" to \""+newname+"\".")
+                            try:
+                                os.rename(newpath,foldername+newname)
+                                response="Renamed \""+newpath+"\" to \""+newname+"\"."
+                                self.log("Renamed \""+newpath+"\" to \""+newname+"\".")
+                            except:
+                                response="Problem renaming."
+                                self.log("File/folder \""+newpath+"\" rename error.")
+                        else:
+                            response="Problem with path."
+                            self.log("File/folder rename \""+newpath+"\" path error.")
+                    else:
+                        response="File/folder not found or inaccessible."
+                        self.log("File/folder to rename \""+newpath+"\" not found.")
+                else:
+                    response="The new name must not be a path or contain invalid characters."
+                    self.log("Attempted to rename \""+newpath+"\" with an invalid new name.")
+            else:
+                response="A name or path and a new name preceded by \"?to:\" must be provided."
+                self.log("Attempted to rename without specifying a name or path.")
 
         elif command_type=="eat" and self.allow_writing==True:
             if command_args.endswith(" ?confirm")==True:
@@ -1490,6 +1531,7 @@ class User_Message_Handler(object):
                 response+="/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+" simultaneous tasks\n"
                 response+="/listzips: list all running 7-ZIP archival tasks\n"
                 response+="/stopzips: stop all running 7-ZIP archival tasks\n"
+                response+="/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
             response+="/up: move up one folder from current path\n"
             response+="/get <[PATH]FILE>: retrieve the file at the location to Telegram chat\n"
             if self.allow_writing==True:
