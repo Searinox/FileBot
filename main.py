@@ -1276,8 +1276,8 @@ class User_Message_Handler(object):
 
             if command_args!="" and newname!="":
                 newname_ok=True
-                for c in ["|","<",">","\"",":","\\","/","*","?"]:
-                    if c in newname:
+                for c in newname:
+                    if c in "|<>\":\\/*?":
                         newname_ok=False
                         break
                 if newname_ok==True:
@@ -1308,7 +1308,7 @@ class User_Message_Handler(object):
                         self.log("File/folder to rename \""+newpath+"\" not found.")
                 else:
                     response="The new name must not be a path or contain invalid characters."
-                    self.log("Attempted to rename \""+newpath+"\" with an invalid new name.")
+                    self.log("Attempted to rename \""+command_args+"\" to a new name containing invalid characters.")
             else:
                 response="A name or path and a new name preceded by \"?to:\" must be provided."
                 self.log("Attempted to rename without specifying a name or path.")
