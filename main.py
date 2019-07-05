@@ -165,11 +165,18 @@ def terminate_with_backslash(input_string):
     return input_string
 
 def sanitize_path(input_path):
-    for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","<",">","\""]:
-        if bad_pattern in input_path:
+    if isinstance(input_path,str)==False:
+        for bad_pattern in [u"\\\\",u"\\.\\",u"\\.\\",u"?",u"*",u"|",u"<",u">",u"\""]:
+            if bad_pattern in input_path:
+                return u"<BAD PATH>"
+        if len(input_path)-1>len(input_path.replace(u":",u"")):
+            return u"<BAD PATH>"
+    else:
+        for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","<",">","\""]:
+            if bad_pattern in input_path:
+                return "<BAD PATH>"
+        if len(input_path)-1>len(input_path.replace(":","")):
             return "<BAD PATH>"
-    if len(input_path)-1>len(input_path.replace(":","")):
-        return "<BAD PATH>"
     return input_path
 
 def OS_Uptime_Seconds():
@@ -1131,7 +1138,7 @@ class User_Message_Handler(object):
                 if os.path.isfile(path):
                     if folders_only==False:
                         if name.lower().find(search)!=-1 or search==u"":
-                            filelist+=[name+u" [Size: "+readable_size(os.path.getsize(path))+u"]"]
+                            filelist+=[name+u" [Size: "+unicode(readable_size(os.path.getsize(path)))+u"]"]
                 else:
                     if name.lower().find(search)!=-1 or search==u"":
                         folderlist+=[name]
@@ -1288,7 +1295,7 @@ class User_Message_Handler(object):
                             self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                         else:
                             if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+u"."
+                                response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES))+u"."
                                 self.log("Requested file \""+newpath+"\" too large to get.")
                             else:
                                 response=u"File is empty."
@@ -1366,7 +1373,7 @@ class User_Message_Handler(object):
                                 success=True
                             else:
                                 if fsize!=0:
-                                    response=u"Bots cannot upload files larger than "+readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES)+"."
+                                    response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES))+"."
                                     self.log("Requested file \""+newpath+"\" too large to eat.")
                                 else:
                                     response="File is empty."
