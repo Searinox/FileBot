@@ -913,7 +913,10 @@ class User_Message_Handler(object):
 
     def allowed_path(self,input_path):
         if input_path.lower().startswith(self.allowed_root.lower())==True or self.allowed_root==u"*":
-            return True
+            if u"\\.\\" in input_path or u"\\..\\" in input_path:
+                return False
+            else:
+                return True
         else:
             return False
 
@@ -1732,8 +1735,6 @@ class User_Console(object):
                              "Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+"\n"+\
                              "Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+"\n"
             if stats_out!="":
-                if stats_out.endswith("\n")==True:
-                    stats_out=stats_out[:-1]
                 stats_out="USER STATS:\n"+stats_out
                 self.log(stats_out)
             else:
