@@ -12,20 +12,21 @@ try:
 except:
     pass
 import base64
-import os
-import shutil
-import ctypes
-import sys
 import time
 import datetime
+import sys
+import os
 import threading
 import warnings
-import telepot
+import shutil
+import ctypes
+import ctypes.wintypes
 import win32api
 import win32con
 import win32process
 import urllib2
 import ssl
+import telepot
 from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel,QCoreApplication)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
@@ -198,18 +199,52 @@ OBJS
 
 
 class ShellProcess(object):
+    class startupinfow(ctypes.Structure):
+        _fields_=[("cb",ctypes.wintypes.DWORD),("lpReserved",ctypes.wintypes.LPWSTR),("lpDesktop",ctypes.wintypes.LPWSTR),("lpTitle",ctypes.wintypes.LPWSTR),("dwX",ctypes.wintypes.DWORD),("dwY",ctypes.wintypes.DWORD),("dwXSize",ctypes.wintypes.DWORD),("dwYSize",ctypes.wintypes.DWORD),("dwXCountChars",ctypes.wintypes.DWORD),("dwYCountChars",ctypes.wintypes.DWORD),("dwFillAtrribute",ctypes.wintypes.DWORD),("dwFlags",ctypes.wintypes.DWORD),("wShowWindow",ctypes.wintypes.WORD),("cbReserved2",ctypes.wintypes.WORD),("lpReserved2",ctypes.POINTER(ctypes.wintypes.BYTE)),("hStdInput",ctypes.wintypes.HANDLE),("hStdOutput",ctypes.wintypes.HANDLE),("hStdError",ctypes.wintypes.HANDLE)]
+    
+    class process_information(ctypes.Structure):
+        _fields_=[("hProcess",ctypes.wintypes.HANDLE),("hThread",ctypes.wintypes.HANDLE),("dwProcessId",ctypes.wintypes.DWORD),("dwThreadId",ctypes.wintypes.DWORD)]
+
+    class dummy_handle(ctypes.c_void_p):
+        def __init__(self, *a, **kw):
+            super(ShellProcess.dummy_handle,self).__init__(*a,**kw)
+            self.closed = False
+            return
+
+        def Close(self):
+            if not self.closed:
+                ctypes.windll.kernel32.CloseHandle(self)
+                self.closed = True
+            return
+
+        def __int__(self):
+            return self.value
+
     def __init__(self,input_command):
-        self.process_handle=win32process.CreateProcess(None,input_command.encode("mbcs"),None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
+        global PATH_WINDOWS_SYSTEM32
+
+        startup_info=win32process.STARTUPINFO()
+        siw=ShellProcess.startupinfow(dwFlags=startup_info.dwFlags,wShowWindow=startup_info.wShowWindow,cb=ctypes.sizeof(self.startupinfow),hStdInput=int(startup_info.hStdInput),hStdOutput=int(startup_info.hStdOutput),hStdError=int(startup_info.hStdError))
+        CreateProcessW=ctypes.windll.kernel32.CreateProcessW
+        CreateProcessW.argtypes=[ctypes.c_char_p,ctypes.c_wchar_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.wintypes.BOOL,ctypes.wintypes.DWORD,ctypes.wintypes.LPVOID,ctypes.c_char_p,ctypes.POINTER(self.startupinfow),ctypes.POINTER(self.process_information)]
+        CreateProcessW.restype=ctypes.wintypes.BOOL
+        get_process_info=self.process_information()
+        result=CreateProcessW(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unicode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,siw,get_process_info)
+        if result:
+            self.process_handle=self.dummy_handle(get_process_info.hProcess)
+            self.process_ID=get_process_info.dwProcessId
+        else:
+            raise Exception("Error creating process.")
         return
 
     def IS_RUNNING(self): 
-        exit_code=win32process.GetExitCodeProcess(self.process_handle[0])
+        exit_code=win32process.GetExitCodeProcess(self.process_handle)
         if exit_code!=win32con.STILL_ACTIVE:
             return False
         return True
 
     def PID(self):
-        return self.process_handle[2]
+        return self.process_ID
 
     def WAIT(self):
         global PENDING_ACTIVITY_HEARTBEAT_SECONDS
@@ -513,10 +548,7 @@ class Task_Handler_7ZIP(object):
             target_location=instance["temp_file"]
             if target_location.lower().endswith(u".7z.tmp"):
                 target_location=target_location[:-len(u".7z.tmp")]
-            try:
-                retval+=[{"pid":instance["process"][2],"target":target_location,"user":instance["user"]}]
-            except:
-                pass
+            retval+=[{"pid":instance["process"].PID(),"target":target_location,"user":instance["user"]}]
         self.lock_instances_7zip.release()
 
         return retval
@@ -899,7 +931,7 @@ class User_Message_Handler(object):
 
     def proper_caps_path(self,input_path):
         try:
-            retval=str(win32api.GetLongPathNameW(win32api.GetShortPathName(input_path)))
+            retval=unicode(win32api.GetLongPathNameW(win32api.GetShortPathName(input_path)))
         except:
             retval=input_path
         if len(retval)>1:
@@ -1541,7 +1573,7 @@ class User_Message_Handler(object):
 
             for taskdata in tasks_7zip:
                 if taskdata["user"]==self.account_username:
-                    response+=u">ARCHIVING \""+taskdata["target"]+u"\"\n"
+                    response+=u">ARCHIVING \""+self.proper_caps_path(taskdata["target"])+u"\"\n"
 
             if response==u"":
                 response=u"No archival tasks running."
