@@ -262,9 +262,7 @@ class Logger(object):
         self.log_handle=None
         self.log_lock=threading.Lock()
         self.active_signaller=None
-        compact_command=u"\""+PATH_WINDOWS_SYSTEM32+u"compact.exe\" /a /c \""+input_path+u"\""
-        compact_command=u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+compact_command+u" \""
-        ShellProcess(compact_command).WAIT()
+        ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"compact.exe\" /a /c \""+input_path+u"\"").WAIT()
         self.is_active=threading.Event()
         self.is_active.clear()
         return
@@ -515,7 +513,6 @@ class Task_Handler_7ZIP(object):
         prompt_commands=folder_command+u" & "+zip_command+u" & "+rename_command
         folder_path=terminate_with_backslash(folder_path)
         full_target=folder_path+archive_filename.lower()
-        process_command_line=u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+prompt_commands+u" \""
         if os.path.exists(full_target+u".7z")==False:
             self.lock_instances_7zip.acquire()
             user_task_total=0
@@ -529,7 +526,7 @@ class Task_Handler_7ZIP(object):
                 self.lock_instances_7zip.release()
                 return {"result":"ERROR","full_target":u""}
             try:
-                new_process=ShellProcess(process_command_line)
+                new_process=ShellProcess(prompt_commands)
                 self.instances_7zip+=[{"process":new_process,"temp_file":full_target+u".7z.TMP","user":originating_user,"new":True}]
                 self.lock_instances_7zip.release()
 
@@ -647,9 +644,7 @@ class Task_Handler_7ZIP(object):
 
             if terminate==True:
                 self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
-                taskkill_command=u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+str(get_PID)
-                taskkill_command=u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe \" /c \""+taskkill_command+u" \""
-                taskkill_list+=[{"process":ShellProcess(taskkill_command),u"file":self.instances_7zip[i][u"temp_file"]}]
+                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+unicode(str(get_PID))),u"file":self.instances_7zip[i][u"temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
