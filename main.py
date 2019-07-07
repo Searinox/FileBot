@@ -2620,7 +2620,6 @@ for argument in environment_info["arguments"]:
 LOGGER=Logger(os.path.join(unicode(environment_info["working_dir"]),u"log.txt"))
 LOGGER.ACTIVATE()
 
-
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 
 UI_SIGNAL=UI_Signaller()
