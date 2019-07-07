@@ -49,7 +49,8 @@ TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.5
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
 LOG_UPDATE_INTERVAL_SECONDS=0.085
 
-BOT_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
+BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*50
+BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*20
 MAX_IM_SIZE_BYTES=4096
 IM_RELEVANCE_TIMEOUT_SECONDS=30
 MAX_7ZIP_TASKS_PER_USER=3
@@ -1068,6 +1069,7 @@ class User_Message_Handler(object):
 
     def process_messages(self,input_msglist):
         global IM_RELEVANCE_TIMEOUT_SECONDS
+        global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         for m in input_msglist:
             if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=IM_RELEVANCE_TIMEOUT_SECONDS:
@@ -1075,7 +1077,7 @@ class User_Message_Handler(object):
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
                     if u"document" in m:
-                        self.process_files(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"])
+                        self.process_files(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"],m[u"document"][u"file_size"])
                     elif u"audio" in m:
                         proceed=True
                         try:
@@ -1103,30 +1105,36 @@ class User_Message_Handler(object):
                             self.sendmsg(m[u"from"][u"id"],u"Could not get filename.")
                             proceed=False
                         if proceed==True:
-                            self.process_files(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename)
+                            self.process_files(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename,m[u"audio"][u"file_size"])
                     else:
-                        self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the filename will not preserve.")
+                        self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the file name will not carry over.")
         return
 
-    def process_files(self,sid,fid,filename):
+    def process_files(self,sid,fid,filename,filesize):
+        global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
+
         if self.bot_lock_pass!=u"" or self.allow_writing==False:
             return
 
-        foldername=self.get_last_folder()
-        complete_put_path=foldername+filename
-        self.sendmsg(sid,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
-        self.log("Receiving file \""+complete_put_path+"\"...")
-        if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
-            try:
-                self.bot_handle.download_file(fid,complete_put_path)
-                self.sendmsg(sid,u"Finished putting file \""+complete_put_path+u"\".")
-                self.log("File download complete.")
-            except:
-                self.sendmsg(sid,u"File \""+filename+u"\" could not be placed.")
-                self.log("File download aborted due to unknown issue.")
+        if filesize<=BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES:
+            foldername=self.get_last_folder()
+            complete_put_path=foldername+filename
+            self.sendmsg(sid,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
+            self.log("Receiving file \""+complete_put_path+"\"...")
+            if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
+                    try:
+                        self.bot_handle.download_file(fid,complete_put_path)
+                        self.sendmsg(sid,u"Finished putting file \""+complete_put_path+u"\".")
+                        self.log("File download complete.")
+                    except:
+                        self.sendmsg(sid,u"File \""+filename+u"\" could not be placed.")
+                        self.log("File download aborted due to unknown issue.")
+            else:
+                self.sendmsg(sid,u"File \""+filename+u"\" already exists at the location.")
+                self.log("File download aborted due to existing instance.")
         else:
-            self.sendmsg(sid,u"File \""+filename+u"\" already exists at the location.")
-            self.log("File download aborted due to existing instance.")
+            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+unicode(readable_size(BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".")
+            self.log("File download aborted due to size exceeding limit.")
         return
 
     def segment_file_list_string(self,input_string):
@@ -1198,7 +1206,8 @@ class User_Message_Handler(object):
         return response
 
     def process_instructions(self,sid,msg,cid):
-        global BOT_MAX_ALLOWED_FILESIZE_BYTES
+        global BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
+        global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!=u"":
             if msg.lower().startswith(u"/unlock ")==True:
@@ -1326,11 +1335,11 @@ class User_Message_Handler(object):
                     self.sendmsg(sid,u"Getting file, please wait...")
                     try:
                         fsize=os.path.getsize(newpath)
-                        if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                        if fsize<=BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                             self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                         else:
                             if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES))+u"."
+                                response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                 self.log("Requested file \""+newpath+"\" too large to get.")
                             else:
                                 response=u"File is empty."
@@ -1403,15 +1412,15 @@ class User_Message_Handler(object):
                         success=False
                         try:
                             fsize=os.path.getsize(newpath)
-                            if fsize<=BOT_MAX_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                            if fsize<=BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                                 self.bot_handle.sendDocument(cid,open(newpath,"rb"))
                                 success=True
                             else:
                                 if fsize!=0:
-                                    response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_ALLOWED_FILESIZE_BYTES))+"."
+                                    response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                     self.log("Requested file \""+newpath+"\" too large to eat.")
                                 else:
-                                    response="File is empty."
+                                    response=u"File is empty."
                                     self.log("Eat file \""+newpath+"\" failed because the file is empty.")
                         except:
                             response=u"Problem getting file."
@@ -1624,8 +1633,10 @@ class User_Message_Handler(object):
                 response+=u"/rmdir <[PATH]FOLDER>: delete the folder at the location\n"
             response+=u"/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+=u"/unlock <PASSWORD>: unlock the bot\n"
-            response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)"
+            response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
+            response+=u"File size limit for getting files from host system: "+unicode(readable_size(BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u"."
             if self.allow_writing==True:
+                response+=u"\nFile size limit for putting files on host system: "+unicode(readable_size(BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".\n"
                 response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
             self.log(u"Help requested.")
         else:
