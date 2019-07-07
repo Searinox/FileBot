@@ -1102,9 +1102,10 @@ class User_Message_Handler(object):
                                 newname=newname.replace(u"/",u"").replace(u"\\",u"").replace(u"?",u"").replace(u"*",u"").replace(u":",u"").replace(u"|",u"").replace(u"<",u"").replace(u">",u"")
                                 filename=newname
                         except:
-                            self.sendmsg(m[u"from"][u"id"],u"Could not get filename.")
+                            self.sendmsg(m[u"from"][u"id"],u"Could not obtain the file name.")
                             proceed=False
                         if proceed==True:
+                            print m[u"audio"][u"file_size"]
                             self.process_files(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename,m[u"audio"][u"file_size"])
                     else:
                         self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the file name will not carry over.")
