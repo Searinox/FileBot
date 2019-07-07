@@ -51,6 +51,7 @@ LOG_UPDATE_INTERVAL_SECONDS=0.085
 
 BOT_MAX_ALLOWED_FILESIZE_BYTES=1024*1024*50
 MAX_IM_SIZE_BYTES=4096
+IM_RELEVANCE_TIMEOUT_SECONDS=30
 MAX_7ZIP_TASKS_PER_USER=3
 
 FONT_POINT_SIZE=8
@@ -201,20 +202,20 @@ OBJS
 class ShellProcess(object):
     class startupinfow(ctypes.Structure):
         _fields_=[("cb",ctypes.wintypes.DWORD),("lpReserved",ctypes.wintypes.LPWSTR),("lpDesktop",ctypes.wintypes.LPWSTR),("lpTitle",ctypes.wintypes.LPWSTR),("dwX",ctypes.wintypes.DWORD),("dwY",ctypes.wintypes.DWORD),("dwXSize",ctypes.wintypes.DWORD),("dwYSize",ctypes.wintypes.DWORD),("dwXCountChars",ctypes.wintypes.DWORD),("dwYCountChars",ctypes.wintypes.DWORD),("dwFillAtrribute",ctypes.wintypes.DWORD),("dwFlags",ctypes.wintypes.DWORD),("wShowWindow",ctypes.wintypes.WORD),("cbReserved2",ctypes.wintypes.WORD),("lpReserved2",ctypes.POINTER(ctypes.wintypes.BYTE)),("hStdInput",ctypes.wintypes.HANDLE),("hStdOutput",ctypes.wintypes.HANDLE),("hStdError",ctypes.wintypes.HANDLE)]
-    
+
     class process_information(ctypes.Structure):
         _fields_=[("hProcess",ctypes.wintypes.HANDLE),("hThread",ctypes.wintypes.HANDLE),("dwProcessId",ctypes.wintypes.DWORD),("dwThreadId",ctypes.wintypes.DWORD)]
 
-    class dummy_handle(ctypes.c_void_p):
-        def __init__(self, *a, **kw):
-            super(ShellProcess.dummy_handle,self).__init__(*a,**kw)
-            self.closed = False
+    class process_handle(ctypes.c_void_p):
+        def __init__(self,*a,**kw):
+            super(ShellProcess.process_handle,self).__init__(*a,**kw)
+            self.closed=False
             return
 
         def Close(self):
             if not self.closed:
                 ctypes.windll.kernel32.CloseHandle(self)
-                self.closed = True
+                self.closed=True
             return
 
         def __int__(self):
@@ -231,7 +232,7 @@ class ShellProcess(object):
         get_process_info=self.process_information()
         result=CreateProcessW(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unicode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,siw,get_process_info)
         if result:
-            self.process_handle=self.dummy_handle(get_process_info.hProcess)
+            self.process_handle=self.process_handle(get_process_info.hProcess)
             self.process_ID=get_process_info.dwProcessId
         else:
             raise Exception("Error creating process.")
@@ -489,8 +490,6 @@ class Task_Handler_7ZIP(object):
         return self.max_tasks_per_user
 
     def NEW_TASK(self,target_path,originating_user):
-        global PATH_WINDOWS_SYSTEM32
-
         if self.request_exit.is_set()==True:
             return {"result":"ERROR","full_target":u""}
 
@@ -790,6 +789,8 @@ class Bot_Listener(object):
         return
 
     def organize_messages(self,input_msglist):
+        global IM_RELEVANCE_TIMEOUT_SECONDS
+
         collect_new_messages={}
         for username in self.listen_users:
             collect_new_messages[username]=[]
@@ -805,7 +806,7 @@ class Bot_Listener(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if self.active_time_provider.GET_SERVER_TIME()-msg_send_time<=30:
+                    if self.active_time_provider.GET_SERVER_TIME()-msg_send_time<=IM_RELEVANCE_TIMEOUT_SECONDS:
                         if u"username" in input_msglist[i][u"message"][u"from"]:
                             msg_user=input_msglist[i][u"message"][u"from"][u"username"]
                         else:
@@ -827,7 +828,7 @@ class Bot_Listener(object):
             if len(collect_new_messages[message])>0:
                 self.user_messages[message]+=collect_new_messages[message]
             for i in reversed(range(len(self.user_messages[message]))):
-                if self.active_time_provider.GET_SERVER_TIME()-self.user_messages[message][i][u"date"]>30:
+                if self.active_time_provider.GET_SERVER_TIME()-self.user_messages[message][i][u"date"]>IM_RELEVANCE_TIMEOUT_SECONDS:
                     del self.user_messages[message][i]
             self.messagelist_lock[message].release()
         return
@@ -842,6 +843,8 @@ class Bot_Listener(object):
 
 class User_Message_Handler(object):
     def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_timeprovider,input_7zip_task_handler,input_logger=None):
+        global PATH_WINDOWS_SYSTEM32
+
         self.active_logger=input_logger
         self.active_7zip_task_handler=input_7zip_task_handler
         self.working_thread=threading.Thread(target=self.work_loop)
@@ -871,7 +874,7 @@ class User_Message_Handler(object):
         self.processing_messages.clear()
         self.bot_handle=None
         if self.allowed_root==u"*":
-            self.set_last_folder(u"C:\\")
+            self.set_last_folder(PATH_WINDOWS_SYSTEM32[0].upper()+u":\\")
         else:
             self.set_last_folder(self.allowed_root)
         return
@@ -1064,8 +1067,10 @@ class User_Message_Handler(object):
         return self.has_quit.is_set()==False
 
     def process_messages(self,input_msglist):
+        global IM_RELEVANCE_TIMEOUT_SECONDS
+
         for m in input_msglist:
-            if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=30:
+            if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=IM_RELEVANCE_TIMEOUT_SECONDS:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
@@ -1606,7 +1611,7 @@ class User_Message_Handler(object):
             response+=u"/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+=u"/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+u" simultaneous tasks\n"
+                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+unicode(str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER()))+u" simultaneous tasks\n"
                 response+=u"/listzips: list all running 7-ZIP archival tasks\n"
                 response+=u"/stopzips: stop all running 7-ZIP archival tasks\n"
                 response+=u"/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
@@ -2017,6 +2022,7 @@ class UI(object):
         self.working_thread.join()
         return
 
+
 class UI_Signaller(QObject):
     active_signal=pyqtSignal(object)
 
@@ -2353,9 +2359,13 @@ class Main_Window(QMainWindow):
         return
 
     def update_tray_icon(self):
-        tray_text_new=self.label_botname_value.text()
-        if tray_text_new!="<not retrieved>":
-            tray_text_new="FileBot running bot \""+tray_text_new+"\""
+        global __version__
+
+        tray_text_new="FileBot v"+str(__version__)+"\nBot name: "
+        if self.label_botname_value.text()!="<not retrieved>":
+            tray_text_new+="\""+self.label_botname_value.text()+"\"\nStatus: "
+        else:
+            tray_text_new+="<not retrieved>\n"
 
         tray_candidate="default"
         if self.online_state==True:
@@ -2365,11 +2375,11 @@ class Main_Window(QMainWindow):
             tray_candidate="deactivated"
 
         if tray_candidate=="default":
-            tray_text_new+=" - ONLINE"
+            tray_text_new+="ONLINE"
         elif tray_candidate=="deactivated":
-            tray_text_new+=" - OFFLINE"
+            tray_text_new+="OFFLINE"
         elif tray_candidate=="busy":
-            tray_text_new+=" - ONLINE (processing messages)"
+            tray_text_new+="ONLINE (processing messages)"
 
         if self.tray_current_text!=tray_text_new:
             self.tray_current_text=tray_text_new
