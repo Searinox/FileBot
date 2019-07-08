@@ -257,14 +257,17 @@ class ShellProcess(object):
 
 
 class Logger(object):
-    def __init__(self,input_path):
+    def __init__(self,input_log_path=u""):
         global PATH_WINDOWS_SYSTEM32
 
-        self.logging_path=input_path
+        self.logging_path=input_log_path
         self.log_handle=None
         self.log_lock=threading.Lock()
+        self.output_stdout=threading.Event()
+        self.output_stdout.clear()
         self.active_signaller=None
-        ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"compact.exe\" /a /c \""+input_path+u"\"").WAIT()
+        if self.logging_path!=u"":
+            ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"compact.exe\" /a /c \""+input_log_path+u"\"").WAIT()
         self.is_active=threading.Event()
         self.is_active.clear()
         return
@@ -275,6 +278,13 @@ class Logger(object):
         except:
             pass
         self.is_active.set()
+        return
+
+    def SET_STDOUT(self,input_state):
+        if input_state==True:
+            self.output_stdout.set()
+        else:
+            self.output_stdout.clear()
         return
 
     def DEACTIVATE(self):
@@ -326,10 +336,11 @@ class Logger(object):
             except:
                 pass
 
-        try:
-            sys.stdout.write(msg)
-        except:
-            pass
+        if self.output_stdout.is_set()==True:
+            try:
+                sys.stdout.write(msg)
+            except:
+                pass
 
         if self.active_signaller is not None:
             try:
@@ -1082,8 +1093,8 @@ class User_Message_Handler(object):
                         proceed=True
                         try:
                             filename=self.bot_handle.getFile(m[u"audio"][u"file_id"])[u"file_path"]
-                            filename=filename[filename.rfind("/")+1:]
-                            fileext=filename[filename.rfind(".")+1:]
+                            filename=filename[filename.rfind(u"/")+1:]
+                            fileext=filename[filename.rfind(u".")+1:]
                             filetitle=""
                             fileperformer=""
                             if u"title" in m[u"audio"]:
@@ -1944,7 +1955,7 @@ class User_Console(object):
 class User_Entry(object):
     def __init__(self,from_string):
         self.username=""
-        self.home=""
+        self.home=u""
         self.allow_write=""
         self.error_message=""
 
@@ -1961,7 +1972,7 @@ class User_Entry(object):
                 raise ValueError("Wrong number of \"|\"-separated characters.")
 
             self.username=segments[0]
-            self.home=segments[1]
+            self.home=unicode(segments[1]).strip()
             self.allow_write=False
 
             if self.username.count("#")!=2 and self.username.count("#")!=0:
@@ -1980,17 +1991,26 @@ class User_Entry(object):
                     raise ValueError("Username contains invalid characters.")
 
             if len(self.home)>0:
-                if self.home[0]==">":
+                if self.home[0]==u">":
                     self.allow_write=True
                     self.home=self.home[1:]
-            if self.home=="":
+            if self.home==u"":
                 raise ValueError("Home path was empty.")
-            self.home=self.home.replace("/","\\")
+            self.home=self.home.replace(u"/",u"\\")
+            if self.home!=u"*":
+                self.home=terminate_with_backslash(self.home)
+
+            for c in self.home:
+                if c in u"|<>?":
+                    raise ValueError("Home path contains invalid characters.")
+
+            if (self.home.count(u"*")>1 and len(self.home)>1) or self.home.count(u":")>1 or self.home.startswith(u"\\")==True:
+                raise ValueError("Home path contains invalid characters.")
 
         except:
             self.error_message="User entry \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1])
             self.username=""
-            self.home=""
+            self.home=u""
             self.allow_write=False
         return
 
@@ -2611,13 +2631,20 @@ environment_info=Get_Runtime_Environment()
 PATH_WINDOWS_SYSTEM32=terminate_with_backslash(unicode(environment_info["system32"]))
 
 start_minimized=False
+stdout_output=False
 for argument in environment_info["arguments"]:
     argument=unicode(argument.lower().strip())
 
     if argument==u"/minimized":
         start_minimized=True
+    elif argument==u"/stdout":
+        stdout_output=True
+
+if environment_info["running_from_source"]==True:
+    stdout_output=True
 
 LOGGER=Logger(os.path.join(unicode(environment_info["working_dir"]),u"log.txt"))
+LOGGER.SET_STDOUT(stdout_output)
 LOGGER.ACTIVATE()
 
 CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
@@ -2645,7 +2672,8 @@ log("\n\nREQUIREMENTS:\n"+\
     "JohnDoe|C:\\MySharedFiles\n"+\
     "TrustedUser|>*\n\n"+\
     "COMMAND LINE:\n"+\
-    "/minimized: starts the application minimized to system tray\n")
+    "/minimized: starts the application minimized to system tray\n"+\
+    "/stdout: output log to stdout in addition to window\n")
 
 log("Process ID is "+str(environment_info["process_id"])+". FileBot architecture is "+str(environment_info["architecture"])+"-bit.")
 
@@ -2673,9 +2701,9 @@ if fatal_error==False:
         file_handle=open(os.path.join(unicode(environment_info["working_dir"]),u"userlist.txt"),"r")
         all_lines=file_handle.readlines()
         for line in all_lines:
-            new_line=line.encode("utf-8").strip()
-            if new_line!="":
-                collect_user_file_entries+=[new_line]
+            line=line.strip()
+            if line!=u"":
+                collect_user_file_entries+=[line]
         file_handle.close()
     except:
         if file_handle is not None:
@@ -2683,7 +2711,7 @@ if fatal_error==False:
                 file_handle.close()
             except:
                 pass
-        log("ERROR: Could not read entries from \"userlist.txt\".")
+        log("ERROR: Could not obtain any valid user entries from \"userlist.txt\".")
         fatal_error=True
 
 if fatal_error==False:
