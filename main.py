@@ -126,26 +126,24 @@ def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_even
     global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
     global MAINTHREAD_HEARTBEAT_SECONDS
 
-    process_total_time=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
-    last_server_time_check=time.time()
+    last_process_priority_check=GetTickCount64()-MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000
+    last_server_time_check=datetime.datetime.utcnow()
 
     while input_waitobject.IS_RUNNING()==True:
-
         time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
 
         Flush_Std_Buffers()
 
-        process_total_time+=MAINTHREAD_HEARTBEAT_SECONDS
-        if process_total_time>=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS:
-            process_total_time-=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
+        if GetTickCount64()-last_process_priority_check>=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000:
             try:
                 if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
                     win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
                     log("Idle process priority set.")
             except:
                 log("Error managing process priority.")
+            last_process_priority_check=GetTickCount64()
 
-        if abs(time.time()-last_server_time_check)>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
+        if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
             log("Performing time synchronization via Internet...")
             sync_result=input_timeobject.SYNC()
             if sync_result["success"]==True:
@@ -154,7 +152,7 @@ def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_even
                 log("Time synchronization failed.")
             if input_timesync_request_event.is_set()==True:
                 input_timesync_request_event.clear()
-            last_server_time_check=time.time()
+            last_server_time_check=datetime.datetime.utcnow()
 
     return
 
@@ -193,6 +191,80 @@ def readable_size(input_size):
     if input_size<1024**3:
         return str(round(input_size/1024.0**2,2))+" MB"
     return str(round(input_size/1024.0**3,2))+" GB"
+
+def Bot_Token_From_String(from_string):
+    retval=from_string
+    try:
+        retval=str(retval.encode("utf-8").strip())
+    except:
+        return ""
+    if len(retval)==0 or len(retval)>64:
+        return ""
+    for c in retval:
+        if c not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz:":
+            return ""
+    if retval.count(":")>1:
+        return ""
+    if len(retval)==0 or len(retval)>64:
+        return ""
+    return retval
+
+def User_Entry_From_String(from_string):
+    retval={"username":"","home":u"","allow_write":False,"error_message":""}
+
+    segments=[]
+
+    try:
+        segments=from_string.split("|")
+        for i in range(len(segments)):
+            segments[i]=segments[i].strip()
+
+        if len(segments)==1:
+            raise ValueError("Home path was not present.")
+        if len(segments)>2:
+            raise ValueError("Wrong number of \"|\"-separated characters.")
+
+        retval["username"]=segments[0]
+        retval["home"]=unicode(segments[1]).strip()
+        retval["allow_write"]=False
+
+        if retval["username"].count("#")!=2 and retval["username"].count("#")!=0:
+            raise ValueError("Username contained an incorrect number of \"#\" characters.")
+
+        username_nohashes=retval["username"].replace("#","")
+
+        if username_nohashes=="":
+            raise ValueError("Username was empty.")
+
+        if username_nohashes[0] in "_0123456789":
+            raise ValueError("Username cannot begin with a number or underscore.")
+
+        for c in username_nohashes:
+            if c.lower() not in "_0123456789abcdefghijklmnopqrstuvwxyz":
+                raise ValueError("Username contains invalid characters.")
+
+        if retval["home"].startswith(u">")==True:
+            retval["allow_write"]=True
+            retval["home"]=retval["home"][1:]
+        if retval["home"]==u"":
+            raise ValueError("Home path was empty.")
+        retval["home"]=retval["home"].replace(u"/",u"\\")
+        if retval["home"]!=u"*":
+            retval["home"]=terminate_with_backslash(retval["home"])
+
+        for c in retval["home"]:
+            if c in u"|<>?":
+                raise ValueError("Home path contains invalid characters.")
+
+        if (retval["home"].count(u"*")>1 and len(retval["home"])>1) or retval["home"].count(u":")>1 or retval["home"].startswith(u"\\")==True:
+            raise ValueError("Home path contains invalid characters.")
+
+        if u"\\.\\" in retval["home"] or u"\\..\\" in retval["home"] or retval["home"].startswith(u"\\\\")==True or len(retval["home"])>255:
+            raise ValueError("Home path format is invalid.")
+
+    except:
+        return {"error_message":"User entry \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1]),"username":"","home":u"","allow_write":False}
+    return retval
 
 
 """
@@ -320,11 +392,11 @@ class Logger(object):
         else:
             source_literal=""
             input_literal=str(source.encode("utf-8"))
-
         if source!="":
             source_literal=" ["+source_literal+"] "
         else:
             source_literal=" "
+
         msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal+"\n"
 
         self.log_lock.acquire()
@@ -388,7 +460,7 @@ class Time_Provider(object):
     def SYNC(self,input_signaller=None):
         if self.update_server_time()==True:
             get_time_diff=self.get_local_machine_time_delta_str()
-            
+
             self.lock_subscribers.acquire()
             for subscriber in self.signal_subscribers:
                 subscriber.send("timesync_clock_bias",get_time_diff)
@@ -423,7 +495,7 @@ class Time_Provider(object):
         return update_success
 
     def get_local_machine_time_delta_str(self):
-        time_difference=round(time.time()-self.GET_SERVER_TIME(),3)
+        time_difference=round(float((datetime.datetime.utcnow()-datetime.datetime(1970,1,1)).total_seconds())-self.GET_SERVER_TIME(),3)
         if time_difference>0:
             retval="+"+str(time_difference)
         else:
@@ -1835,12 +1907,11 @@ class User_Console(object):
                     except:
                         invalid=False
                         if len(arg)>=5 and len(arg)<=32:
-                            if arg[0] in ["0","1","2","3","4","5","6","7","8","9","_"]:
+                            if arg[0] in "0123456789_":
                                 invalid=True
                             else:
                                 for c in arg:
-                                    c=c.lower()
-                                    if c not in ["0","1","2","3","4","5","6","7","8","9","_","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","#"]:
+                                    if c.lower() not in "0123456789_abcdefghijklmnopqrstuvwxyz#":
                                         invalid=True
                                         break
                         else:
@@ -1949,69 +2020,6 @@ class User_Console(object):
         self.active_UI_signaller.send("detach_console",{})
         self.active_UI_signaller.send("close",{})
         self.has_quit.set()
-        return
-
-
-class User_Entry(object):
-    def __init__(self,from_string):
-        self.username=""
-        self.home=u""
-        self.allow_write=""
-        self.error_message=""
-
-        segments=[]
-
-        try:
-            segments=from_string.split("|")
-            for i in range(len(segments)):
-                segments[i]=segments[i].strip()
-
-            if len(segments)==1:
-                raise ValueError("Home path was not present.")
-            if len(segments)>2:
-                raise ValueError("Wrong number of \"|\"-separated characters.")
-
-            self.username=segments[0]
-            self.home=unicode(segments[1]).strip()
-            self.allow_write=False
-
-            if self.username.count("#")!=2 and self.username.count("#")!=0:
-                raise ValueError("Username contained an incorrect number of \"#\" characters.")
-
-            username_nohashes=self.username.replace("#","")
-
-            if username_nohashes=="":
-                raise ValueError("Username was empty.")
-
-            if username_nohashes[0] in ["_","0","1","2","3","4","5","6","7","8","9"]:
-                raise ValueError("Username cannot begin with a number or underscore.")
-            
-            for c in username_nohashes:
-                if c.lower() not in ["_","0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]:
-                    raise ValueError("Username contains invalid characters.")
-
-            if len(self.home)>0:
-                if self.home[0]==u">":
-                    self.allow_write=True
-                    self.home=self.home[1:]
-            if self.home==u"":
-                raise ValueError("Home path was empty.")
-            self.home=self.home.replace(u"/",u"\\")
-            if self.home!=u"*":
-                self.home=terminate_with_backslash(self.home)
-
-            for c in self.home:
-                if c in u"|<>?":
-                    raise ValueError("Home path contains invalid characters.")
-
-            if (self.home.count(u"*")>1 and len(self.home)>1) or self.home.count(u":")>1 or self.home.startswith(u"\\")==True:
-                raise ValueError("Home path contains invalid characters.")
-
-        except:
-            self.error_message="User entry \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1])
-            self.username=""
-            self.home=u""
-            self.allow_write=False
         return
 
 
@@ -2193,24 +2201,24 @@ class Main_Window(QMainWindow):
 
         self.label_botstatus=QLabel(self)
         self.label_botstatus.setText("Status:")
-        self.label_botstatus.setGeometry(372*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus.setGeometry(367*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
 
         self.label_botstatus_value=QLabel(self)
-        self.label_botstatus_value.setGeometry(410*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus_value.setGeometry(405*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus_value.setFont(self.font_cache["status"])
         self.label_botstatus_value.setText("NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
-        self.label_clock_bias.setGeometry(620*UI_SCALE,12*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias.setGeometry(615*UI_SCALE,12*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias_value=QLabel(self)
-        self.label_clock_bias_value.setGeometry(800*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias_value.setGeometry(795*UI_SCALE,12*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
@@ -2625,7 +2633,6 @@ MAIN
 
 warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
 qInstallMessageHandler(qtmsg_handler)
-
 environment_info=Get_Runtime_Environment()
 
 PATH_WINDOWS_SYSTEM32=terminate_with_backslash(unicode(environment_info["system32"]))
@@ -2678,20 +2685,21 @@ log("\n\nREQUIREMENTS:\n"+\
 log("Process ID is "+str(environment_info["process_id"])+". FileBot architecture is "+str(environment_info["architecture"])+"-bit.")
 
 fatal_error=False
-collect_api_token=""
+collect_bot_token=""
 collect_user_file_entries=[]
 collect_allowed_users=[]
 
 try:
     file_handle=open(os.path.join(unicode(environment_info["working_dir"]),u"token.txt"),"r")
-    collect_api_token=file_handle.readline().encode("utf-8").strip()
+    collect_bot_token=file_handle.readline()
     file_handle.close()
 except:
     log("ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
     fatal_error=True
 
 if fatal_error==False:
-    if len(collect_api_token)==0:
+    collect_bot_token=Bot_Token_From_String(collect_bot_token)
+    if collect_bot_token=="":
         log("ERROR: Make sure the token is correctly written in \"token.txt\".")
         fatal_error=True
 
@@ -2716,11 +2724,11 @@ if fatal_error==False:
 
 if fatal_error==False:
     for entry in collect_user_file_entries:
-        new_user=User_Entry(entry)
-        if new_user.error_message=="":
+        new_user=User_Entry_From_String(entry)
+        if new_user["error_message"]=="":
             collect_allowed_users+=[new_user]
         else:
-            log("WARNING: "+new_user.error_message)
+            log("WARNING: "+new_user["error_message"])
 
     collect_user_file_entries=[]
     if len(collect_allowed_users)>0:
@@ -2756,9 +2764,9 @@ if fatal_error==False:
 
         collect_allowed_usernames=[]
         for sender in collect_allowed_users:
-            collect_allowed_usernames+=[sender.username]
+            collect_allowed_usernames+=[sender["username"]]
 
-        Active_BotListener=Bot_Listener(collect_api_token,collect_allowed_usernames,Active_Time_Provider,UI_SIGNAL,LOGGER)
+        Active_BotListener=Bot_Listener(collect_bot_token,collect_allowed_usernames,Active_Time_Provider,UI_SIGNAL,LOGGER)
         log("Starting Bot Listener...")
         Active_BotListener.START()
 
@@ -2769,7 +2777,7 @@ if fatal_error==False:
 
             log("User message handler(s) starting up...")
             for sender in collect_allowed_users:
-                UserHandleInstances+=[User_Message_Handler(collect_api_token,sender.home,sender.username,sender.allow_write,Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
+                UserHandleInstances+=[User_Message_Handler(collect_bot_token,sender["home"],sender["username"],sender["allow_write"],Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
 
             request_sync_time=threading.Event()
             request_sync_time.clear()
