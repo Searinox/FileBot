@@ -201,7 +201,7 @@ def Bot_Token_From_String(from_string):
     if len(retval)==0 or len(retval)>64:
         return ""
     for c in retval:
-        if c not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz:":
+        if c not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_:":
             return ""
     if retval.count(":")>1:
         return ""
