@@ -794,12 +794,11 @@ class Bot_Listener(object):
         return self.is_ready.is_set()==True
 
     def work_loop(self):
-        last_check_status=False
-
         self.bot_handle=telepot.Bot(self.bot_token)
 
         bot_bind_ok=False
         activation_fail_announce=False
+        last_check_status=False
         while bot_bind_ok==False and self.request_exit.is_set()==False:
             try:
                 self.name=self.bot_handle.getMe()[u"username"]
@@ -821,7 +820,7 @@ class Bot_Listener(object):
             response=[]
 
             try:
-                response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1,allowed_updates=["message"])
                 check_status=True
             except:
                 check_status=False
@@ -843,12 +842,14 @@ class Bot_Listener(object):
         return
 
     def catch_up_IDs(self):
+        global IM_RELEVANCE_TIMEOUT_SECONDS
+
         retrieved=False
         responses=[]
         announced_fail=False
-        while retrieved==False:
+        while retrieved==False and self.request_exit.is_set()==False:
             try:
-                responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1)
+                responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1,allowed_updates=["message"])
                 retrieved=True
                 self.log("Caught up with messages.")
             except:
@@ -871,6 +872,8 @@ class Bot_Listener(object):
 
         newest_ID=self.last_ID_checked
         for i in reversed(range(len(input_msglist))):
+            if self.request_exit.is_set()==True:
+                break
             this_msg_ID=input_msglist[i][u"update_id"]
             if this_msg_ID>self.last_ID_checked:
                 if newest_ID<this_msg_ID:
@@ -898,6 +901,8 @@ class Bot_Listener(object):
         self.last_ID_checked=newest_ID
 
         for message in collect_new_messages:
+            if self.request_exit.is_set()==True:
+                break
             self.messagelist_lock[message].acquire()
             if len(collect_new_messages[message])>0:
                 self.user_messages[message]+=collect_new_messages[message]
@@ -909,7 +914,7 @@ class Bot_Listener(object):
 
     def consume_user_messages(self,input_username):
         self.messagelist_lock[input_username].acquire()
-        get_messages=self.user_messages[input_username]
+        get_messages=self.user_messages[input_username][:]
         self.user_messages[input_username]=[]
         self.messagelist_lock[input_username].release()
         return get_messages
