@@ -1151,6 +1151,8 @@ class User_Message_Handler(object):
         global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         for m in input_msglist:
+            if self.request_exit.is_set()==True:
+                break
             if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=IM_RELEVANCE_TIMEOUT_SECONDS:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
