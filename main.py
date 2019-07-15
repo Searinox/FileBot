@@ -1377,6 +1377,8 @@ class User_Message_Handler(object):
                             response=u"<Listing interrupted.>"
                             self.log("Listing for folder path \""+command_args+"\" was interrupted.")
                             break
+                        if self.request_exit.is_set()==True:
+                            break
                 else:
                     response=u"<Folder is empty.>"
                     self.log("Folder path \""+command_args+"\" was empty.")
