@@ -41,13 +41,14 @@ MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
 COMMAND_CHECK_INTERVAL_SECONDS=0.2
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
-USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.2
-CLIPBOARD_COPY_TIMEOUT_SECONDS=2
-CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
+USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
+USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS=0.1
+UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1.5
+UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
 TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.5
+TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
-LOG_UPDATE_INTERVAL_SECONDS=0.085
+UI_LOG_UPDATE_INTERVAL_SECONDS=0.085
 
 BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*50
 BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*20
@@ -157,27 +158,16 @@ def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_even
     return
 
 def terminate_with_backslash(input_string):
-    if isinstance(input_string,str)==False:
-        if input_string.endswith(u"\\")==False:
-            return input_string+u"\\"
-    else:
-        if input_string.endswith("\\")==False:
-            return input_string+"\\"
+    if input_string.endswith(u"\\")==False:
+        return input_string+u"\\"
     return input_string
 
 def sanitize_path(input_path):
-    if isinstance(input_path,str)==False:
-        for bad_pattern in [u"\\\\",u"\\.\\",u"\\.\\",u"?",u"*",u"|",u"<",u">",u"\""]:
-            if bad_pattern in input_path:
-                return u"<BAD PATH>"
-        if len(input_path)-1>len(input_path.replace(u":",u"")):
+    for bad_pattern in [u"\\\\",u"\\.\\",u"\\.\\",u"?",u"*",u"|",u"<",u">",u"\""]:
+        if bad_pattern in input_path:
             return u"<BAD PATH>"
-    else:
-        for bad_pattern in ["\\\\","\\.\\","\\.\\","?","*","|","<",">","\""]:
-            if bad_pattern in input_path:
-                return "<BAD PATH>"
-        if len(input_path)-1>len(input_path.replace(":","")):
-            return "<BAD PATH>"
+    if len(input_path)-1>len(input_path.replace(u":",u"")):
+        return u"<BAD PATH>"
     return input_path
 
 def OS_Uptime_Seconds():
@@ -969,6 +959,8 @@ class User_Message_Handler(object):
         return
 
     def sendmsg(self,sid,msg):
+        global USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS
+
         if self.request_exit.is_set()==True:
             return True
 
@@ -984,8 +976,12 @@ class User_Message_Handler(object):
             extra_sleep=(len(self.lastsent_timers)**1.9)/35.69
         else:
             extra_sleep=0
-        throttle_time=second_delay+max(extra_sleep-second_delay,0)
-        time.sleep(throttle_time)
+        throttle_time=(second_delay+max(extra_sleep-second_delay,0))*1000
+        start_time=GetTickCount64()
+        while GetTickCount64()-start_time<throttle_time and self.request_exit.is_set()==False:
+            time.sleep(USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS)
+        if self.request_exit.is_set()==True:
+            return True
         try:
             self.last_send_time=OS_Uptime_Seconds()
             self.bot_handle.sendMessage(sid,msg)
@@ -2281,14 +2277,14 @@ class Main_Window(QMainWindow):
         return
 
     def clipboard_insert(self):
-        global CLIPBOARD_COPY_TIMEOUT_SECONDS
+        global UI_CLIPBOARD_COPY_TIMEOUT_SECONDS
 
         if self.is_exiting.is_set()==True:
             return
 
         self.lock_clipboard.acquire()
         start_time=GetTickCount64()
-        while self.active_clipboard.text()!=self.clipboard_queue and (GetTickCount64()-start_time)/1000.0<CLIPBOARD_COPY_TIMEOUT_SECONDS:
+        while self.active_clipboard.text()!=self.clipboard_queue and (GetTickCount64()-start_time)/1000.0<UI_CLIPBOARD_COPY_TIMEOUT_SECONDS:
             self.active_clipboard.setText(self.clipboard_queue)
             QCoreApplication.processEvents()
         self.clipboard_queue=""
@@ -2313,7 +2309,7 @@ class Main_Window(QMainWindow):
         return
 
     def eventFilter(self,widget,event):
-        global CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS
+        global UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS
 
         if widget==self.input_commandfield:
             if self.input_commandfield.isEnabled()==True:
@@ -2343,7 +2339,7 @@ class Main_Window(QMainWindow):
                     rows=self.textbox_output.selectionModel().clearSelection()
                 elif key_pressed==Qt.Key_C:
                     if event.modifiers()&Qt.ControlModifier:
-                        if (GetTickCount64()-self.last_clipboard_selection_time)/1000.0>CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS:
+                        if (GetTickCount64()-self.last_clipboard_selection_time)/1000.0>UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS:
                             self.last_clipboard_selection_time=GetTickCount64()
                             rows=self.textbox_output.selectionModel().selectedRows()
                             if len(rows)>0:
@@ -2357,11 +2353,11 @@ class Main_Window(QMainWindow):
         return QWidget.eventFilter(self,widget,event)
 
     def queue_log_update(self):
-        global LOG_UPDATE_INTERVAL_SECONDS
+        global UI_LOG_UPDATE_INTERVAL_SECONDS
 
         if self.log_is_updating==False:
             self.log_is_updating=True
-            self.timer_update_output.start(max(0,self.last_log_update_time+LOG_UPDATE_INTERVAL_SECONDS*1000.0-GetTickCount64()))
+            self.timer_update_output.start(max(0,self.last_log_update_time+UI_LOG_UPDATE_INTERVAL_SECONDS*1000.0-GetTickCount64()))
         return
 
     def update_output(self):
