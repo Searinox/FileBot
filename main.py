@@ -783,7 +783,7 @@ class Telegram_Bot(object):
 
         return None
 
-    def perform_file_request(self,input_method,input_url,input_args,input_file=None):
+    def perform_file_request(self,input_method,input_url,input_args=None):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
         global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
         global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
@@ -793,10 +793,10 @@ class Telegram_Bot(object):
 
         response=None
         try:
-            if input_file is None:
-                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=True,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS))
+            if input_method=="POST":
+                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS))
             else:
-                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
+                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
         except:
             pass
         if response is not None:
@@ -871,7 +871,7 @@ class Telegram_Bot(object):
             except:
                 raise Exception("Request error.")
 
-        response=self.perform_file_request("GET",self.base_file_url+input_id,None)
+        response=self.perform_file_request("GET",self.base_file_url+input_id)
 
         if response is not None:
             file_handle=None
@@ -1351,7 +1351,6 @@ class User_Message_Handler(object):
                             self.sendmsg(m[u"from"][u"id"],u"Could not obtain the file name.")
                             proceed=False
                         if proceed==True:
-                            print m[u"audio"][u"file_size"]
                             self.process_files(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename,m[u"audio"][u"file_size"])
                     else:
                         self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the file name will not carry over.")
