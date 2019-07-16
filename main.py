@@ -794,6 +794,12 @@ class Telegram_Bot(object):
         response=None
         try:
             if input_method=="POST":
+                for keyname in input_args:
+                    if type(input_args[keyname])==tuple:
+                        if len(input_args[keyname])==2:
+                            if type(input_args[keyname][1])==file:
+                                input_args[keyname]=(input_args[keyname][0],input_args[keyname][1].read())
+                                break
                 response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS))
             else:
                 response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
@@ -842,7 +848,7 @@ class Telegram_Bot(object):
         filename=input_file_path.replace(u"/",u"\\")
         filename=filename[filename.rfind(u"\\")+1:]
         file_handle=open(input_file_path,"rb",buffering=0)
-        response=self.perform_file_request("POST",self.base_web_url+"sendDocument",{"chat_id":input_chat_id,"document":(filename,file_handle.read())})
+        response=self.perform_file_request("POST",self.base_web_url+"sendDocument",{"chat_id":input_chat_id,"document":(filename,file_handle)})
         file_handle.close()
         if response is not None:
             return response
