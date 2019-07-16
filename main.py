@@ -20,13 +20,12 @@ import threading
 import warnings
 import shutil
 import ctypes
-import ctypes.wintypes
+import ctypes.wintypes as wintypes
 import win32api
 import win32con
 import win32process
-import urllib2
-import ssl
-import telepot
+import urllib3
+import json
 from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel,QCoreApplication)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
@@ -50,10 +49,15 @@ TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
 UI_LOG_UPDATE_INTERVAL_SECONDS=0.085
 
-BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*50
-BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*20
-MAX_IM_SIZE_BYTES=4096
-IM_RELEVANCE_TIMEOUT_SECONDS=30
+TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
+TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS=60*60
+TELEGRAM_API_DOWNLOAD_CHUNK_BYTES=256*256
+TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*50
+TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*20
+TELEGRAM_API_MAX_IM_SIZE_BYTES=4096
+BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS=30
+
+WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
 
 FONT_POINT_SIZE=8
@@ -264,10 +268,10 @@ OBJS
 
 class ShellProcess(object):
     class startupinfow(ctypes.Structure):
-        _fields_=[("cb",ctypes.wintypes.DWORD),("lpReserved",ctypes.wintypes.LPWSTR),("lpDesktop",ctypes.wintypes.LPWSTR),("lpTitle",ctypes.wintypes.LPWSTR),("dwX",ctypes.wintypes.DWORD),("dwY",ctypes.wintypes.DWORD),("dwXSize",ctypes.wintypes.DWORD),("dwYSize",ctypes.wintypes.DWORD),("dwXCountChars",ctypes.wintypes.DWORD),("dwYCountChars",ctypes.wintypes.DWORD),("dwFillAtrribute",ctypes.wintypes.DWORD),("dwFlags",ctypes.wintypes.DWORD),("wShowWindow",ctypes.wintypes.WORD),("cbReserved2",ctypes.wintypes.WORD),("lpReserved2",ctypes.POINTER(ctypes.wintypes.BYTE)),("hStdInput",ctypes.wintypes.HANDLE),("hStdOutput",ctypes.wintypes.HANDLE),("hStdError",ctypes.wintypes.HANDLE)]
+        _fields_=[("cb",wintypes.DWORD),("lpReserved",wintypes.LPWSTR),("lpDesktop",wintypes.LPWSTR),("lpTitle",wintypes.LPWSTR),("dwX",wintypes.DWORD),("dwY",wintypes.DWORD),("dwXSize",wintypes.DWORD),("dwYSize",wintypes.DWORD),("dwXCountChars",wintypes.DWORD),("dwYCountChars",wintypes.DWORD),("dwFillAtrribute",wintypes.DWORD),("dwFlags",wintypes.DWORD),("wShowWindow",wintypes.WORD),("cbReserved2",wintypes.WORD),("lpReserved2",ctypes.POINTER(wintypes.BYTE)),("hStdInput",wintypes.HANDLE),("hStdOutput",wintypes.HANDLE),("hStdError",wintypes.HANDLE)]
 
     class process_information(ctypes.Structure):
-        _fields_=[("hProcess",ctypes.wintypes.HANDLE),("hThread",ctypes.wintypes.HANDLE),("dwProcessId",ctypes.wintypes.DWORD),("dwThreadId",ctypes.wintypes.DWORD)]
+        _fields_=[("hProcess",wintypes.HANDLE),("hThread",wintypes.HANDLE),("dwProcessId",wintypes.DWORD),("dwThreadId",wintypes.DWORD)]
 
     class process_handle(ctypes.c_void_p):
         def __init__(self,*a,**kw):
@@ -290,8 +294,8 @@ class ShellProcess(object):
         startup_info=win32process.STARTUPINFO()
         siw=ShellProcess.startupinfow(dwFlags=startup_info.dwFlags,wShowWindow=startup_info.wShowWindow,cb=ctypes.sizeof(self.startupinfow),hStdInput=int(startup_info.hStdInput),hStdOutput=int(startup_info.hStdOutput),hStdError=int(startup_info.hStdError))
         CreateProcessW=ctypes.windll.kernel32.CreateProcessW
-        CreateProcessW.argtypes=[ctypes.c_char_p,ctypes.c_wchar_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.wintypes.BOOL,ctypes.wintypes.DWORD,ctypes.wintypes.LPVOID,ctypes.c_char_p,ctypes.POINTER(self.startupinfow),ctypes.POINTER(self.process_information)]
-        CreateProcessW.restype=ctypes.wintypes.BOOL
+        CreateProcessW.argtypes=[ctypes.c_char_p,ctypes.c_wchar_p,ctypes.c_void_p,ctypes.c_void_p,wintypes.BOOL,wintypes.DWORD,wintypes.LPVOID,ctypes.c_char_p,ctypes.POINTER(self.startupinfow),ctypes.POINTER(self.process_information)]
+        CreateProcessW.restype=wintypes.BOOL
         get_process_info=self.process_information()
         result=CreateProcessW(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unicode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,siw,get_process_info)
         if result:
@@ -416,11 +420,10 @@ class Logger(object):
 
 class Time_Provider(object):
     def __init__(self):
+        urllib3.disable_warnings()
+        self.request_pool=urllib3.PoolManager()
         self.lock_time_delta=threading.Lock()
         self.time_delta=0
-        self.context_SSL_NOCERT=ssl.create_default_context()
-        self.context_SSL_NOCERT.check_hostname=False
-        self.context_SSL_NOCERT.verify_mode=ssl.CERT_NONE
         self.lock_subscribers=threading.Lock()
         self.signal_subscribers=[]
         return
@@ -460,8 +463,13 @@ class Time_Provider(object):
         return {"success":True,"time_difference":get_time_diff}
 
     def retrieve_current_UTC_internet_time(self):
-        response=urllib2.urlopen("https://time.gov/actualtime.cgi",context=self.context_SSL_NOCERT)
-        timestr=str(response.read())
+        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
+
+        response=self.request_pool.request(method="GET",url="https://time.gov/actualtime.cgi",preload_content=True,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS))
+        if response.status==200:
+            timestr=str(response.data)
+        else:
+            raise Exception("Could not get time.")
         quot1=timestr.find("time=\"")
         quot1+=len("time=\"")
         quot2=quot1+timestr[quot1+1:].find("\"")
@@ -742,9 +750,163 @@ class Task_Handler_7ZIP(object):
         return
 
 
+class Telegram_Bot(object):
+    def __init__(self,input_token):
+        urllib3.disable_warnings()
+        self.request_pool=urllib3.PoolManager()
+        self.bot_token=input_token
+        self.bot_name=""
+        self.is_stopped=threading.Event()
+        self.is_stopped.clear()
+        self.base_web_url="https://api.telegram.org/bot"+self.bot_token+"/"
+        self.base_file_url="https://api.telegram.org/file/bot"+self.bot_token+"/"
+        return
+
+    def perform_web_request(self,input_method,input_url,input_args):
+        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
+        global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
+
+        if self.is_stopped.is_set()==True:
+            return None
+
+        response=None
+        try:
+            response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
+        except:
+            pass
+        if response is not None:
+            if response.status in [200,201]:
+                response=json.loads(response.data)
+                if "ok" in response:
+                    if "result" in response:
+                        return response["result"]
+
+        return None
+
+    def perform_file_request(self,input_method,input_url,input_args,input_file=None):
+        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
+        global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
+        global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
+
+        if self.is_stopped.is_set()==True:
+            return None
+
+        response=None
+        try:
+            if input_file is None:
+                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=True,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS))
+            else:
+                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
+        except:
+            pass
+        if response is not None:
+            if response.status in [200,201]:
+                return response
+
+        return None
+
+    def Get_Bot_Info(self):
+        if self.is_stopped.is_set()==True:
+            raise Exception("Bot is stopped.")
+
+        response=self.perform_web_request("GET",self.base_web_url+"getMe",None)
+        if response is not None:
+            return response
+
+        raise Exception("Response error.")
+
+    def Get_Messages(self,input_id):
+        if self.is_stopped.is_set()==True:
+            raise Exception("Bot is stopped.")
+
+        response=self.perform_web_request("GET",self.base_web_url+"getUpdates",{"offset":input_id,"allowed_updates":["message"]})
+        if response is not None:
+            return response
+
+        raise Exception("Response error.")
+
+    def Send_Message(self,input_chat_id,input_message):
+        if self.is_stopped.is_set()==True:
+            raise Exception("Bot is stopped.")
+
+        response=self.perform_web_request("POST",self.base_web_url+"sendMessage",{"chat_id":input_chat_id,"text":input_message})
+        if response is not None:
+            return response
+
+        raise Exception("Response error.")
+
+    def Send_File(self,input_chat_id,input_file_path):
+        if self.is_stopped.is_set()==True:
+            raise Exception("Bot is stopped.")
+
+        filename=input_file_path.replace(u"/",u"\\")
+        filename=filename[filename.rfind(u"\\")+1:]
+        file_handle=open(input_file_path,"rb",buffering=0)
+        response=self.perform_file_request("POST",self.base_web_url+"sendDocument",{"chat_id":input_chat_id,"document":(filename,file_handle.read())})
+        file_handle.close()
+        if response is not None:
+            return response
+
+        raise Exception("Response error.")
+
+    def Get_File_Info(self,input_id):
+        if self.is_stopped.is_set()==True:
+            return None
+
+        response=self.perform_web_request("GET",self.base_web_url+"getFile",{"file_id":input_id})
+        if response is not None:
+            return response
+
+        raise Exception("Response error.")
+
+    def Get_File(self,input_id,input_path):
+        global TELEGRAM_API_DOWNLOAD_CHUNK_BYTES
+
+        if self.is_stopped.is_set()==True:
+            raise Exception("Bot is stopped.")
+
+        if "/" not in input_id and "\\" not in input_id:
+            try:
+                input_id=self.Get_File_Info(input_id)[u"file_path"]
+            except:
+                raise Exception("Request error.")
+
+        response=self.perform_file_request("GET",self.base_file_url+input_id,None)
+
+        if response is not None:
+            file_handle=None
+            try:
+                file_handle=open(input_path,"wb")
+                for chunk in response.stream(TELEGRAM_API_DOWNLOAD_CHUNK_BYTES):
+                    if self.is_stopped.is_set()==True:
+                        file_handle.close()
+                        os.remove(input_path)
+                        raise Exception("Download error.")
+                    file_handle.write(chunk)
+                file_handle.close()
+                return
+            except:
+                if file_handle is not None:
+                    try:
+                        file_handle.close()
+                    except:
+                        pass
+
+                os.remove(input_path)
+                raise Exception("Download error.")
+
+        raise Exception("Response error.")
+
+    def DEACTIVATE(self):
+        self.is_stopped.set()
+        self.request_pool.clear()
+        self.request_pool.pools=None
+        self.request_pool=None
+        return
+
+
 class Bot_Listener(object):
     def __init__(self,input_token,username_list,input_timeprovider,input_signaller,input_logger=None):
-        self.bot_token=input_token
         self.active_logger=input_logger
         self.request_exit=threading.Event()
         self.request_exit.clear()
@@ -765,6 +927,7 @@ class Bot_Listener(object):
         self.user_messages={}
         for username in self.listen_users:
             self.user_messages[username]=[]
+        self.bot_handle=Telegram_Bot(input_token)
         return
 
     def log(self,input_text):
@@ -776,6 +939,7 @@ class Bot_Listener(object):
         self.working_thread.start()
 
     def REQUEST_STOP(self):
+        self.bot_handle.DEACTIVATE()
         self.request_exit.set()
         return
 
@@ -794,14 +958,12 @@ class Bot_Listener(object):
         return self.is_ready.is_set()==True
 
     def work_loop(self):
-        self.bot_handle=telepot.Bot(self.bot_token)
-
         bot_bind_ok=False
         activation_fail_announce=False
         last_check_status=False
         while bot_bind_ok==False and self.request_exit.is_set()==False:
             try:
-                self.name=self.bot_handle.getMe()[u"username"]
+                self.name=self.bot_handle.Get_Bot_Info()[u"username"]
                 bot_bind_ok=True
             except:
                 if activation_fail_announce==False:
@@ -820,7 +982,7 @@ class Bot_Listener(object):
             response=[]
 
             try:
-                response=self.bot_handle.getUpdates(offset=self.last_ID_checked+1,allowed_updates=["message"])
+                response=self.bot_handle.Get_Messages(self.last_ID_checked+1)
                 check_status=True
             except:
                 check_status=False
@@ -842,14 +1004,14 @@ class Bot_Listener(object):
         return
 
     def catch_up_IDs(self):
-        global IM_RELEVANCE_TIMEOUT_SECONDS
+        global BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS
 
         retrieved=False
         responses=[]
         announced_fail=False
         while retrieved==False and self.request_exit.is_set()==False:
             try:
-                responses=self.bot_handle.getUpdates(offset=self.last_ID_checked+1,allowed_updates=["message"])
+                responses=self.bot_handle.Get_Messages(self.last_ID_checked+1)
                 retrieved=True
                 self.log("Caught up with messages.")
             except:
@@ -864,7 +1026,7 @@ class Bot_Listener(object):
         return
 
     def organize_messages(self,input_msglist):
-        global IM_RELEVANCE_TIMEOUT_SECONDS
+        global BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS
 
         collect_new_messages={}
         for username in self.listen_users:
@@ -883,7 +1045,7 @@ class Bot_Listener(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if self.active_time_provider.GET_SERVER_TIME()-msg_send_time<=IM_RELEVANCE_TIMEOUT_SECONDS:
+                    if self.active_time_provider.GET_SERVER_TIME()-msg_send_time<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                         if u"username" in input_msglist[i][u"message"][u"from"]:
                             msg_user=input_msglist[i][u"message"][u"from"][u"username"]
                         else:
@@ -907,7 +1069,7 @@ class Bot_Listener(object):
             if len(collect_new_messages[message])>0:
                 self.user_messages[message]+=collect_new_messages[message]
             for i in reversed(range(len(self.user_messages[message]))):
-                if self.active_time_provider.GET_SERVER_TIME()-self.user_messages[message][i][u"date"]>IM_RELEVANCE_TIMEOUT_SECONDS:
+                if self.active_time_provider.GET_SERVER_TIME()-self.user_messages[message][i][u"date"]>BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                     del self.user_messages[message][i]
             self.messagelist_lock[message].release()
         return
@@ -928,7 +1090,6 @@ class User_Message_Handler(object):
         self.active_7zip_task_handler=input_7zip_task_handler
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
-        self.bot_token=input_token
         self.listener=input_listener_service
         self.request_exit=threading.Event()
         self.request_exit.clear()
@@ -951,7 +1112,7 @@ class User_Message_Handler(object):
         self.active_time_provider=input_timeprovider
         self.processing_messages=threading.Event()
         self.processing_messages.clear()
-        self.bot_handle=None
+        self.bot_handle=Telegram_Bot(input_token)
         if self.allowed_root==u"*":
             self.set_last_folder(PATH_WINDOWS_SYSTEM32[0].upper()+u":\\")
         else:
@@ -989,7 +1150,7 @@ class User_Message_Handler(object):
             return True
         try:
             self.last_send_time=OS_Uptime_Seconds()
-            self.bot_handle.sendMessage(sid,msg)
+            self.bot_handle.Send_Message(sid,msg)
             self.lastsent_timers+=[self.last_send_time]
             excess_entries=max(0,len(self.lastsent_timers)-40)
             for _ in range(excess_entries):
@@ -1065,13 +1226,11 @@ class User_Message_Handler(object):
 
         self.log("User Message Handler started, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
 
-        self.bot_handle=telepot.Bot(self.bot_token)
-
         bot_bind_ok=False
         activation_fail_announce=False
         while bot_bind_ok==False and self.request_exit.is_set()==False:
             try:
-                self.bot_handle.getMe()[u"username"]
+                self.bot_handle.Get_Bot_Info()[u"username"]
                 bot_bind_ok=True
             except:
                 if activation_fail_announce==False:
@@ -1137,6 +1296,7 @@ class User_Message_Handler(object):
 
     def REQUEST_STOP(self):
         self.listen_flag.clear()
+        self.bot_handle.DEACTIVATE()
         self.request_exit.set()
         return
 
@@ -1152,13 +1312,13 @@ class User_Message_Handler(object):
         return self.has_quit.is_set()==False
 
     def process_messages(self,input_msglist):
-        global IM_RELEVANCE_TIMEOUT_SECONDS
-        global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
+        global BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS
+        global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         for m in input_msglist:
             if self.request_exit.is_set()==True:
                 break
-            if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=IM_RELEVANCE_TIMEOUT_SECONDS:
+            if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                 if u"text" in m:
                     self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
                 else:
@@ -1167,7 +1327,7 @@ class User_Message_Handler(object):
                     elif u"audio" in m:
                         proceed=True
                         try:
-                            filename=self.bot_handle.getFile(m[u"audio"][u"file_id"])[u"file_path"]
+                            filename=self.bot_handle.Get_File_Info(m[u"audio"][u"file_id"])[u"file_path"]
                             filename=filename[filename.rfind(u"/")+1:]
                             fileext=filename[filename.rfind(u".")+1:]
                             filetitle=""
@@ -1198,19 +1358,19 @@ class User_Message_Handler(object):
         return
 
     def process_files(self,sid,fid,filename,filesize):
-        global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
+        global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!=u"" or self.allow_writing==False:
             return
 
-        if filesize<=BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES:
+        if filesize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES:
             foldername=self.get_last_folder()
             complete_put_path=foldername+filename
             self.sendmsg(sid,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
             self.log("Receiving file \""+complete_put_path+"\"...")
             if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
                     try:
-                        self.bot_handle.download_file(fid,complete_put_path)
+                        self.bot_handle.Get_File(fid,complete_put_path)
                         self.sendmsg(sid,u"Finished putting file \""+complete_put_path+u"\".")
                         self.log("File download complete.")
                     except:
@@ -1220,12 +1380,12 @@ class User_Message_Handler(object):
                 self.sendmsg(sid,u"File \""+filename+u"\" already exists at the location.")
                 self.log("File download aborted due to existing instance.")
         else:
-            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+unicode(readable_size(BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".")
+            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+unicode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".")
             self.log("File download aborted due to size exceeding limit.")
         return
 
     def segment_file_list_string(self,input_string):
-        global MAX_IM_SIZE_BYTES
+        global TELEGRAM_API_MAX_IM_SIZE_BYTES
 
         retval=[]
         input_list=input_string.split(u"\n")
@@ -1233,7 +1393,7 @@ class User_Message_Handler(object):
 
         for file_listing in input_list:
             new_entry=file_listing.strip()+u"\n"
-            if len(new_entry)+len(current_message)<=MAX_IM_SIZE_BYTES+1:
+            if len(new_entry)+len(current_message)<=TELEGRAM_API_MAX_IM_SIZE_BYTES+1:
                 current_message+=new_entry
             else:
                 current_message=current_message[:-1]
@@ -1293,8 +1453,8 @@ class User_Message_Handler(object):
         return response
 
     def process_instructions(self,sid,msg,cid):
-        global BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
-        global BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
+        global TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
+        global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!=u"":
             if msg.lower().startswith(u"/unlock ")==True:
@@ -1424,11 +1584,11 @@ class User_Message_Handler(object):
                     self.sendmsg(sid,u"Getting file, please wait...")
                     try:
                         fsize=os.path.getsize(newpath)
-                        if fsize<=BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                            self.bot_handle.sendDocument(cid,open(newpath,"rb"))
+                        if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                            self.bot_handle.Send_File(cid,newpath)
                         else:
                             if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                response=u"Bots cannot upload files larger than "+unicode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                 self.log("Requested file \""+newpath+"\" too large to get.")
                             else:
                                 response=u"File is empty."
@@ -1501,12 +1661,12 @@ class User_Message_Handler(object):
                         success=False
                         try:
                             fsize=os.path.getsize(newpath)
-                            if fsize<=BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                                self.bot_handle.sendDocument(cid,open(newpath,"rb"))
+                            if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                                self.bot_handle.Send_File(cid,newpath)
                                 success=True
                             else:
                                 if fsize!=0:
-                                    response=u"Bots cannot upload files larger than "+unicode(readable_size(BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                    response=u"Bots cannot upload files larger than "+unicode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                     self.log("Requested file \""+newpath+"\" too large to eat.")
                                 else:
                                     response=u"File is empty."
@@ -1723,9 +1883,9 @@ class User_Message_Handler(object):
             response+=u"/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+=u"/unlock <PASSWORD>: unlock the bot\n"
             response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
-            response+=u"File size limit for getting files from host system: "+unicode(readable_size(BOT_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u"."
+            response+=u"File size limit for getting files from host system: "+unicode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u"."
             if self.allow_writing==True:
-                response+=u"\nFile size limit for putting files on host system: "+unicode(readable_size(BOT_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".\n"
+                response+=u"\nFile size limit for putting files on host system: "+unicode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".\n"
                 response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
             self.log(u"Help requested.")
         else:
