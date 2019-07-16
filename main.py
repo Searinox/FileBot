@@ -420,11 +420,14 @@ class Logger(object):
 
 class Time_Provider(object):
     def __init__(self):
+        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
+
         urllib3.disable_warnings()
         self.request_pool=urllib3.PoolManager()
         self.lock_time_delta=threading.Lock()
         self.time_delta=0
         self.lock_subscribers=threading.Lock()
+        self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.signal_subscribers=[]
         return
 
@@ -463,9 +466,7 @@ class Time_Provider(object):
         return {"success":True,"time_difference":get_time_diff}
 
     def retrieve_current_UTC_internet_time(self):
-        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
-
-        response=self.request_pool.request(method="GET",url="https://time.gov/actualtime.cgi",preload_content=True,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS))
+        response=self.request_pool.request(method="GET",url="https://time.gov/actualtime.cgi",preload_content=True,chunked=False,timeout=self.request_timeout)
         if response.status==200:
             timestr=str(response.data)
         else:
@@ -752,26 +753,29 @@ class Task_Handler_7ZIP(object):
 
 class Telegram_Bot(object):
     def __init__(self,input_token):
+        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
+        global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
+        global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
+
         urllib3.disable_warnings()
         self.request_pool=urllib3.PoolManager()
         self.bot_token=input_token
-        self.bot_name=""
         self.is_stopped=threading.Event()
         self.is_stopped.clear()
         self.base_web_url="https://api.telegram.org/bot"+self.bot_token+"/"
         self.base_file_url="https://api.telegram.org/file/bot"+self.bot_token+"/"
+        self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
+        self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
+        self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
         return
 
     def perform_web_request(self,input_method,input_url,input_args):
-        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
-        global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
-
         if self.is_stopped.is_set()==True:
             return None
 
         response=None
         try:
-            response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
+            response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=False,timeout=self.timeout_web)
         except:
             pass
         if response is not None:
@@ -784,10 +788,6 @@ class Telegram_Bot(object):
         return None
 
     def perform_file_request(self,input_method,input_url,input_args=None):
-        global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
-        global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
-        global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
-
         if self.is_stopped.is_set()==True:
             return None
 
@@ -800,9 +800,9 @@ class Telegram_Bot(object):
                             if type(input_args[keyname][1])==file:
                                 input_args[keyname]=(input_args[keyname][0],input_args[keyname][1].read())
                                 break
-                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS))
+                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=self.timeout_upload)
             else:
-                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=False,timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS))
+                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=False,timeout=self.timeout_download)
         except:
             pass
         if response is not None:
