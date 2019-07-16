@@ -1,7 +1,5 @@
 # FileBot - Telegram file server bot for Windows 7 and higher written in Python 2.7
 
-This bot is based on the Telepot library by nickcoala. (https://github.com/nickoala/telepot)
-
 7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/
 
 The bot serves files from the host machine.
