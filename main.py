@@ -25,6 +25,7 @@ import win32api
 import win32con
 import win32process
 import urllib3
+import ssl
 import json
 from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel,QCoreApplication)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
@@ -422,12 +423,14 @@ class Time_Provider(object):
     def __init__(self):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
 
-        urllib3.disable_warnings()
-        self.request_pool=urllib3.PoolManager()
+        ssl_cert_context=ssl.create_default_context()
+        ssl_cert_context.check_hostname=True
+        ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
+        self.request_pool=urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
+        self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.lock_time_delta=threading.Lock()
         self.time_delta=0
         self.lock_subscribers=threading.Lock()
-        self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.signal_subscribers=[]
         return
 
@@ -757,16 +760,18 @@ class Telegram_Bot(object):
         global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
         global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
 
-        urllib3.disable_warnings()
-        self.request_pool=urllib3.PoolManager()
+        ssl_cert_context=ssl.create_default_context()
+        ssl_cert_context.check_hostname=True
+        ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
+        self.request_pool=urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
+        self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
+        self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
+        self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
         self.bot_token=input_token
         self.is_stopped=threading.Event()
         self.is_stopped.clear()
         self.base_web_url="https://api.telegram.org/bot"+self.bot_token+"/"
         self.base_file_url="https://api.telegram.org/file/bot"+self.bot_token+"/"
-        self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
-        self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
-        self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
         return
 
     def perform_web_request(self,input_method,input_url,input_args):
