@@ -48,7 +48,7 @@ UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
 TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
 TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
-UI_LOG_UPDATE_INTERVAL_SECONDS=0.055
+UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS=0.055
 
 TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
 TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS=60*60
@@ -1096,7 +1096,7 @@ class Bot_Listener(object):
 
 
 class User_Message_Handler(object):
-    def __init__(self,input_token,input_root,input_user,input_write,input_listener_service,input_timeprovider,input_7zip_task_handler,input_logger=None):
+    def __init__(self,input_token,input_root,input_user,input_write,input_blacklisted_paths,input_listener_service,input_timeprovider,input_7zip_task_handler,input_logger=None):
         global PATH_WINDOWS_SYSTEM32
 
         self.active_logger=input_logger
@@ -1130,6 +1130,12 @@ class User_Message_Handler(object):
             self.set_last_folder(PATH_WINDOWS_SYSTEM32[0].upper()+u":\\")
         else:
             self.set_last_folder(self.allowed_root)
+        if self.allowed_root!=u"*":
+            self.blacklisted_paths=input_blacklisted_paths
+        else:
+            self.blacklisted_paths=[]
+        for i in range(len(self.blacklisted_paths)):
+            self.blacklisted_paths[i]=self.blacklisted_paths[i].lower()
         return
 
     def log(self,input_text):
@@ -1174,13 +1180,16 @@ class User_Message_Handler(object):
             return False
 
     def allowed_path(self,input_path):
-        if input_path.lower().startswith(self.allowed_root.lower())==True or self.allowed_root==u"*":
-            if u"\\.\\" in input_path or u"\\..\\" in input_path:
-                return False
-            else:
-                return True
-        else:
+        test_path=input_path.lower().strip()
+        if u"\\.\\" in test_path or u"\\..\\" in test_path:
             return False
+        if self.allowed_root!=u"*":
+            if test_path.startswith(self.allowed_root.lower())==False:
+                return False
+            for check_path in self.blacklisted_paths:
+                if test_path.startswith(check_path):
+                    return False
+        return True
 
     def usable_dir(self,newpath):
         if self.allowed_path(newpath)==True:
@@ -2535,12 +2544,12 @@ class Main_Window(QMainWindow):
         return QWidget.eventFilter(self,widget,event)
 
     def queue_log_update(self):
-        global UI_LOG_UPDATE_INTERVAL_SECONDS
+        global UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS
 
         if self.log_is_updating==False:
             self.log_is_updating=True
             extra_timer=max(self.last_log_update_duration-GetTickCount64()+self.last_log_update_time,0)*1.1
-            self.timer_update_output.start(max(0,self.last_log_update_time+UI_LOG_UPDATE_INTERVAL_SECONDS*1000.0+extra_timer-GetTickCount64()))
+            self.timer_update_output.start(max(0,self.last_log_update_time+UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS*1000.0+extra_timer-GetTickCount64()))
         return
 
     def update_output(self):
@@ -2855,7 +2864,8 @@ log("\n\nREQUIREMENTS:\n"+\
     "Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+\
     "If a user has no username, you can add them via first name and last name with a \"#\" before each. EXAMPLE:\n"+\
     "FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+\
-    "Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n\n"+\
+    "Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n"+\
+    "Note that users without \"*\" home path will be disallowed from accessing FileBot's running folder even if it's a valid subfolder.\n\n"+\
     "EXAMPLE ENTRIES:\n"+\
     "JohnDoe|C:\\MySharedFiles\n"+\
     "TrustedUser|>*\n\n"+\
@@ -2958,7 +2968,7 @@ if fatal_error==False:
 
             log("User message handler(s) starting up...")
             for sender in collect_allowed_users:
-                UserHandleInstances+=[User_Message_Handler(collect_bot_token,sender["home"],sender["username"],sender["allow_write"],Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
+                UserHandleInstances+=[User_Message_Handler(collect_bot_token,sender["home"],sender["username"],sender["allow_write"],[environment_info["working_dir"]],Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
 
             request_sync_time=threading.Event()
             request_sync_time.clear()
