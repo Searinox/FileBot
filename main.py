@@ -43,12 +43,12 @@ SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
 USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS=0.1
-UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1.5
+UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1.2
 UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
 TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
 TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
-UI_LOG_UPDATE_INTERVAL_SECONDS=0.085
+UI_LOG_UPDATE_INTERVAL_SECONDS=0.055
 
 TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
 TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS=60*60
@@ -68,7 +68,7 @@ CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
-QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","QTextCursor::setPosition: Position '","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
+QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 
@@ -902,8 +902,10 @@ class Telegram_Bot(object):
                         file_handle.close()
                     except:
                         pass
-
-                os.remove(input_path)
+                try:
+                    os.remove(input_path)
+                except:
+                    pass
                 raise Exception("Download error.")
 
         raise Exception("Response error.")
@@ -1491,7 +1493,7 @@ class User_Message_Handler(object):
             cmd_end=len(msg)
         command_type=msg[1:cmd_end].strip().lower()
         command_args=msg[cmd_end+1:].strip()
-        response=""
+        response=u""
 
         if command_type==u"start":
             self.log("User has sent a start request.")
@@ -1835,7 +1837,7 @@ class User_Message_Handler(object):
                     response=u"File not found or inaccessible."
                     self.log("Zip \""+command_args+"\" file not found or inaccessible.")
             else:
-                response="A file or folder name or path must be provided."
+                response=u"A file or folder name or path must be provided."
                 self.log("Attempted to zip without a name or path.")
 
         elif command_type==u"listzips" and self.allow_writing==True:
@@ -2308,6 +2310,7 @@ class Main_Window(QMainWindow):
         self.update_log_on_restore=False
         self.clipboard_queue=""
         self.log_is_updating=False
+        self.last_log_update_duration=0
         self.last_clipboard_selection_time=GetTickCount64()
         self.last_log_update_time=GetTickCount64()
 
@@ -2536,7 +2539,8 @@ class Main_Window(QMainWindow):
 
         if self.log_is_updating==False:
             self.log_is_updating=True
-            self.timer_update_output.start(max(0,self.last_log_update_time+UI_LOG_UPDATE_INTERVAL_SECONDS*1000.0-GetTickCount64()))
+            extra_timer=max(self.last_log_update_duration-GetTickCount64()+self.last_log_update_time,0)*1.1
+            self.timer_update_output.start(max(0,self.last_log_update_time+UI_LOG_UPDATE_INTERVAL_SECONDS*1000.0+extra_timer-GetTickCount64()))
         return
 
     def update_output(self):
@@ -2546,6 +2550,7 @@ class Main_Window(QMainWindow):
             return
 
         self.lock_log_queue.acquire()
+        self.last_log_update_duration=GetTickCount64()
         get_output_queue=self.output_queue[:]
         self.output_queue=[]
         self.lock_log_queue.release()
@@ -2567,6 +2572,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.scrollToBottom()
         self.textbox_output.setUpdatesEnabled(True)
         self.last_log_update_time=GetTickCount64()
+        self.last_log_update_duration=self.last_log_update_time-self.last_log_update_duration
         self.log_is_updating=False
 
         self.lock_output_update.release()
