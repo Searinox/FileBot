@@ -2280,7 +2280,7 @@ class Main_Window(QMainWindow):
                 if fontproperty=="strikeout":
                     self.font_cache[fontname].setStrikeOut(True)
 
-        self.setFixedSize(900*UI_SCALE,600*UI_SCALE)
+        self.setFixedSize(880*UI_SCALE,600*UI_SCALE)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
 
         self.lock_log_queue=threading.Lock()
@@ -2359,36 +2359,36 @@ class Main_Window(QMainWindow):
 
         self.label_botname=QLabel(self)
         self.label_botname.setText("Bot name:")
-        self.label_botname.setGeometry(22*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botname.setGeometry(12*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botname.setFont(self.font_cache["general"])
         self.label_botname.setAlignment(Qt.AlignLeft)
 
         self.label_botname_value=QLabel(self)
-        self.label_botname_value.setGeometry(75*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botname_value.setGeometry(65*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botname_value.setFont(self.font_cache["status"])
         self.label_botname_value.setText("<not retrieved>")
         self.label_botname_value.setAlignment(Qt.AlignLeft)
 
         self.label_botstatus=QLabel(self)
         self.label_botstatus.setText("Status:")
-        self.label_botstatus.setGeometry(367*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus.setGeometry(357*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
 
         self.label_botstatus_value=QLabel(self)
-        self.label_botstatus_value.setGeometry(405*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus_value.setGeometry(395*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus_value.setFont(self.font_cache["status"])
         self.label_botstatus_value.setText("NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
-        self.label_clock_bias.setGeometry(615*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias.setGeometry(605*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias_value=QLabel(self)
-        self.label_clock_bias_value.setGeometry(795*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias_value.setGeometry(785*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
@@ -2396,7 +2396,7 @@ class Main_Window(QMainWindow):
         self.textbox_output=QListView(self)
         self.textbox_output.setModel(QStringListModel(self))
         self.textbox_output.setFont(self.font_cache["log"])
-        self.textbox_output.setGeometry(20*UI_SCALE,24*UI_SCALE,860*UI_SCALE,524*UI_SCALE)
+        self.textbox_output.setGeometry(10*UI_SCALE,24*UI_SCALE,860*UI_SCALE,524*UI_SCALE)
         self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#808080; color:#000000;}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn);
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff);
@@ -2415,12 +2415,12 @@ class Main_Window(QMainWindow):
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
-        self.label_commands.setGeometry(390*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_commands.setGeometry(380*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
 
         self.input_commandfield=QLineEdit(self)
-        self.input_commandfield.setGeometry(20*UI_SCALE,566*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
+        self.input_commandfield.setGeometry(10*UI_SCALE,566*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
         self.input_commandfield.setFont(self.font_cache["log"])
         self.input_commandfield.setMaxLength(137)
         self.input_commandfield.setAcceptDrops(False)
