@@ -7,33 +7,28 @@ INIT
 """
 
 
-try:
-    import sip
-except:
-    pass
+import unidecode
 import base64
 import time
 import datetime
 import sys
 import os
 import threading
-import warnings
 import shutil
 import ctypes
 import ctypes.wintypes as wintypes
-import win32api
 import win32con
 import win32process
 import urllib3
 import ssl
 import json
-from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,qInstallMessageHandler,QEvent,QTimer,QStringListModel,QCoreApplication)
+from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QStringListModel,QCoreApplication)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
 
 def Get_B64_Resource(input_path):
     import resources_base64
-    return resources_base64.Get_Resource(input_path)
+    return bytes(resources_base64.Get_Resource(input_path),"utf8")
 
 MAINTHREAD_HEARTBEAT_SECONDS=0.085
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.1
@@ -68,8 +63,6 @@ CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
-QTMSG_BLACKLIST_STARTSWITH=["Qt: Untested Windows version","WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
-
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 
 
@@ -81,16 +74,6 @@ DEFS
 GetTickCount64=ctypes.windll.kernel32.GetTickCount64
 GetTickCount64.restype=ctypes.c_uint64
 GetTickCount64.argtypes=()
-
-def qtmsg_handler(msg_type,msg_log_context,msg_string):
-    global QTMSG_BLACKLIST_STARTSWITH
-
-    for entry in QTMSG_BLACKLIST_STARTSWITH:
-        if msg_string.startswith(entry):
-            return
-
-    sys.stderr.write(msg_string+"\n")
-    return
 
 def Flush_Std_Buffers():
     sys.stdout.flush()
@@ -190,7 +173,7 @@ def readable_size(input_size):
 def Bot_Token_From_String(from_string):
     retval=from_string
     try:
-        retval=str(retval.encode("utf-8").strip())
+        retval=str(retval.strip())
     except:
         return ""
     if len(retval)==0 or len(retval)>64:
@@ -220,7 +203,7 @@ def User_Entry_From_String(from_string):
             raise ValueError("Wrong number of \"|\"-separated characters.")
 
         retval["username"]=segments[0]
-        retval["home"]=unicode(segments[1]).strip()
+        retval["home"]=unidecode.unidecode(segments[1]).strip()
         retval["allow_write"]=False
 
         if retval["username"].count("#")!=2 and retval["username"].count("#")!=0:
@@ -298,7 +281,7 @@ class ShellProcess(object):
         CreateProcessW.argtypes=[ctypes.c_char_p,ctypes.c_wchar_p,ctypes.c_void_p,ctypes.c_void_p,wintypes.BOOL,wintypes.DWORD,wintypes.LPVOID,ctypes.c_char_p,ctypes.POINTER(self.startupinfow),ctypes.POINTER(self.process_information)]
         CreateProcessW.restype=wintypes.BOOL
         get_process_info=self.process_information()
-        result=CreateProcessW(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unicode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,siw,get_process_info)
+        result=CreateProcessW(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unidecode.unidecode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,siw,get_process_info)
         if result:
             self.process_handle=self.process_handle(get_process_info.hProcess)
             self.process_ID=get_process_info.dwProcessId
@@ -382,11 +365,11 @@ class Logger(object):
             return
 
         if input_data!="":
-            source_literal=str(source.encode("utf-8"))
-            input_literal=str(input_data.encode("utf-8"))
+            source_literal=str(source)
+            input_literal=str(input_data)
         else:
             source_literal=""
-            input_literal=str(source.encode("utf-8"))
+            input_literal=str(source)
         if source!="":
             source_literal=" ["+source_literal+"] "
         else:
@@ -522,7 +505,7 @@ class Task_Handler_7ZIP(object):
         self.list_end_tasks_PIDs=[]
         self.list_end_tasks_users=[]
 
-        input_path_7zip=unicode(input_path_7zip)
+        input_path_7zip=unidecode.unidecode(input_path_7zip)
         input_path_7zip=input_path_7zip.replace(u"/",u"\\")
         input_path_7zip=terminate_with_backslash(input_path_7zip)
         self.path_7zip_bin=os.path.join(input_path_7zip,u"7z.exe")
@@ -530,7 +513,7 @@ class Task_Handler_7ZIP(object):
 
         try:
             write_7z_binary=open(self.path_7zip_bin,"w+b")
-            write_7z_binary.write(base64.decodestring(input_7zip_binary_base64))
+            write_7z_binary.write(base64.decodebytes(input_7zip_binary_base64))
             self.binary_7zip_read=open(self.path_7zip_bin,"rb")
             write_7z_binary.close()
         except:
@@ -729,7 +712,7 @@ class Task_Handler_7ZIP(object):
 
             if terminate==True:
                 self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
-                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+unicode(str(get_PID))),u"file":self.instances_7zip[i][u"temp_file"]}]
+                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+unidecode.unidecode(str(get_PID))),u"file":self.instances_7zip[i][u"temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
@@ -802,7 +785,7 @@ class Telegram_Bot(object):
                 for keyname in input_args:
                     if type(input_args[keyname])==tuple:
                         if len(input_args[keyname])==2:
-                            if type(input_args[keyname][1])==file:
+                            if str(type(input_args[keyname][1]))=="<class '_io.TextIOWrapper'>":
                                 input_args[keyname]=(input_args[keyname][0],input_args[keyname][1].read())
                                 break
                 response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=self.timeout_upload)
@@ -1117,7 +1100,7 @@ class User_Message_Handler(object):
         self.account_username=input_user
         self.lastsent_timers=[]
         self.bot_lock_pass=u""
-        self.allowed_root=unicode(input_root)
+        self.allowed_root=unidecode.unidecode(input_root)
         self.pending_lockclear=threading.Event()
         self.pending_lockclear.clear()
         self.lock_status=threading.Event()
@@ -1200,7 +1183,7 @@ class User_Message_Handler(object):
 
     def proper_caps_path(self,input_path):
         try:
-            retval=unicode(win32api.GetLongPathNameW(win32api.GetShortPathName(input_path)))
+            retval=unidecode.unidecode(ctypes.windll.kernel32.GetLongPathNameW(ctypes.windll.kernel32.GetShortPathName(input_path)))
         except:
             retval=input_path
         if len(retval)>1:
@@ -1401,7 +1384,7 @@ class User_Message_Handler(object):
                 self.sendmsg(sid,u"File \""+filename+u"\" already exists at the location.")
                 self.log("File download aborted due to existing instance.")
         else:
-            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+unicode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".")
+            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".")
             self.log("File download aborted due to size exceeding limit.")
         return
 
@@ -1449,7 +1432,7 @@ class User_Message_Handler(object):
                 if os.path.isfile(path):
                     if folders_only==False:
                         if name.lower().find(search)!=-1 or search==u"":
-                            filelist+=[name+u" [Size: "+unicode(readable_size(os.path.getsize(path)))+u"]"]
+                            filelist+=[name+u" [Size: "+unidecode.unidecode(readable_size(os.path.getsize(path)))+u"]"]
                 else:
                     if name.lower().find(search)!=-1 or search==u"":
                         folderlist+=[name]
@@ -1609,7 +1592,7 @@ class User_Message_Handler(object):
                             self.bot_handle.Send_File(cid,newpath)
                         else:
                             if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+unicode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                response=u"Bots cannot upload files larger than "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                 self.log("Requested file \""+newpath+"\" too large to get.")
                             else:
                                 response=u"File is empty."
@@ -1687,7 +1670,7 @@ class User_Message_Handler(object):
                                 success=True
                             else:
                                 if fsize!=0:
-                                    response=u"Bots cannot upload files larger than "+unicode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                    response=u"Bots cannot upload files larger than "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                     self.log("Requested file \""+newpath+"\" too large to eat.")
                                 else:
                                     response=u"File is empty."
@@ -1890,7 +1873,7 @@ class User_Message_Handler(object):
             response+=u"/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+=u"/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+unicode(str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER()))+u" simultaneous tasks\n"
+                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+unidecode.unidecode(str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER()))+u" simultaneous tasks\n"
                 response+=u"/listzips: list all running 7-ZIP archival tasks\n"
                 response+=u"/stopzips: stop all running 7-ZIP archival tasks\n"
                 response+=u"/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
@@ -1904,9 +1887,9 @@ class User_Message_Handler(object):
             response+=u"/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+=u"/unlock <PASSWORD>: unlock the bot\n"
             response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
-            response+=u"File size limit for getting files from host system: "+unicode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u"."
+            response+=u"File size limit for getting files from host system: "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u"."
             if self.allow_writing==True:
-                response+=u"\nFile size limit for putting files on host system: "+unicode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".\n"
+                response+=u"\nFile size limit for putting files on host system: "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".\n"
                 response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
             self.log(u"Help requested.")
         else:
@@ -2325,7 +2308,7 @@ class Main_Window(QMainWindow):
 
         self.icon_cache={}
         for iconname in APP_ICONS_B64:
-            icon_qba=QByteArray.fromBase64(APP_ICONS_B64[iconname])
+            icon_qba=QByteArray.fromBase64(APP_ICONS_B64[iconname],QByteArray.Base64Encoding)
             icon_qimg=QImage.fromData(icon_qba,"PNG")
             icon_qpix=QPixmap.fromImage(icon_qimg)
             self.icon_cache[iconname]=QIcon(icon_qpix)
@@ -2643,7 +2626,7 @@ class Main_Window(QMainWindow):
         return
 
     def input_commandfield_onsend(self):
-        clean_text=str(self.input_commandfield.text().encode("utf-8").strip())
+        clean_text=str(self.input_commandfield.text().strip())
         self.input_commandfield.setText(clean_text)
         if clean_text=="":
             return
@@ -2821,16 +2804,14 @@ MAIN
 """
 
 
-warnings.filterwarnings("ignore",category=UserWarning,module="urllib2")
-qInstallMessageHandler(qtmsg_handler)
 environment_info=Get_Runtime_Environment()
 
-PATH_WINDOWS_SYSTEM32=terminate_with_backslash(unicode(environment_info["system32"]))
+PATH_WINDOWS_SYSTEM32=terminate_with_backslash(unidecode.unidecode(environment_info["system32"]))
 
 start_minimized=False
 stdout_output=False
 for argument in environment_info["arguments"]:
-    argument=unicode(argument.lower().strip())
+    argument=unidecode.unidecode(argument.lower().strip())
 
     if argument==u"/minimized":
         start_minimized=True
@@ -2840,11 +2821,11 @@ for argument in environment_info["arguments"]:
 if environment_info["running_from_source"]==True:
     stdout_output=True
 
-LOGGER=Logger(os.path.join(unicode(environment_info["working_dir"]),u"log.txt"))
+LOGGER=Logger(os.path.join(unidecode.unidecode(environment_info["working_dir"]),u"log.txt"))
 LOGGER.SET_STDOUT(stdout_output)
 LOGGER.ACTIVATE()
 
-CURRENT_PROCESS_HANDLE=win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
+CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
@@ -2881,7 +2862,7 @@ collect_user_file_entries=[]
 collect_allowed_users=[]
 
 try:
-    file_handle=open(os.path.join(unicode(environment_info["working_dir"]),u"token.txt"),"r")
+    file_handle=open(os.path.join(unidecode.unidecode(environment_info["working_dir"]),u"token.txt"),"r")
     collect_bot_token=file_handle.readline()
     file_handle.close()
 except:
@@ -2897,7 +2878,7 @@ if fatal_error==False:
 if fatal_error==False:
     file_handle=None
     try:
-        file_handle=open(os.path.join(unicode(environment_info["working_dir"]),u"userlist.txt"),"r")
+        file_handle=open(os.path.join(unidecode.unidecode(environment_info["working_dir"]),u"userlist.txt"),"r")
         all_lines=file_handle.readlines()
         for line in all_lines:
             line=line.strip()
