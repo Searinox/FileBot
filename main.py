@@ -55,7 +55,7 @@ WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
 
 FONT_POINT_SIZE=8
-FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type":"Monospace","scale":1,"properties":["bold"]},"log":{"type":"Consolas","scale":1,"properties":["bold"]}}
+FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type":"Arial","scale":1,"properties":["bold"]},"log":{"type":"Consolas","scale":1,"properties":["bold"]}}
 
 CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
@@ -2340,24 +2340,24 @@ class Main_Window(QMainWindow):
 
         self.label_botstatus=QLabel(self)
         self.label_botstatus.setText("Status:")
-        self.label_botstatus.setGeometry(357*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus.setGeometry(352*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
 
         self.label_botstatus_value=QLabel(self)
-        self.label_botstatus_value.setGeometry(395*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus_value.setGeometry(390*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus_value.setFont(self.font_cache["status"])
         self.label_botstatus_value.setText("NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
-        self.label_clock_bias.setGeometry(605*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias.setGeometry(575*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias_value=QLabel(self)
-        self.label_clock_bias_value.setGeometry(785*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias_value.setGeometry(746*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
@@ -2384,7 +2384,7 @@ class Main_Window(QMainWindow):
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
-        self.label_commands.setGeometry(380*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_commands.setGeometry(370*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
 
