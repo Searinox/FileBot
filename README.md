@@ -1,4 +1,4 @@
-# FileBot - Telegram file server bot for Windows 7 and higher written in Python 2.7
+# FileBot - Telegram file server bot for Windows 7 and higher written in Python 3.7
 
 7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/
 
