@@ -16,7 +16,6 @@ import os
 import threading
 import shutil
 import ctypes
-import ctypes.wintypes as wintypes
 import win32con
 import win32process
 import urllib3
@@ -251,42 +250,13 @@ OBJS
 
 
 class ShellProcess(object):
-    class startupinfow(ctypes.Structure):
-        _fields_=[("cb",wintypes.DWORD),("lpReserved",wintypes.LPWSTR),("lpDesktop",wintypes.LPWSTR),("lpTitle",wintypes.LPWSTR),("dwX",wintypes.DWORD),("dwY",wintypes.DWORD),("dwXSize",wintypes.DWORD),("dwYSize",wintypes.DWORD),("dwXCountChars",wintypes.DWORD),("dwYCountChars",wintypes.DWORD),("dwFillAtrribute",wintypes.DWORD),("dwFlags",wintypes.DWORD),("wShowWindow",wintypes.WORD),("cbReserved2",wintypes.WORD),("lpReserved2",ctypes.POINTER(wintypes.BYTE)),("hStdInput",wintypes.HANDLE),("hStdOutput",wintypes.HANDLE),("hStdError",wintypes.HANDLE)]
-
-    class process_information(ctypes.Structure):
-        _fields_=[("hProcess",wintypes.HANDLE),("hThread",wintypes.HANDLE),("dwProcessId",wintypes.DWORD),("dwThreadId",wintypes.DWORD)]
-
-    class process_handle(ctypes.c_void_p):
-        def __init__(self,*a,**kw):
-            super(ShellProcess.process_handle,self).__init__(*a,**kw)
-            self.closed=False
-            return
-
-        def Close(self):
-            if not self.closed:
-                ctypes.windll.kernel32.CloseHandle(self)
-                self.closed=True
-            return
-
-        def __int__(self):
-            return self.value
-
     def __init__(self,input_command):
         global PATH_WINDOWS_SYSTEM32
 
-        startup_info=win32process.STARTUPINFO()
-        siw=ShellProcess.startupinfow(dwFlags=startup_info.dwFlags,wShowWindow=startup_info.wShowWindow,cb=ctypes.sizeof(self.startupinfow),hStdInput=int(startup_info.hStdInput),hStdOutput=int(startup_info.hStdOutput),hStdError=int(startup_info.hStdError))
-        CreateProcessW=ctypes.windll.kernel32.CreateProcessW
-        CreateProcessW.argtypes=[ctypes.c_char_p,ctypes.c_wchar_p,ctypes.c_void_p,ctypes.c_void_p,wintypes.BOOL,wintypes.DWORD,wintypes.LPVOID,ctypes.c_char_p,ctypes.POINTER(self.startupinfow),ctypes.POINTER(self.process_information)]
-        CreateProcessW.restype=wintypes.BOOL
-        get_process_info=self.process_information()
-        result=CreateProcessW(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unidecode.unidecode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,siw,get_process_info)
+        result=win32process.CreateProcess(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unidecode.unidecode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
         if result:
-            self.process_handle=self.process_handle(get_process_info.hProcess)
-            self.process_ID=get_process_info.dwProcessId
-        else:
-            raise Exception("Error creating process.")
+            self.process_handle=result[0]
+            self.process_ID=result[2]
         return
 
     def IS_RUNNING(self): 
