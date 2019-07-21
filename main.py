@@ -7,7 +7,6 @@ INIT
 """
 
 
-import unidecode
 import base64
 import time
 import datetime
@@ -202,7 +201,7 @@ def User_Entry_From_String(from_string):
             raise ValueError("Wrong number of \"|\"-separated characters.")
 
         retval["username"]=segments[0]
-        retval["home"]=unidecode.unidecode(segments[1]).strip()
+        retval["home"]=segments[1].strip()
         retval["allow_write"]=False
 
         if retval["username"].count("#")!=2 and retval["username"].count("#")!=0:
@@ -253,7 +252,7 @@ class ShellProcess(object):
     def __init__(self,input_command):
         global PATH_WINDOWS_SYSTEM32
 
-        result=win32process.CreateProcess(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+unidecode.unidecode(input_command)+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
+        result=win32process.CreateProcess(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+input_command+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
         if result:
             self.process_handle=result[0]
             self.process_ID=result[2]
@@ -475,7 +474,7 @@ class Task_Handler_7ZIP(object):
         self.list_end_tasks_PIDs=[]
         self.list_end_tasks_users=[]
 
-        input_path_7zip=unidecode.unidecode(input_path_7zip)
+        input_path_7zip=input_path_7zip
         input_path_7zip=input_path_7zip.replace(u"/",u"\\")
         input_path_7zip=terminate_with_backslash(input_path_7zip)
         self.path_7zip_bin=os.path.join(input_path_7zip,u"7z.exe")
@@ -682,7 +681,7 @@ class Task_Handler_7ZIP(object):
 
             if terminate==True:
                 self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
-                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+unidecode.unidecode(str(get_PID))),u"file":self.instances_7zip[i][u"temp_file"]}]
+                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+str(get_PID)),u"file":self.instances_7zip[i][u"temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
@@ -1070,7 +1069,7 @@ class User_Message_Handler(object):
         self.account_username=input_user
         self.lastsent_timers=[]
         self.bot_lock_pass=u""
-        self.allowed_root=unidecode.unidecode(input_root)
+        self.allowed_root=input_root
         self.pending_lockclear=threading.Event()
         self.pending_lockclear.clear()
         self.lock_status=threading.Event()
@@ -1153,7 +1152,7 @@ class User_Message_Handler(object):
 
     def proper_caps_path(self,input_path):
         try:
-            retval=unidecode.unidecode(ctypes.windll.kernel32.GetLongPathNameW(ctypes.windll.kernel32.GetShortPathName(input_path)))
+            retval=ctypes.windll.kernel32.GetLongPathNameW(ctypes.windll.kernel32.GetShortPathName(input_path))
         except:
             retval=input_path
         if len(retval)>1:
@@ -1354,7 +1353,7 @@ class User_Message_Handler(object):
                 self.sendmsg(sid,u"File \""+filename+u"\" already exists at the location.")
                 self.log("File download aborted due to existing instance.")
         else:
-            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".")
+            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".")
             self.log("File download aborted due to size exceeding limit.")
         return
 
@@ -1402,7 +1401,7 @@ class User_Message_Handler(object):
                 if os.path.isfile(path):
                     if folders_only==False:
                         if name.lower().find(search)!=-1 or search==u"":
-                            filelist+=[name+u" [Size: "+unidecode.unidecode(readable_size(os.path.getsize(path)))+u"]"]
+                            filelist+=[name+u" [Size: "+readable_size(os.path.getsize(path))+u"]"]
                 else:
                     if name.lower().find(search)!=-1 or search==u"":
                         folderlist+=[name]
@@ -1562,7 +1561,7 @@ class User_Message_Handler(object):
                             self.bot_handle.Send_File(cid,newpath)
                         else:
                             if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                 self.log("Requested file \""+newpath+"\" too large to get.")
                             else:
                                 response=u"File is empty."
@@ -1640,7 +1639,7 @@ class User_Message_Handler(object):
                                 success=True
                             else:
                                 if fsize!=0:
-                                    response=u"Bots cannot upload files larger than "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                    response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
                                     self.log("Requested file \""+newpath+"\" too large to eat.")
                                 else:
                                     response=u"File is empty."
@@ -1843,7 +1842,7 @@ class User_Message_Handler(object):
             response+=u"/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
             response+=u"/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
             if self.allow_writing==True:
-                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+unidecode.unidecode(str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER()))+u" simultaneous tasks\n"
+                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+u" simultaneous tasks\n"
                 response+=u"/listzips: list all running 7-ZIP archival tasks\n"
                 response+=u"/stopzips: stop all running 7-ZIP archival tasks\n"
                 response+=u"/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
@@ -1857,9 +1856,9 @@ class User_Message_Handler(object):
             response+=u"/lock <PASSWORD>: lock the bot from responding to messages\n"
             response+=u"/unlock <PASSWORD>: unlock the bot\n"
             response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
-            response+=u"File size limit for getting files from host system: "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u"."
+            response+=u"File size limit for getting files from host system: "+readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES)+u"."
             if self.allow_writing==True:
-                response+=u"\nFile size limit for putting files on host system: "+unidecode.unidecode(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u".\n"
+                response+=u"\nFile size limit for putting files on host system: "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".\n"
                 response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
             self.log(u"Help requested.")
         else:
@@ -2776,12 +2775,12 @@ MAIN
 
 environment_info=Get_Runtime_Environment()
 
-PATH_WINDOWS_SYSTEM32=terminate_with_backslash(unidecode.unidecode(environment_info["system32"]))
+PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
 
 start_minimized=False
 stdout_output=False
 for argument in environment_info["arguments"]:
-    argument=unidecode.unidecode(argument.lower().strip())
+    argument=argument.lower().strip()
 
     if argument==u"/minimized":
         start_minimized=True
@@ -2791,7 +2790,7 @@ for argument in environment_info["arguments"]:
 if environment_info["running_from_source"]==True:
     stdout_output=True
 
-LOGGER=Logger(os.path.join(unidecode.unidecode(environment_info["working_dir"]),u"log.txt"))
+LOGGER=Logger(os.path.join(environment_info["working_dir"],u"log.txt"))
 LOGGER.SET_STDOUT(stdout_output)
 LOGGER.ACTIVATE()
 
@@ -2832,7 +2831,7 @@ collect_user_file_entries=[]
 collect_allowed_users=[]
 
 try:
-    file_handle=open(os.path.join(unidecode.unidecode(environment_info["working_dir"]),u"token.txt"),"r")
+    file_handle=open(os.path.join(environment_info["working_dir"],u"token.txt"),"r")
     collect_bot_token=file_handle.readline()
     file_handle.close()
 except:
@@ -2848,7 +2847,7 @@ if fatal_error==False:
 if fatal_error==False:
     file_handle=None
     try:
-        file_handle=open(os.path.join(unidecode.unidecode(environment_info["working_dir"]),u"userlist.txt"),"r")
+        file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"r")
         all_lines=file_handle.readlines()
         for line in all_lines:
             line=line.strip()
