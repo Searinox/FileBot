@@ -2196,16 +2196,17 @@ class UI(object):
         return
 
     def UI_thread_launcher(self):
-        UI_app=QApplication([])
-        UI_app.setStyle("fusion")
-        UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
-        UI_window.show()
-        UI_app.aboutToQuit.connect(UI_app.deleteLater)
+        self.UI_app=QApplication([])
+        self.UI_app.setStyle("fusion")
+        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
+        self.UI_window.show()
+        self.UI_app.aboutToQuit.connect(self.UI_app.deleteLater)
         if self.start_minimized==False:
-            UI_window.raise_()
-            UI_window.activateWindow()
-        sys.exit(UI_app.exec_())
-        del UI_app
+            self.UI_window.raise_()
+            self.UI_window.activateWindow()
+        sys.exit(self.UI_app.exec_())
+        del self.UI_app
+        del self.UI_window
         return
 
     def IS_RUNNING(self):
