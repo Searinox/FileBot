@@ -2187,7 +2187,7 @@ class UI(object):
     @staticmethod
     def qtmsg_handler(msg_type,msg_log_context,msg_string):
         global QTMSG_BLACKLIST_STARTSWITH
-    
+
         for entry in QTMSG_BLACKLIST_STARTSWITH:
             if msg_string.startswith(entry):
                 return
