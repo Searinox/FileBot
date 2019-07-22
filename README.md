@@ -10,6 +10,8 @@ Formatting info for token and allowed users + paths is available at console star
 
 In-chat help is available by typing "/help" to the bot.
 
-It is possible to give strictly read or read+write permissions to users.
+Set read or read/write permissions on a per-user basis.
 
-File size limits enforced on bots by the Telegram service still apply. As of the last update to this document, that limit is 50MB.
+Initiate or cancel archival tasks for files or folders to later retrieve them within service file size limits.
+
+File size limits enforced on bots by the Telegram service still apply. As of the last update to this document, the limit for uploading files to chat is 50MB and the limit for downloading files from chat is 20MB.
