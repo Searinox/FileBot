@@ -1,4 +1,4 @@
-__version__="1.70"
+__version__="1.80"
 __author__="Searinox Navras"
 
 
@@ -21,9 +21,9 @@ import win32process
 import urllib3
 import ssl
 import json
-from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QStringListModel,QCoreApplication,qInstallMessageHandler)
+from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QCoreApplication,qInstallMessageHandler)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
-from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
+from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QBrush,QColor,QStandardItemModel,QStandardItem)
 
 def Get_B64_Resource(input_path):
     import resources_base64
@@ -604,6 +604,7 @@ class Task_Handler_7ZIP(object):
         get_end_task_list_PIDs=[]
         get_end_task_list_users=[]
 
+        self.log("7-ZIP Task Handler started.")
         last_update=GetTickCount64()-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000
         while self.request_exit.is_set()==False:
             time.sleep(TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS)
@@ -2384,13 +2385,14 @@ class Main_Window(QMainWindow):
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
 
+        self.textbox_output_model=QStandardItemModel(self)
         self.textbox_output=QListView(self)
-        self.textbox_output.setModel(QStringListModel(self))
+        self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
         self.textbox_output.setGeometry(10*UI_SCALE,24*UI_SCALE,860*UI_SCALE,524*UI_SCALE)
-        self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#808080; color:#000000;}")
-        self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn);
-        self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff);
+        self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#3A3A3A; color:#000000;}")
+        self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textbox_output.setAcceptDrops(False)
         self.textbox_output.setToolTip(None)
         self.textbox_output.setWordWrap(True)
@@ -2403,6 +2405,8 @@ class Main_Window(QMainWindow):
         self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CDCDCD; color:#000000; background-color:#CDCDCD; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {background-color:#DBDBDB}")
         self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
+
+        self.output_colors={"<DEFAULT>":QBrush(QColor(255,255,255)),"MAINTHRD":QBrush(QColor(160,255,255)),"BOTLSTNR":QBrush(QColor(255,160,255)),"MSGHNDLR":QBrush(QColor(255,255,160)),"7ZTSKHND":QBrush(QColor(255,200,90)),"UCONSOLE":QBrush(QColor(160,255,160))}
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
@@ -2417,7 +2421,7 @@ class Main_Window(QMainWindow):
         self.input_commandfield.setAcceptDrops(False)
         self.input_commandfield.returnPressed.connect(self.input_commandfield_onsend)
         self.input_commandfield.installEventFilter(self)
-        self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color:#000000; color:#00FF00;} QLineEdit::disabled {background-color:#808080; color:#000000;}")
+        self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color:#000000; color:#00FF00;} QLineEdit::disabled {background-color:#3A3A3A; color:#000000;}")
 
         self.set_UI_lock(True)
         self.update_UI_usability()
@@ -2538,20 +2542,21 @@ class Main_Window(QMainWindow):
         self.output_queue=[]
         self.lock_log_queue.release()
         get_output_queue_len=len(get_output_queue)
-        cache_model=self.textbox_output.model()
 
         self.lock_output_update.acquire()
 
-        rows_to_delete=max(0,cache_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
-        starting_row=cache_model.rowCount()-rows_to_delete
+        rows_to_delete=max(0,self.textbox_output_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
+        starting_row=self.textbox_output_model.rowCount()-rows_to_delete
         index=-1
 
         self.textbox_output.setUpdatesEnabled(False)
-        cache_model.removeRows(0,rows_to_delete)
-        cache_model.insertRows(starting_row,get_output_queue_len)
-        for line in get_output_queue:
+        self.textbox_output_model.removeRows(0,rows_to_delete)
+        self.textbox_output_model.insertRows(starting_row,get_output_queue_len)
+        for entry in get_output_queue:
             index+=1
-            cache_model.setItemData(cache_model.index(starting_row+index),{0:line})
+            target_row=starting_row+index
+            self.textbox_output_model.setItem(target_row,QStandardItem(entry[0]))
+            self.textbox_output_model.setData(self.textbox_output_model.index(target_row,0),entry[1],Qt.ForegroundRole)
         self.textbox_output.scrollToBottom()
         self.textbox_output.setUpdatesEnabled(True)
         self.last_log_update_time=GetTickCount64()
@@ -2599,8 +2604,16 @@ class Main_Window(QMainWindow):
 
         if input_line.endswith("\n"):
             input_line=input_line[:-1]
+        text_source=""
+        if len(input_line)>=29:
+            if input_line[20]=="[" and input_line[29]=="]":
+                text_source=input_line[21:29]
+        if text_source in self.output_colors:
+            text_color=self.output_colors[text_source]
+        else:
+            text_color=self.output_colors["<DEFAULT>"]
         self.lock_log_queue.acquire()
-        self.output_queue+=[input_line]
+        self.output_queue+=[(input_line,text_color)]
         if len(self.output_queue)>OUTPUT_ENTRIES_MAX:
             del self.output_queue[0]
         self.lock_log_queue.release()
