@@ -15,6 +15,7 @@ import os
 import threading
 import shutil
 import ctypes
+import win32api
 import win32con
 import win32process
 import urllib3
@@ -1154,7 +1155,7 @@ class User_Message_Handler(object):
 
     def proper_caps_path(self,input_path):
         try:
-            retval=ctypes.windll.kernel32.GetLongPathNameW(ctypes.windll.kernel32.GetShortPathName(input_path))
+            retval=win32api.GetLongPathNameW(win32api.GetShortPathName(input_path))
         except:
             retval=input_path
         if len(retval)>1:
@@ -1555,13 +1556,13 @@ class User_Message_Handler(object):
                 newpath=self.rel_to_abs(command_args,True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
-                    self.log(u"Requested get file \""+newpath+u"\". Processing...")
+                    self.log("Requested get file \""+newpath+"\". Sending...")
                     self.sendmsg(sid,u"Getting file, please wait...")
                     try:
                         fsize=os.path.getsize(newpath)
                         if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                             self.bot_handle.Send_File(cid,newpath)
-                            self.log(u"File \""+newpath+u"\". Sent.")
+                            self.log("File \""+newpath+"\" sent.")
                         else:
                             if fsize!=0:
                                 response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
@@ -1632,14 +1633,14 @@ class User_Message_Handler(object):
                     newpath=self.rel_to_abs(command_args,True)
                     if self.usable_path(newpath)==True:
                         newpath=self.proper_caps_path(newpath)
-                        self.log("Requested eat file \""+newpath+"\".")
+                        self.log("Requested eat file \""+newpath+"\". Sending...")
                         self.sendmsg(sid,u"Eating file, please wait...")
                         success=False
                         try:
                             fsize=os.path.getsize(newpath)
                             if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                                 self.bot_handle.Send_File(cid,newpath)
-                                self.log(u"File \""+newpath+u"\". Sent.")
+                                self.log("File \""+newpath+"\" sent.")
                                 success=True
                             else:
                                 if fsize!=0:
