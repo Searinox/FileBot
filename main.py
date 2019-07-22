@@ -2205,8 +2205,8 @@ class UI(object):
             self.UI_window.raise_()
             self.UI_window.activateWindow()
         sys.exit(self.UI_app.exec_())
-        del self.UI_app
         del self.UI_window
+        del self.UI_app
         return
 
     def IS_RUNNING(self):
