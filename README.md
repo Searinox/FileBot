@@ -15,3 +15,5 @@ Set read or read/write permissions on a per-user basis.
 Initiate or cancel archival tasks for files or folders to later retrieve them within service file size limits.
 
 File size limits enforced on bots by the Telegram service still apply. As of the last update to this document, the limit for uploading files to chat is 50MB and the limit for downloading files from chat is 20MB.
+
+NOTE: This program requires PyQt5 to be installed. If you intend to compile to an executable using PyInstaller, be advised that a bug in Qt5 requires version 5.12.2 or prior to be installed in order for the compiled program to work.
