@@ -20,13 +20,13 @@ import win32process
 import urllib3
 import ssl
 import json
-from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QStringListModel,QCoreApplication)
+from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QStringListModel,QCoreApplication,qInstallMessageHandler)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont)
 
 def Get_B64_Resource(input_path):
     import resources_base64
-    return bytes(resources_base64.Get_Resource(input_path),"utf8")
+    return resources_base64.Get_Resource(input_path)
 
 MAINTHREAD_HEARTBEAT_SECONDS=0.085
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.1
@@ -62,6 +62,8 @@ COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
+
+QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 
 
 """
@@ -2163,6 +2165,7 @@ class User_Console(object):
 
 class UI(object):
     def __init__(self,input_signaller,input_minimized,input_logger=None):
+        qInstallMessageHandler(self.qtmsg_handler)
         self.active_logger=input_logger
         self.start_minimized=input_minimized
         self.is_ready=threading.Event()
@@ -2177,17 +2180,32 @@ class UI(object):
         self.working_thread.start()
         return
 
+    def __del__(self):
+        qInstallMessageHandler(None)
+        return
+
+    @staticmethod
+    def qtmsg_handler(msg_type,msg_log_context,msg_string):
+        global QTMSG_BLACKLIST_STARTSWITH
+    
+        for entry in QTMSG_BLACKLIST_STARTSWITH:
+            if msg_string.startswith(entry):
+                return
+
+        sys.stderr.write(msg_string+"\n")
+        return
+
     def UI_thread_launcher(self):
-        self.UI_APP=0
-        self.UI_APP=QApplication([])
-        self.UI_APP.setStyle("fusion")
-        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
-        self.UI_window.show()
-        self.UI_APP.aboutToQuit.connect(self.UI_APP.deleteLater)
+        UI_app=QApplication([])
+        UI_app.setStyle("fusion")
+        UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
+        UI_window.show()
+        UI_app.aboutToQuit.connect(UI_app.deleteLater)
         if self.start_minimized==False:
-            self.UI_window.raise_()
-            self.UI_window.activateWindow()
-        sys.exit(self.UI_APP.exec_())
+            UI_window.raise_()
+            UI_window.activateWindow()
+        sys.exit(UI_app.exec_())
+        del UI_app
         return
 
     def IS_RUNNING(self):
