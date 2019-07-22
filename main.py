@@ -756,7 +756,7 @@ class Telegram_Bot(object):
                 for keyname in input_args:
                     if type(input_args[keyname])==tuple:
                         if len(input_args[keyname])==2:
-                            if str(type(input_args[keyname][1]))=="<class '_io.TextIOWrapper'>":
+                            if str(type(input_args[keyname][1]))=="<class '_io.FileIO'>":
                                 input_args[keyname]=(input_args[keyname][0],input_args[keyname][1].read())
                                 break
                 response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=self.timeout_upload)
@@ -1561,6 +1561,7 @@ class User_Message_Handler(object):
                         fsize=os.path.getsize(newpath)
                         if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                             self.bot_handle.Send_File(cid,newpath)
+                            self.log(u"File \""+newpath+u"\". Sent.")
                         else:
                             if fsize!=0:
                                 response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
@@ -1638,6 +1639,7 @@ class User_Message_Handler(object):
                             fsize=os.path.getsize(newpath)
                             if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                                 self.bot_handle.Send_File(cid,newpath)
+                                self.log(u"File \""+newpath+u"\". Sent.")
                                 success=True
                             else:
                                 if fsize!=0:
@@ -2793,7 +2795,6 @@ MAIN
 
 
 environment_info=Get_Runtime_Environment()
-
 PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
 
 start_minimized=False
