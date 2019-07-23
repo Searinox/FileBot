@@ -2311,9 +2311,10 @@ class Main_Window(QMainWindow):
 
         self.tray_current_state="deactivated"
         self.tray_current_text="FileBot"
-        self.tray_icon=QSystemTrayIcon(self.icon_cache[self.tray_current_state],self)
+        self.tray_icon=QSystemTrayIcon(self)
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
+        self.tray_icon.setIcon(self.icon_cache[self.tray_current_state])
 
         self.timer_update_output=QTimer(self)
         self.timer_update_output.timeout.connect(self.update_output)
