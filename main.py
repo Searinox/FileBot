@@ -2273,7 +2273,7 @@ class Main_Window(QMainWindow):
                 if fontproperty=="strikeout":
                     self.font_cache[fontname].setStrikeOut(True)
 
-        self.setFixedSize(880*UI_SCALE,600*UI_SCALE)
+        self.setFixedSize(940*UI_SCALE,598*UI_SCALE)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
 
         self.lock_log_queue=threading.Lock()
@@ -2365,24 +2365,24 @@ class Main_Window(QMainWindow):
 
         self.label_botstatus=QLabel(self)
         self.label_botstatus.setText("Status:")
-        self.label_botstatus.setGeometry(352*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus.setGeometry(384*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
 
         self.label_botstatus_value=QLabel(self)
-        self.label_botstatus_value.setGeometry(390*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus_value.setGeometry(422*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus_value.setFont(self.font_cache["status"])
         self.label_botstatus_value.setText("NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
-        self.label_clock_bias.setGeometry(575*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias.setGeometry(625*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
 
         self.label_clock_bias_value=QLabel(self)
-        self.label_clock_bias_value.setGeometry(746*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias_value.setGeometry(796*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
@@ -2391,7 +2391,7 @@ class Main_Window(QMainWindow):
         self.textbox_output=QListView(self)
         self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
-        self.textbox_output.setGeometry(10*UI_SCALE,24*UI_SCALE,860*UI_SCALE,524*UI_SCALE)
+        self.textbox_output.setGeometry(9*UI_SCALE,24*UI_SCALE,922*UI_SCALE,524*UI_SCALE)
         self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#3A3A3A; color:#000000;}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -2404,7 +2404,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setFrameStyle(QFrame.NoFrame)
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
-        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CBCBA8; color:#000000; background-color:#CBCBA8; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#000000; background-color:#DFDFAF}")
+        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CFCFA4; color:#000000; background-color:#CFCFA4; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#000000; background-color:#E8E8BB}")
         self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
 
@@ -2412,14 +2412,14 @@ class Main_Window(QMainWindow):
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
-        self.label_commands.setGeometry(370*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_commands.setGeometry(410*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
 
         self.input_commandfield=QLineEdit(self)
-        self.input_commandfield.setGeometry(10*UI_SCALE,566*UI_SCALE,860*UI_SCALE,24*UI_SCALE)
+        self.input_commandfield.setGeometry(9*UI_SCALE,566*UI_SCALE,922*UI_SCALE,22*UI_SCALE)
         self.input_commandfield.setFont(self.font_cache["log"])
-        self.input_commandfield.setMaxLength(137)
+        self.input_commandfield.setMaxLength(147)
         self.input_commandfield.setAcceptDrops(False)
         self.input_commandfield.returnPressed.connect(self.input_commandfield_onsend)
         self.input_commandfield.installEventFilter(self)
