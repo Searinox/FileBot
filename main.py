@@ -2336,6 +2336,7 @@ class Main_Window(QMainWindow):
 
         self.options_macros={}
         self.tray_menu=QMenu(self)
+        self.tray_menu.setStyleSheet("QMenu {color:#000000; background-color:#FFFFF0;} QMenu::item:selected {color:#FFFFFF; background-color:#3B3BFF;}")
         self.options_macros["restore"]=self.tray_menu.addAction("Restore")
         self.options_macros["restore"].triggered.connect(self.traymenu_restore_onselect)
         self.options_macros["restore"].setFont(self.font_cache["general"])
