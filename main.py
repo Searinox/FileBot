@@ -2275,6 +2275,7 @@ class Main_Window(QMainWindow):
 
         self.setFixedSize(940*UI_SCALE,598*UI_SCALE)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
+        self.setWindowFlags(self.windowFlags()|Qt.MSWindowsFixedSizeDialogHint)
 
         self.lock_log_queue=threading.Lock()
         self.lock_output_update=threading.Lock()
