@@ -2349,7 +2349,7 @@ class Main_Window(QMainWindow):
 
         self.label_botname=QGroupBox(self)
         self.label_botname.setGeometry(-10*UI_SCALE,-100*UI_SCALE,self.width()+10*UI_SCALE,self.height()+100*UI_SCALE)
-        self.label_botname.setStyleSheet("QGroupBox {background-color:#F0F0FF;}")
+        self.label_botname.setStyleSheet("QGroupBox {background-color:#FFFFF0;}")
 
         self.label_botname=QLabel(self)
         self.label_botname.setText("Bot name:")
@@ -2404,7 +2404,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setFrameStyle(QFrame.NoFrame)
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
-        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CDCDCD; color:#000000; background-color:#CDCDCD; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {background-color:#DBDBDB}")
+        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CBCBA8; color:#000000; background-color:#CBCBA8; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#000000; background-color:#DFDFAF}")
         self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
 
@@ -2869,7 +2869,7 @@ collect_allowed_users=[]
 
 try:
     file_handle=open(os.path.join(environment_info["working_dir"],u"token.txt"),"r")
-    collect_bot_token=file_handle.readline()
+    collect_bot_token=file_handle.read(128)
     file_handle.close()
 except:
     log("ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
@@ -2885,7 +2885,7 @@ if fatal_error==False:
     file_handle=None
     try:
         file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"r")
-        all_lines=file_handle.readlines(MAX_BOT_USERS)
+        all_lines=file_handle.readlines(384*MAX_BOT_USERS)
         for line in all_lines:
             line=line.strip()
             if line!=u"":
