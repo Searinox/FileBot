@@ -54,6 +54,7 @@ BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS=30
 
 WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
+MAX_BOT_USERS=100
 
 FONT_POINT_SIZE=8
 FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type":"Arial","scale":1,"properties":["bold"]},"log":{"type":"Consolas","scale":1,"properties":["bold"]}}
@@ -2107,14 +2108,14 @@ class User_Console(object):
 
     def process_input(self):
         global COMMAND_CHECK_INTERVAL_SECONDS
+        global COMMAND_HISTORY_MAX
 
         self.log("Starting User Message Handler(s)...")
         for user_handler_instance in self.user_handler_list:
             user_handler_instance.START()
             user_handler_instance.LISTEN(True)
 
-        self.log("User Console activated.")
-        self.log("Type \"help\" in the console for available commands.")
+        self.log("User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(COMMAND_HISTORY_MAX)+" history).")
         self.active_UI_signaller.send("attach_console",self)
 
         if self.user_handlers_running()==0:
@@ -2854,6 +2855,7 @@ log("\n\nREQUIREMENTS:\n"+\
     "EXAMPLE ENTRIES:\n"+\
     "JohnDoe|C:\\MySharedFiles\n"+\
     "TrustedUser|>*\n\n"+\
+    "A maximum of "+str(MAX_BOT_USERS)+" users are supported.\n\n"+\
     "COMMAND LINE:\n"+\
     "/minimized: starts the application minimized to system tray\n"+\
     "/stdout: output log to stdout in addition to window\n")
@@ -2883,7 +2885,7 @@ if fatal_error==False:
     file_handle=None
     try:
         file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"r")
-        all_lines=file_handle.readlines()
+        all_lines=file_handle.readlines(MAX_BOT_USERS)
         for line in all_lines:
             line=line.strip()
             if line!=u"":
