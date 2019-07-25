@@ -1249,7 +1249,7 @@ class User_Message_Handler(object):
                 bot_bind_ok=True
             except Exception as ex:
                 if str(ex)=="Invalid token.":
-                    self.log("The provided bot token is invalid. Startup cannot proceed.")
+                    self.log("Invalid token. Exiting...")
                     self.REQUEST_STOP()
                 else:
                     if activation_fail_announce==False:
