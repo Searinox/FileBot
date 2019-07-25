@@ -23,7 +23,7 @@ import ssl
 import json
 from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QCoreApplication,qInstallMessageHandler)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
-from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QBrush,QColor,QStandardItemModel,QStandardItem)
+from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QColor,QStandardItemModel,QStandardItem)
 
 def Get_B64_Resource(input_path):
     import resources_base64
@@ -56,16 +56,37 @@ WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
 MAX_BOT_USERS=100
 
-FONT_POINT_SIZE=8
-FONTS={"general":{"type":"Monospace","scale":1,"properties":[]},"status":{"type":"Arial","scale":1,"properties":["bold"]},"log":{"type":"Consolas","scale":1,"properties":["bold"]}}
-
-CUSTOM_UI_SCALING=1.125
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
-APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
-
 QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
+CUSTOM_UI_SCALING=1.125
+FONT_POINT_SIZE=8
+FONTS={"general":
+       {"type":"Monospace","scale":1,"properties":[]},
+       "status":{"type":"Arial","scale":1,"properties":["bold"]},
+       "log":{"type":"Consolas","scale":1,"properties":["bold"]}}
+COLOR_SCHEME={"window_text":"000000",
+              "window_background":"FFFFF0",
+              "selection_text":"FFFFF0",
+              "selection_background":"3B3BFF",
+              "background_IO":"000000",
+              "background_IO_disabled":"3D3D3D",
+              "input_text":"00FF00",
+              "scrollbar_text":"000000",
+              "scrollbar_background":"CFCFA4",
+              "scrollarea_background":"E8E8BB",
+              "status_username":"000090",
+              "status_ok":"009000",
+              "status_warn":"909000",
+              "status_error":"900000",
+              "output":{"<DEFAULT>":"FFFFFF",
+                        "MAINTHRD":"A0FFFF",
+                        "BOTLSTNR":"FFA0FF",
+                        "MSGHNDLR":"FFFFA0",
+                        "7ZTSKHND":"FFC85A",
+                        "UCONSOLE":"A0FFA0"}}
+APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 
 
 """
@@ -2169,10 +2190,12 @@ class User_Console(object):
 
 
 class UI(object):
-    def __init__(self,input_signaller,input_minimized,input_logger=None):
-        qInstallMessageHandler(self.qtmsg_handler)
+    def __init__(self,input_colorscheme,input_icons_b64,input_signaller,input_minimized,input_logger=None):
+        self.colorscheme=json.loads(json.dumps(input_colorscheme))
+        self.icons_b64=input_icons_b64
         self.active_logger=input_logger
         self.start_minimized=input_minimized
+        qInstallMessageHandler(self.qtmsg_handler)
         self.is_ready=threading.Event()
         self.is_ready.clear()
         self.is_exiting=threading.Event()
@@ -2203,7 +2226,7 @@ class UI(object):
     def UI_thread_launcher(self):
         self.UI_app=QApplication([])
         self.UI_app.setStyle("fusion")
-        self.UI_window=Main_Window(self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
+        self.UI_window=Main_Window(self.colorscheme,self.icons_b64,self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
         self.UI_window.show()
         self.UI_app.aboutToQuit.connect(self.UI_app.deleteLater)
         if self.start_minimized==False:
@@ -2244,7 +2267,7 @@ WINS
 
 
 class Main_Window(QMainWindow):
-    def __init__(self,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
+    def __init__(self,input_colorscheme,input_icons_b64,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
         global __author__
         global __version__
         global APP_ICONS_B64
@@ -2301,15 +2324,31 @@ class Main_Window(QMainWindow):
         self.last_log_update_time=GetTickCount64()
 
         self.icon_cache={}
-        for iconname in APP_ICONS_B64:
-            icon_qba=QByteArray.fromBase64(APP_ICONS_B64[iconname],QByteArray.Base64Encoding)
+        for iconname in input_icons_b64:
+            icon_qba=QByteArray.fromBase64(input_icons_b64[iconname],QByteArray.Base64Encoding)
             icon_qimg=QImage.fromData(icon_qba,"PNG")
             icon_qpix=QPixmap.fromImage(icon_qimg)
             self.icon_cache[iconname]=QIcon(icon_qpix)
-        del APP_ICONS_B64
-        APP_ICONS_B64=None
+        del input_icons_b64
+        input_icons_b64=None
 
         self.setWindowIcon(self.icon_cache["default"])
+
+        colors_window_text=input_colorscheme["window_text"]
+        colors_window_background=input_colorscheme["window_background"]
+        colors_selection_text=input_colorscheme["selection_text"]
+        colors_selection_background=input_colorscheme["selection_background"]
+        colors_input_text=input_colorscheme["input_text"]
+        colors_background_IO=input_colorscheme["background_IO"]
+        colors_background_IO_disabled=input_colorscheme["background_IO_disabled"]
+        colors_scrollbar_text=input_colorscheme["scrollbar_text"]
+        colors_scrollbar_background=input_colorscheme["scrollbar_background"]
+        colors_scrollarea_background=input_colorscheme["scrollarea_background"]
+        self.colors_status_username=input_colorscheme["status_username"]
+        self.colors_status_ok=input_colorscheme["status_ok"]
+        self.colors_status_warn=input_colorscheme["status_warn"]
+        self.colors_status_error=input_colorscheme["status_error"]
+        self.output_colors=input_colorscheme["output"]
 
         self.tray_current_state="deactivated"
         self.tray_current_text="FileBot"
@@ -2334,9 +2373,12 @@ class Main_Window(QMainWindow):
         self.timer_clipboard.timeout.connect(self.clipboard_insert)
         self.timer_clipboard.setSingleShot(True)
 
+        selection_colors="selection-color:#"+colors_selection_text+"; selection-background-color:#"+colors_selection_background+";"
+        window_colors="color:#"+colors_window_text+"; background-color:#"+colors_window_background+";"
+
         self.options_macros={}
         self.tray_menu=QMenu(self)
-        self.tray_menu.setStyleSheet("QMenu {color:#000000; background-color:#FFFFF0;} QMenu::item:selected {color:#FFFFFF; background-color:#3B3BFF;}")
+        self.tray_menu.setStyleSheet("QMenu {"+window_colors+"} QMenu::item:selected {color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";}")
         self.options_macros["restore"]=self.tray_menu.addAction("Restore")
         self.options_macros["restore"].triggered.connect(self.traymenu_restore_onselect)
         self.options_macros["restore"].setFont(self.font_cache["general"])
@@ -2351,50 +2393,56 @@ class Main_Window(QMainWindow):
 
         self.label_botname=QGroupBox(self)
         self.label_botname.setGeometry(-10*UI_SCALE,-100*UI_SCALE,self.width()+10*UI_SCALE,self.height()+100*UI_SCALE)
-        self.label_botname.setStyleSheet("QGroupBox {background-color:#FFFFF0;}")
+        self.label_botname.setStyleSheet("QGroupBox {"+window_colors+"}")
 
         self.label_botname=QLabel(self)
         self.label_botname.setText("Bot name:")
         self.label_botname.setGeometry(12*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botname.setFont(self.font_cache["general"])
         self.label_botname.setAlignment(Qt.AlignLeft)
+        self.label_botname.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_botname_value=QLabel(self)
         self.label_botname_value.setGeometry(65*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botname_value.setFont(self.font_cache["status"])
         self.label_botname_value.setText("<not retrieved>")
         self.label_botname_value.setAlignment(Qt.AlignLeft)
+        self.label_botname_value.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_botstatus=QLabel(self)
         self.label_botstatus.setText("Status:")
         self.label_botstatus.setGeometry(384*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
+        self.label_botstatus.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_botstatus_value=QLabel(self)
         self.label_botstatus_value.setGeometry(422*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_botstatus_value.setFont(self.font_cache["status"])
         self.label_botstatus_value.setText("NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
+        self.label_botstatus_value.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
         self.label_clock_bias.setGeometry(625*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
+        self.label_clock_bias.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_clock_bias_value=QLabel(self)
         self.label_clock_bias_value.setGeometry(796*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
+        self.label_clock_bias_value.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.textbox_output_model=QStandardItemModel(self)
         self.textbox_output=QListView(self)
         self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
         self.textbox_output.setGeometry(9*UI_SCALE,24*UI_SCALE,922*UI_SCALE,524*UI_SCALE)
-        self.textbox_output.setStyleSheet("QListView::enabled {background-color:#000000; color:#FFFFFF;} QListView::disabled {background-color:#3A3A3A; color:#000000;}")
+        self.textbox_output.setStyleSheet("QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textbox_output.setAcceptDrops(False)
@@ -2406,17 +2454,16 @@ class Main_Window(QMainWindow):
         self.textbox_output.setFrameStyle(QFrame.NoFrame)
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
-        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #CFCFA4; color:#000000; background-color:#CFCFA4; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#000000; background-color:#E8E8BB}")
+        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #"+colors_scrollbar_background+"; color:#"+colors_scrollbar_text+"; background-color:#"+colors_scrollbar_background+"; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#"+colors_scrollbar_text+"; background-color:#"+colors_scrollarea_background+"}")
         self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
-
-        self.output_colors={"<DEFAULT>":QBrush(QColor(255,255,255)),"MAINTHRD":QBrush(QColor(160,255,255)),"BOTLSTNR":QBrush(QColor(255,160,255)),"MSGHNDLR":QBrush(QColor(255,255,160)),"7ZTSKHND":QBrush(QColor(255,200,90)),"UCONSOLE":QBrush(QColor(160,255,160))}
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
         self.label_commands.setGeometry(410*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
+        self.label_commands.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.input_commandfield=QLineEdit(self)
         self.input_commandfield.setGeometry(9*UI_SCALE,566*UI_SCALE,922*UI_SCALE,22*UI_SCALE)
@@ -2425,7 +2472,12 @@ class Main_Window(QMainWindow):
         self.input_commandfield.setAcceptDrops(False)
         self.input_commandfield.returnPressed.connect(self.input_commandfield_onsend)
         self.input_commandfield.installEventFilter(self)
-        self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color:#000000; color:#00FF00;} QLineEdit::disabled {background-color:#3A3A3A; color:#000000;}")
+        self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color:#"+colors_background_IO+"; color:#"+colors_input_text+"; "+selection_colors+"} QLineEdit::disabled {background-color:#"+colors_background_IO_disabled+"; color:#"+colors_input_text+"; "+selection_colors+"}")
+
+        for element in self.output_colors:
+            newcolor=QColor()
+            newcolor.setNamedColor("#"+self.output_colors[element])
+            self.output_colors[element]=newcolor
 
         self.set_UI_lock(True)
         self.update_UI_usability()
@@ -2697,28 +2749,28 @@ class Main_Window(QMainWindow):
 
         elif event_type=="bot_name":
             self.label_botname_value.setText(event_data)
-            self.label_botname_value.setStyleSheet("QLabel {color: #000099}")
+            self.label_botname_value.setStyleSheet("QLabel {color: #"+self.colors_status_username+"}")
             self.update_tray_icon()
 
         elif event_type=="status":
             self.label_botstatus_value.setText(event_data)
             if event_data=="ONLINE":
-                self.label_botstatus_value.setStyleSheet("QLabel {color: #009900}")
+                self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
                 self.online_state=True
                 self.update_tray_icon()
             elif event_data=="OFFLINE":
-                self.label_botstatus_value.setStyleSheet("QLabel {color: #990000}")
+                self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
                 self.online_state=False
                 self.update_tray_icon()
 
         elif event_type=="timesync_clock_bias":
             self.label_clock_bias_value.setText(event_data)
             get_number=float(event_data.replace("+","").replace("-",""))
-            self.label_clock_bias_value.setStyleSheet("QLabel {color: #009900}")
+            self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
             if get_number>=30:
-                self.label_clock_bias_value.setStyleSheet("QLabel {color: #999900}")
+                self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_warn+"}")
             if get_number>=60:
-                self.label_clock_bias_value.setStyleSheet("QLabel {color: #990000}")
+                self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
 
         elif event_type=="commandfield_failed":
             if self.console is not None:
@@ -2836,7 +2888,9 @@ CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_A
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
-Active_UI=UI(UI_SIGNAL,start_minimized,LOGGER)
+Active_UI=UI(COLOR_SCHEME,APP_ICONS_B64,UI_SIGNAL,start_minimized,LOGGER)
+del APP_ICONS_B64
+APP_ICONS_B64=None
 
 while Active_UI.IS_READY()==False:
     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
