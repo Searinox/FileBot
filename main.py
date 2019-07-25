@@ -759,16 +759,18 @@ class Telegram_Bot(object):
         response=None
         try:
             response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=False,timeout=self.timeout_web)
+            response=json.loads(response.data)
         except:
             pass
         if response is not None:
-            if response.status in [200,201]:
-                response=json.loads(response.data)
-                if "ok" in response:
-                    if "result" in response:
-                        return response["result"]
-
-        return None
+            if "ok" in response:
+                if "description" in response:
+                    return {"ok":response["ok"],"result":response["description"]}
+                elif "result" in response:
+                    return {"ok":response["ok"],"result":response["result"]}
+            
+        else:
+            return {"ok":False,"result":None}
 
     def perform_file_request(self,input_method,input_url,input_args=None):
         if self.is_stopped.is_set()==True:
@@ -799,8 +801,13 @@ class Telegram_Bot(object):
             raise Exception("Bot is stopped.")
 
         response=self.perform_web_request("GET",self.base_web_url+"getMe",None)
-        if response is not None:
-            return response
+        if response["ok"]==True:
+            return response["result"]
+        else:
+            if response["result"] is not None:
+                if type(response["result"])==str:
+                    if response["result"].lower().strip()=="not found":
+                        raise Exception("Invalid token.")
 
         raise Exception("Response error.")
 
@@ -809,8 +816,8 @@ class Telegram_Bot(object):
             raise Exception("Bot is stopped.")
 
         response=self.perform_web_request("GET",self.base_web_url+"getUpdates",{"offset":input_id,"allowed_updates":["message"]})
-        if response is not None:
-            return response
+        if response["ok"]==True:
+            return response["result"]
 
         raise Exception("Response error.")
 
@@ -819,8 +826,8 @@ class Telegram_Bot(object):
             raise Exception("Bot is stopped.")
 
         response=self.perform_web_request("POST",self.base_web_url+"sendMessage",{"chat_id":input_chat_id,"text":input_message})
-        if response is not None:
-            return response
+        if response["ok"]==True:
+            return response["result"]
 
         raise Exception("Response error.")
 
@@ -843,8 +850,8 @@ class Telegram_Bot(object):
             return None
 
         response=self.perform_web_request("GET",self.base_web_url+"getFile",{"file_id":input_id})
-        if response is not None:
-            return response
+        if response["ok"]==True:
+            return response["result"]
 
         raise Exception("Response error.")
 
@@ -890,8 +897,11 @@ class Telegram_Bot(object):
 
     def DEACTIVATE(self):
         self.is_stopped.set()
-        self.request_pool.clear()
-        self.request_pool.pools=None
+        try:
+            self.request_pool.clear()
+            self.request_pool.pools=None
+        except:
+            pass
         self.request_pool=None
         return
 
@@ -912,6 +922,7 @@ class Bot_Listener(object):
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
         self.listen_users=username_list
+        self.name=""
         self.messagelist_lock={}
         for username in self.listen_users:
             self.messagelist_lock[username]=threading.Lock()
@@ -956,11 +967,15 @@ class Bot_Listener(object):
             try:
                 self.name=self.bot_handle.Get_Bot_Info()[u"username"]
                 bot_bind_ok=True
-            except:
-                if activation_fail_announce==False:
-                    self.log("Bot Listener activation error. Will keep trying...")
-                    activation_fail_announce=True
-                time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
+            except Exception as ex:
+                if str(ex)=="Invalid token.":
+                    self.log("ERROR: The provided bot token is invalid. Startup cannot proceed.")
+                    self.REQUEST_STOP()
+                else:
+                    if activation_fail_announce==False:
+                        self.log("Bot Listener activation error. Will keep trying...")
+                        activation_fail_announce=True
+                    time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
         if self.request_exit.is_set()==False:
             self.catch_up_IDs()
@@ -1232,11 +1247,15 @@ class User_Message_Handler(object):
             try:
                 self.bot_handle.Get_Bot_Info()[u"username"]
                 bot_bind_ok=True
-            except:
-                if activation_fail_announce==False:
-                    self.log("User Message Handler activation error. Will keep trying...")
-                    activation_fail_announce=True
-                time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
+            except Exception as ex:
+                if str(ex)=="Invalid token.":
+                    self.log("The provided bot token is invalid. Startup cannot proceed.")
+                    self.REQUEST_STOP()
+                else:
+                    if activation_fail_announce==False:
+                        self.log("User Message Handler activation error. Will keep trying...")
+                        activation_fail_announce=True
+                    time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
         if self.request_exit.is_set()==False:
             self.listener.consume_user_messages(self.account_username)
