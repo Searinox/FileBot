@@ -2270,7 +2270,6 @@ class Main_Window(QMainWindow):
     def __init__(self,input_colorscheme,input_icons_b64,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
         global __author__
         global __version__
-        global APP_ICONS_B64
         global FONTS
         global CUSTOM_UI_SCALING
 
