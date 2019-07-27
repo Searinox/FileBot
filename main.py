@@ -54,13 +54,14 @@ BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS=30
 
 WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
-MAX_BOT_USERS=100
+MAX_BOT_USERS=50
 
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
-QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 CUSTOM_UI_SCALING=1.125
+QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
+APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 FONT_POINT_SIZE=8
 FONTS={"general":
        {"type":"Monospace","scale":1,"properties":[]},
@@ -86,7 +87,6 @@ COLOR_SCHEME={"window_text":"000000",
                         "MSGHNDLR":"FFFFA0",
                         "7ZTSKHND":"FFC85A",
                         "UCONSOLE":"A0FFA0"}}
-APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 
 
 """
@@ -111,16 +111,16 @@ def Get_Runtime_Environment():
     retval["process_binary"]=os.path.basename(sys_exe).lower()
     retval["working_dir"]=os.path.realpath(os.path.dirname(sys_exe))
     retval["process_id"]=os.getpid()
-    retval["system32"]=os.path.join(os.environ["WINDIR"],"System32")
+    retval["system32"]=os.path.join(os.environ["WINDIR"],u"System32")
 
     if ctypes.sizeof(ctypes.c_voidp)==4:
         retval["architecture"]=32
     else:
         retval["architecture"]=64
 
-    if retval["process_binary"]=="python.exe":
+    if retval["process_binary"]==u"python.exe":
         if len(retval["arguments"])>0:
-            if retval["arguments"][0].replace("\"","").lower().strip().endswith(".py"):
+            if retval["arguments"][0].replace(u"\"",u"").lower().strip().endswith(u".py"):
                 retval["working_dir"]=os.path.realpath(os.path.dirname(retval["arguments"][0]))
                 retval["arguments"]=retval["arguments"][1:]
                 retval["running_from_source"]=True
@@ -2979,6 +2979,8 @@ if fatal_error==False:
         new_user=User_Entry_From_String(entry)
         if new_user["error_message"]=="":
             collect_allowed_users+=[new_user]
+            if len(collect_allowed_users)==MAX_BOT_USERS:
+                break
         else:
             log("WARNING: "+new_user["error_message"])
 
