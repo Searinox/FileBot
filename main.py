@@ -2373,9 +2373,9 @@ class Main_Window(QMainWindow):
         self.tray_current_state="deactivated"
         self.tray_current_text="FileBot"
         self.tray_icon=QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.icon_cache[self.tray_current_state])
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
-        self.tray_icon.setIcon(self.icon_cache[self.tray_current_state])
 
         self.timer_update_output=QTimer(self)
         self.timer_update_output.timeout.connect(self.update_output)
@@ -2462,7 +2462,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
         self.textbox_output.setGeometry(9*UI_SCALE,24*UI_SCALE,922*UI_SCALE,524*UI_SCALE)
-        self.textbox_output.setStyleSheet("QListView::item {border-top:"+str(int(1*UI_SCALE))+"px solid #"+colors_output_border+"} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
+        self.textbox_output.setStyleSheet("QListView::item:selected {border-top:"+str(int(1*UI_SCALE))+"px solid #"+colors_output_border+"; color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";} QListView::item {border-top:"+str(int(1*UI_SCALE))+"px solid #"+colors_output_border+";} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textbox_output.setAcceptDrops(False)
