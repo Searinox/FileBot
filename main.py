@@ -81,6 +81,7 @@ COLOR_SCHEME={"window_text":"000000",
               "status_ok":"009000",
               "status_warn":"909000",
               "status_error":"900000",
+              "output_border":"282828",
               "output":{"<DEFAULT>":"FFFFFF",
                         "MAINTHRD":"A0FFFF",
                         "BOTLSTNR":"FFA0FF",
@@ -2362,6 +2363,7 @@ class Main_Window(QMainWindow):
         colors_scrollbar_text=input_colorscheme["scrollbar_text"]
         colors_scrollbar_background=input_colorscheme["scrollbar_background"]
         colors_scrollarea_background=input_colorscheme["scrollarea_background"]
+        colors_output_border=input_colorscheme["output_border"]
         self.colors_status_username=input_colorscheme["status_username"]
         self.colors_status_ok=input_colorscheme["status_ok"]
         self.colors_status_warn=input_colorscheme["status_warn"]
@@ -2460,7 +2462,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
         self.textbox_output.setGeometry(9*UI_SCALE,24*UI_SCALE,922*UI_SCALE,524*UI_SCALE)
-        self.textbox_output.setStyleSheet("QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
+        self.textbox_output.setStyleSheet("QListView::item {border-top:"+str(int(1*UI_SCALE))+"px solid #"+colors_output_border+"} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textbox_output.setAcceptDrops(False)
