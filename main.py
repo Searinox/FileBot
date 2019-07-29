@@ -60,7 +60,7 @@ COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
 CUSTOM_UI_SCALING=1.125
-QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
+QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 FONT_POINT_SIZE=8
 FONTS={"general":
@@ -2373,9 +2373,9 @@ class Main_Window(QMainWindow):
         self.tray_current_state="deactivated"
         self.tray_current_text="FileBot"
         self.tray_icon=QSystemTrayIcon(self)
-        self.tray_icon.setIcon(self.icon_cache[self.tray_current_state])
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
+        self.tray_icon.setIcon(self.icon_cache[self.tray_current_state])
 
         self.timer_update_output=QTimer(self)
         self.timer_update_output.timeout.connect(self.update_output)
