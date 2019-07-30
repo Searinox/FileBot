@@ -45,6 +45,8 @@ TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
 UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS=0.055
 
 TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
+TELEGRAM_API_MAX_GLOBAL_IMS=30
+TELEGRAM_API_MAX_GLOBAL_TIME_INTERVAL_SECONDS=1
 TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS=60*60
 TELEGRAM_API_DOWNLOAD_CHUNK_BYTES=256*256
 TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*50
@@ -907,6 +909,53 @@ class Telegram_Bot(object):
         return
 
 
+class Telegram_Global_Message_Floodtracker(object):
+    def __init__(self,input_max_messages,input_time_interval_seconds):
+        self.timer_list=[]
+        self.max_messages=input_max_messages
+        self.time_interval_ms=input_time_interval_seconds*1000
+        self.request_exit=threading.Event()
+        self.request_exit.clear()
+        self.lock_timerlist=threading.Lock()
+        return
+
+    def timer_list_size_and_cleanup(self):
+        for i in reversed(range(len(self.timer_list))):
+            if self.timer_list[i]<GetTickCount64()-self.time_interval_ms:
+                del self.timer_list[i]
+            else:
+                break
+        return len(self.timer_list)
+
+    def get_list_size(self):
+        self.lock_timerlist.acquire()
+        retval=self.timer_list_size_and_cleanup()
+        self.lock_timerlist.release()
+        return retval
+
+    def NEWMESSAGE(self):
+        if self.request_exit.is_set()==True:
+            return
+
+        self.lock_timerlist.acquire()
+        self.timer_list+=[GetTickCount64()]
+        self.timer_list_size_and_cleanup()
+        self.lock_timerlist.release()
+        return
+
+    def WAIT_FOR_CLEAR(self):
+        if self.request_exit.is_set()==True:
+            return
+
+        while self.get_list_size()>=self.max_messages-1 and self.request_exit.is_set()==False:
+            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS/1000)
+        return
+
+    def DEACTIVATE(self):
+        self.request_exit.set()
+        return
+
+
 class Bot_Listener(object):
     def __init__(self,input_token,username_list,input_timeprovider,input_signaller,input_logger=None):
         self.active_logger=input_logger
@@ -1095,6 +1144,7 @@ class User_Message_Handler(object):
 
         self.active_logger=input_logger
         self.active_7zip_task_handler=input_7zip_task_handler
+        self.common_floodtracker=None
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
         self.listener=input_listener_service
@@ -1152,19 +1202,23 @@ class User_Message_Handler(object):
         else:
             second_delay=0
         if len(self.lastsent_timers)>0:
-            extra_sleep=(len(self.lastsent_timers)**1.9)/35.69
+            extra_sleep=(len(self.lastsent_timers)**1.82)/60
         else:
             extra_sleep=0
         throttle_time=(second_delay+max(extra_sleep-second_delay,0))*1000
         start_time=GetTickCount64()
         while GetTickCount64()-start_time<throttle_time and self.request_exit.is_set()==False:
             time.sleep(USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS)
+        if self.common_floodtracker is not None:
+            self.common_floodtracker.WAIT_FOR_CLEAR()
         if self.request_exit.is_set()==True:
             return True
+        self.last_send_time=OS_Uptime_Seconds()
         try:
-            self.last_send_time=OS_Uptime_Seconds()
             self.bot_handle.Send_Message(sid,msg)
             self.lastsent_timers+=[self.last_send_time]
+            if self.common_floodtracker is not None:
+                self.common_floodtracker.NEWMESSAGE()
             excess_entries=max(0,len(self.lastsent_timers)-40)
             for _ in range(excess_entries):
                 del self.lastsent_timers[0]
@@ -1308,6 +1362,10 @@ class User_Message_Handler(object):
                 self.listen_flag.clear()
             else:
                 self.log("Listen stop was requested, but it is not currently listening.")
+        return
+
+    def ATTACH_FLOODTRACKER(self,input_floodtracker):
+        self.common_floodtracker=input_floodtracker
         return
 
     def UNLOCK(self):
@@ -1919,8 +1977,12 @@ class User_Message_Handler(object):
 
 class User_Console(object):
     def __init__(self,input_user_handler_list,input_signaller,input_7zip_taskhandler,input_time_sync,input_logger=None):
+        global TELEGRAM_API_MAX_GLOBAL_IMS
+        global TELEGRAM_API_MAX_GLOBAL_TIME_INTERVAL_SECONDS
+
         self.active_logger=input_logger
-        self.working_thread=threading.Thread(target=self.process_input)
+        self.working_thread=threading.Thread(target=self.work_loop)
+        self.common_floodtracker=Telegram_Global_Message_Floodtracker(TELEGRAM_API_MAX_GLOBAL_IMS,TELEGRAM_API_MAX_GLOBAL_TIME_INTERVAL_SECONDS)
         self.working_thread.daemon=True
         self.active_UI_signaller=input_signaller
         self.is_exiting=threading.Event()
@@ -1946,6 +2008,7 @@ class User_Console(object):
         return
 
     def REQUEST_STOP(self):
+        self.common_floodtracker.DEACTIVATE()
         self.request_exit.set()
         return
 
@@ -2147,12 +2210,13 @@ class User_Console(object):
             self.lock_command.release()
         return retval
 
-    def process_input(self):
+    def work_loop(self):
         global COMMAND_CHECK_INTERVAL_SECONDS
         global COMMAND_HISTORY_MAX
 
         self.log("Starting User Message Handler(s)...")
         for user_handler_instance in self.user_handler_list:
+            user_handler_instance.ATTACH_FLOODTRACKER(self.common_floodtracker)
             user_handler_instance.START()
             user_handler_instance.LISTEN(True)
 
