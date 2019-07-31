@@ -735,6 +735,47 @@ class Task_Handler_7ZIP(object):
         return
 
 
+class Telegram_Message_Rate_Limiter(object):
+    def __init__(self,input_max_messages,input_time_interval_seconds):
+        self.timer_list=[]
+        self.max_messages=input_max_messages
+        self.time_interval_ms=input_time_interval_seconds*1000
+        self.request_exit=threading.Event()
+        self.request_exit.clear()
+        self.lock_timerlist=threading.Lock()
+        return
+
+    def timer_list_size_and_cleanup(self):
+        for i in reversed(range(len(self.timer_list))):
+            if self.timer_list[i]<GetTickCount64()-self.time_interval_ms:
+                del self.timer_list[i]
+                print("deleted")
+            else:
+                break
+        return len(self.timer_list)
+
+    def WAIT_FOR_CLEAR_AND_SEND(self):
+        if self.request_exit.is_set()==True:
+            return
+
+        send_ok=False
+        while send_ok==False and self.request_exit.is_set()==False:
+            self.lock_timerlist.acquire()
+            if self.timer_list_size_and_cleanup()>=self.max_messages-1:
+                self.lock_timerlist.release()
+                time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS/1000)
+            else:
+                self.timer_list+=[GetTickCount64()]
+                self.lock_timerlist.release()
+                send_ok=True
+
+        return
+
+    def DEACTIVATE(self):
+        self.request_exit.set()
+        return
+
+
 class Telegram_Bot(object):
     def __init__(self,input_token):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
@@ -751,11 +792,14 @@ class Telegram_Bot(object):
         self.bot_token=input_token
         self.is_stopped=threading.Event()
         self.is_stopped.clear()
+        self.active_rate_limiter=None
         self.base_web_url="https://api.telegram.org/bot"+self.bot_token+"/"
         self.base_file_url="https://api.telegram.org/file/bot"+self.bot_token+"/"
         return
 
     def perform_web_request(self,input_method,input_url,input_args):
+        if self.active_rate_limiter is not None:
+            self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
         if self.is_stopped.is_set()==True:
             return None
 
@@ -776,6 +820,8 @@ class Telegram_Bot(object):
             return {"ok":False,"result":None}
 
     def perform_file_request(self,input_method,input_url,input_args=None):
+        if self.active_rate_limiter is not None:
+            self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
         if self.is_stopped.is_set()==True:
             return None
 
@@ -898,6 +944,10 @@ class Telegram_Bot(object):
 
         raise Exception("Response error.")
 
+    def ATTACH_MESSAGE_RATE_LIMITER(self,input_ratelimiter):
+        self.active_rate_limiter=input_ratelimiter
+        return
+
     def DEACTIVATE(self):
         self.is_stopped.set()
         try:
@@ -906,53 +956,6 @@ class Telegram_Bot(object):
         except:
             pass
         self.request_pool=None
-        return
-
-
-class Telegram_Global_Message_Floodtracker(object):
-    def __init__(self,input_max_messages,input_time_interval_seconds):
-        self.timer_list=[]
-        self.max_messages=input_max_messages
-        self.time_interval_ms=input_time_interval_seconds*1000
-        self.request_exit=threading.Event()
-        self.request_exit.clear()
-        self.lock_timerlist=threading.Lock()
-        return
-
-    def timer_list_size_and_cleanup(self):
-        for i in reversed(range(len(self.timer_list))):
-            if self.timer_list[i]<GetTickCount64()-self.time_interval_ms:
-                del self.timer_list[i]
-            else:
-                break
-        return len(self.timer_list)
-
-    def get_list_size(self):
-        self.lock_timerlist.acquire()
-        retval=self.timer_list_size_and_cleanup()
-        self.lock_timerlist.release()
-        return retval
-
-    def NEWMESSAGE(self):
-        if self.request_exit.is_set()==True:
-            return
-
-        self.lock_timerlist.acquire()
-        self.timer_list+=[GetTickCount64()]
-        self.timer_list_size_and_cleanup()
-        self.lock_timerlist.release()
-        return
-
-    def WAIT_FOR_CLEAR(self):
-        if self.request_exit.is_set()==True:
-            return
-
-        while self.get_list_size()>=self.max_messages-1 and self.request_exit.is_set()==False:
-            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS/1000)
-        return
-
-    def DEACTIVATE(self):
-        self.request_exit.set()
         return
 
 
@@ -1144,7 +1147,6 @@ class User_Message_Handler(object):
 
         self.active_logger=input_logger
         self.active_7zip_task_handler=input_7zip_task_handler
-        self.common_floodtracker=None
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
         self.listener=input_listener_service
@@ -1209,16 +1211,12 @@ class User_Message_Handler(object):
         start_time=GetTickCount64()
         while GetTickCount64()-start_time<throttle_time and self.request_exit.is_set()==False:
             time.sleep(USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS)
-        if self.common_floodtracker is not None:
-            self.common_floodtracker.WAIT_FOR_CLEAR()
         if self.request_exit.is_set()==True:
             return True
         self.last_send_time=OS_Uptime_Seconds()
         try:
             self.bot_handle.Send_Message(sid,msg)
             self.lastsent_timers+=[self.last_send_time]
-            if self.common_floodtracker is not None:
-                self.common_floodtracker.NEWMESSAGE()
             excess_entries=max(0,len(self.lastsent_timers)-40)
             for _ in range(excess_entries):
                 del self.lastsent_timers[0]
@@ -1364,8 +1362,8 @@ class User_Message_Handler(object):
                 self.log("Listen stop was requested, but it is not currently listening.")
         return
 
-    def ATTACH_FLOODTRACKER(self,input_floodtracker):
-        self.common_floodtracker=input_floodtracker
+    def ATTACH_MESSAGE_RATE_LIMITER(self,input_ratelimiter):
+        self.bot_handle.ATTACH_MESSAGE_RATE_LIMITER(input_ratelimiter)
         return
 
     def UNLOCK(self):
@@ -1982,7 +1980,7 @@ class User_Console(object):
 
         self.active_logger=input_logger
         self.working_thread=threading.Thread(target=self.work_loop)
-        self.common_floodtracker=Telegram_Global_Message_Floodtracker(TELEGRAM_API_MAX_GLOBAL_IMS,TELEGRAM_API_MAX_GLOBAL_TIME_INTERVAL_SECONDS)
+        self.message_rate_limiter=Telegram_Message_Rate_Limiter(TELEGRAM_API_MAX_GLOBAL_IMS,TELEGRAM_API_MAX_GLOBAL_TIME_INTERVAL_SECONDS)
         self.working_thread.daemon=True
         self.active_UI_signaller=input_signaller
         self.is_exiting=threading.Event()
@@ -2008,7 +2006,7 @@ class User_Console(object):
         return
 
     def REQUEST_STOP(self):
-        self.common_floodtracker.DEACTIVATE()
+        self.message_rate_limiter.DEACTIVATE()
         self.request_exit.set()
         return
 
@@ -2216,7 +2214,7 @@ class User_Console(object):
 
         self.log("Starting User Message Handler(s)...")
         for user_handler_instance in self.user_handler_list:
-            user_handler_instance.ATTACH_FLOODTRACKER(self.common_floodtracker)
+            user_handler_instance.ATTACH_MESSAGE_RATE_LIMITER(self.message_rate_limiter)
             user_handler_instance.START()
             user_handler_instance.LISTEN(True)
 
