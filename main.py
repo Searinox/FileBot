@@ -754,6 +754,8 @@ class Telegram_Message_Rate_Limiter(object):
         return len(self.timer_list)
 
     def WAIT_FOR_CLEAR_AND_SEND(self):
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+
         if self.request_exit.is_set()==True:
             return
 
