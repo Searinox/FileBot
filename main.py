@@ -749,7 +749,6 @@ class Telegram_Message_Rate_Limiter(object):
         for i in reversed(range(len(self.timer_list))):
             if self.timer_list[i]<GetTickCount64()-self.time_interval_ms:
                 del self.timer_list[i]
-                print("deleted")
             else:
                 break
         return len(self.timer_list)
