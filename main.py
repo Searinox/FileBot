@@ -2241,7 +2241,7 @@ class User_Console(object):
 
                 if command.lower()=="exit":
                     self.log("Exit requested. Closing...")
-                    self.is_exiting.set()
+                    self.REQUEST_STOP()
                 else:
                     result=self.process_command(command)
 
