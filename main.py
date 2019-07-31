@@ -800,7 +800,8 @@ class Telegram_Bot(object):
 
     def perform_web_request(self,input_method,input_url,input_args):
         if self.active_rate_limiter is not None:
-            self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
+            if input_method=="POST":
+                self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
         if self.is_stopped.is_set()==True:
             return None
 
@@ -820,14 +821,16 @@ class Telegram_Bot(object):
             return {"ok":False,"result":None}
 
     def perform_file_request(self,input_method,input_url,input_args=None):
-        if self.active_rate_limiter is not None:
-            self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
         if self.is_stopped.is_set()==True:
             return None
 
         response=None
         try:
             if input_method=="POST":
+                if self.active_rate_limiter is not None:
+                    self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
+                if self.is_stopped.is_set()==True:
+                    return None
                 for keyname in input_args:
                     if type(input_args[keyname])==tuple:
                         if len(input_args[keyname])==2:
