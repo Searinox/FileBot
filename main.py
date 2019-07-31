@@ -1277,7 +1277,7 @@ class User_Message_Handler(object):
             newpath=terminate_with_backslash(newpath)
         return sanitize_path(newpath)
 
-    def check_tasks(self):
+    def check_pending_tasks(self):
         if self.pending_lockclear.is_set()==True:
             self.pending_lockclear.clear()
             if self.bot_lock_pass!=u"":
@@ -1294,29 +1294,9 @@ class User_Message_Handler(object):
 
         self.log("User Message Handler started, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
 
-        bot_bind_ok=False
-        activation_fail_announce=False
-        while bot_bind_ok==False and self.request_exit.is_set()==False:
-            try:
-                self.bot_handle.Get_Bot_Info()[u"username"]
-                bot_bind_ok=True
-            except Exception as ex:
-                if str(ex)=="Invalid token.":
-                    self.log("Invalid token. Exiting...")
-                    self.REQUEST_STOP()
-                else:
-                    if activation_fail_announce==False:
-                        self.log("User Message Handler activation error. Will keep trying...")
-                        activation_fail_announce=True
-                    time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
-
-        if self.request_exit.is_set()==False:
-            self.listener.consume_user_messages(self.account_username)
-            self.log("User Message Handler for \""+self.account_username+"\" is now active.")
-
         while self.request_exit.is_set()==False:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
-            self.check_tasks()
+            self.check_pending_tasks()
             if self.listen_flag.is_set()==True:
                 new_messages=self.listener.consume_user_messages(self.account_username)
                 total_new_messages=len(new_messages)
