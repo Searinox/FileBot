@@ -816,7 +816,6 @@ class Telegram_Bot(object):
                     return {"ok":response["ok"],"result":response["description"]}
                 elif "result" in response:
                     return {"ok":response["ok"],"result":response["result"]}
-            
         else:
             return {"ok":False,"result":None}
 
