@@ -1,4 +1,4 @@
-__version__="1.80"
+__version__="1.90"
 __author__="Searinox Navras"
 
 
@@ -408,6 +408,7 @@ class Time_Provider(object):
         ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
         self.request_pool=urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
+        self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
         self.time_delta=0
         self.lock_subscribers=threading.Lock()
@@ -449,16 +450,17 @@ class Time_Provider(object):
         return {"success":True,"time_difference":get_time_diff}
 
     def retrieve_current_UTC_internet_time(self):
-        response=self.request_pool.request(method="GET",url="https://time.gov/actualtime.cgi",preload_content=True,chunked=False,timeout=self.request_timeout)
+        response=self.request_pool.request(method="GET",url="https://worldtimeapi.org/api/timezone/Etc/UTC.txt",preload_content=True,chunked=False,timeout=self.request_timeout)
         if response.status==200:
-            timestr=str(response.data)
+            timestr=str(response.data,"utf8")
         else:
             raise Exception("Could not get time.")
-        quot1=timestr.find("time=\"")
-        quot1+=len("time=\"")
-        quot2=quot1+timestr[quot1+1:].find("\"")
+        quot1=timestr.find("\ndatetime: ")
+        quot1+=len("\ndatetime: ")
+        quot2=quot1+timestr[quot1+1:].find("+")
         quot2+=1
-        return int(timestr[quot1:quot2-3])/1000.0
+        timestr=timestr[quot1:quot2-3]
+        return (datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")-datetime.datetime(1970,1,1)).total_seconds()
 
     def update_server_time(self):
         update_success=False
@@ -477,7 +479,7 @@ class Time_Provider(object):
         return update_success
 
     def get_local_machine_time_delta_str(self):
-        time_difference=round(float((datetime.datetime.utcnow()-datetime.datetime(1970,1,1)).total_seconds())-self.GET_SERVER_TIME(),3)
+        time_difference=round(float((datetime.datetime.utcnow()-self.origin_time).total_seconds())-self.GET_SERVER_TIME(),3)
         if time_difference>0:
             retval="+"+str(time_difference)
         else:
