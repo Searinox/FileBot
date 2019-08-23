@@ -460,7 +460,7 @@ class Time_Provider(object):
         quot2=quot1+timestr[quot1+1:].find("+")
         quot2+=1
         timestr=timestr[quot1:quot2-3]
-        return (datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")-datetime.datetime(1970,1,1)).total_seconds()
+        return (datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")-self.origin_time).total_seconds()
 
     def update_server_time(self):
         update_success=False
