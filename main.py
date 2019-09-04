@@ -3054,11 +3054,15 @@ if fatal_error==False:
     log("Starting 7-ZIP Task Handler...")
     Active_7ZIP_Handler.START()
 
-    log("Obtaining local machine clock bias info...")
+    initial_time_sync_failed_once=False
+    log("Performing initial time synchronization via Internet...")
     sync_result={"success":False}
     while sync_result["success"]==False and Active_UI.IS_RUNNING()==True:
-        log("Performing initial time synchronization via Internet...")
         sync_result=Active_Time_Provider.SYNC()
+        if initial_time_sync_failed_once==False:
+            if sync_result["success"]==False:
+                initial_time_sync_failed_once=True
+                log("Initial time synchronization failed. Will keep trying...")
 
     if sync_result["success"]==True:
         log("Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+" second(s).")
