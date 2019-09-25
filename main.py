@@ -65,8 +65,7 @@ UI_SCALE_MODIFIER=1.125
 QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 FONTS={"<reference_point_size>":8,
-       "general":
-       {"type":"Monospace","scale":1,"properties":[]},
+       "general":{"type":"Monospace","scale":1,"properties":[]},
        "status":{"type":"Arial","scale":1,"properties":["bold"]},
        "log":{"type":"Consolas","scale":1,"properties":["bold"]}}
 COLOR_SCHEME={"window_text":"000000",
