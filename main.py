@@ -136,6 +136,12 @@ def log(input_text):
         LOGGER.LOG("MAINTHRD",input_text)
     return
 
+def SSL_Connection_Pool():
+    ssl_cert_context=ssl.create_default_context()
+    ssl_cert_context.check_hostname=True
+    ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
+    return urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
+
 def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_event):
     global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
     global MAINTHREAD_HEARTBEAT_SECONDS
@@ -402,10 +408,7 @@ class Time_Provider(object):
     def __init__(self):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
 
-        ssl_cert_context=ssl.create_default_context()
-        ssl_cert_context.check_hostname=True
-        ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
-        self.request_pool=urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
+        self.request_pool=SSL_Connection_Pool()
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
@@ -784,10 +787,7 @@ class Telegram_Bot(object):
         global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
         global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
 
-        ssl_cert_context=ssl.create_default_context()
-        ssl_cert_context.check_hostname=True
-        ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
-        self.request_pool=urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
+        self.request_pool=SSL_Connection_Pool()
         self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
