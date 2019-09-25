@@ -57,6 +57,8 @@ BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS=30
 WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
 MAX_BOT_USERS=100
+BOT_LOCK_PASSWORD_CHARACTERS_MIN=4
+BOT_LOCK_PASSWORD_CHARACTERS_MAX=32
 
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
@@ -1186,6 +1188,25 @@ class User_Message_Handler(object):
             self.blacklisted_paths=[]
         for i in range(len(self.blacklisted_paths)):
             self.blacklisted_paths[i]=self.blacklisted_paths[i].lower()
+        self.supported_commands={"cd":{"write_only":False,"call":self.performcommand_cd},
+                                 "dir":{"write_only":False,"call":self.performcommand_dir},
+                                 "get":{"write_only":False,"call":self.performcommand_get},
+                                 "help":{"write_only":False,"call":self.performcommand_help},
+                                 "lock":{"write_only":False,"call":self.performcommand_lock},
+                                 "root":{"write_only":False,"call":self.performcommand_root},
+                                 "start":{"write_only":False,"call":self.performcommand_start},
+                                 "stop":{"write_only":False,"call":self.performcommand_stop},
+                                 "unlock":{"write_only":False,"call":self.performcommand_unlock},
+                                 "up":{"write_only":False,"call":self.performcommand_up},
+                                 "del":{"write_only":True,"call":self.performcommand_del},
+                                 "eat":{"write_only":True,"call":self.performcommand_eat},
+                                 "listzips":{"write_only":True,"call":self.performcommand_listzips},
+                                 "mkdir":{"write_only":True,"call":self.performcommand_mkdir},
+                                 "ren":{"write_only":True,"call":self.performcommand_ren},
+                                 "rmdir":{"write_only":True,"call":self.performcommand_rmdir},
+                                 "stopzips":{"write_only":True,"call":self.performcommand_stopzips},
+                                 "zip":{"write_only":True,"call":self.performcommand_zip}
+            }
         return
 
     def log(self,input_text):
@@ -1511,6 +1532,479 @@ class User_Message_Handler(object):
 
         return response
 
+    def performcommand_start(self,command_context):
+        self.log("User has sent a start request.")
+
+        return u""
+
+    def performcommand_stop(self,command_context):
+        self.log("User has sent a stop request.")
+
+        return u""
+
+    def performcommand_root(self,command_context):
+        response=u""
+
+        if self.allowed_root!=u"*":
+            response=u"Root folder path is \""+self.allowed_root+u"\"."
+        else:
+            response=u"This user is allowed to access all host system drives."
+        self.log("Root folder path requested, which is \""+self.allowed_root+"\".")
+
+        return response
+
+    def performcommand_dir(self,command_context):
+        response=u""
+
+        extra_search=u""
+
+        if u"?f:" in command_context["args"].lower():
+            start=command_context["args"].lower().find(u"?f:")
+            end=command_context["args"][start:].find(u" ")
+            if end==-1:
+                end=len(command_context["args"])
+            else:
+                end+=start
+            extra_search=command_context["args"][start+len(u"?f:"):end]
+            if command_context["args"][:start].strip()!=u"":
+                command_context["args"]=command_context["args"][:start].strip()
+            else:
+                command_context["args"]=command_context["args"][end:].strip()
+
+        if u"?d" in command_context["args"].lower():
+            folders_only=True
+            start=command_context["args"].lower().find(u"?d")
+            end=start+len(u"?d")
+            if command_context["args"][:start].strip()!=u"":
+                command_context["args"]=command_context["args"][:start].strip()
+            else:
+                command_context["args"]=command_context["args"][end:].strip()
+        else:
+            folders_only=False
+
+        self.log("Listing requested for path \""+command_context["args"]+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
+
+        if command_context["args"]==u"":
+            use_folder=self.get_last_folder()
+        else:
+            use_folder=command_context["args"]
+        use_folder=self.rel_to_abs(use_folder)
+        if self.allowed_path(use_folder)==True:
+            dirlist=self.folder_list_string(use_folder,extra_search,folders_only)
+        else:
+            dirlist=u""
+            response=u"<Path is inaccessible.>"
+            self.log("Folder path \""+command_context["args"]+"\" was not accessible for listing.")
+        if dirlist!=u"<BAD_PATH>":
+            segment_list=self.segment_file_list_string(dirlist)
+            if len(segment_list)>0:
+                for segment in segment_list:
+                    if self.sendmsg(command_context["sid"],segment)==False:
+                        response=u"<Listing interrupted.>"
+                        self.log("Listing for folder path \""+command_context["args"]+"\" was interrupted.")
+                        break
+                    if self.request_exit.is_set()==True:
+                        break
+            else:
+                response=u"<Folder is empty.>"
+                self.log("Folder path \""+command_context["args"]+"\" was empty.")
+            if response==u"":
+                response=u"<Listing finished.>"
+        else:
+            response=u"<Path is inaccessible.>"
+            self.log("Folder path \""+command_context["args"]+"\" was not accessible for listing.")
+
+        return response
+
+    def performcommand_cd(self,command_context):
+        response=u""
+
+        if command_context["args"]!="":
+            newpath=self.rel_to_abs(command_context["args"])
+            if self.usable_dir(newpath)==True:
+                try:
+                    newpath=self.proper_caps_path(newpath)
+                except:
+                    pass
+                newpath=self.proper_caps_path(terminate_with_backslash(newpath))
+                self.set_last_folder(newpath)
+                response=u"Current folder changed to \""+newpath+"\"."
+                self.log("Current folder changed to \""+newpath+"\".")
+            else:
+                response=u"Path could not be accessed."
+                self.log("Path provided \""+newpath+"\" could not be accessed.")
+        else:
+            newpath=self.get_last_folder()
+            response=u"Current folder is \""+newpath+u"\"."
+            self.log("Queried current folder, which is \""+newpath+"\".")
+
+        return response
+
+    def performcommand_get(self,command_context):
+        response=u""
+
+        if command_context["args"]!=u"":
+            newpath=self.rel_to_abs(command_context["args"],True)
+            if self.usable_path(newpath)==True:
+                newpath=self.proper_caps_path(newpath)
+                self.log("Requested get file \""+newpath+"\". Sending...")
+                self.sendmsg(command_context["sid"],u"Getting file, please wait...")
+                try:
+                    fsize=os.path.getsize(newpath)
+                    if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                        self.bot_handle.Send_File(command_context["cid"],newpath)
+                        self.log("File \""+newpath+"\" sent.")
+                    else:
+                        if fsize!=0:
+                            response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                            self.log("Requested file \""+newpath+"\" too large to get.")
+                        else:
+                            response=u"File is empty."
+                            self.log("Get file \""+newpath+"\" failed because the file is empty.")
+                except:
+                    response=u"Problem getting file."
+                    self.log("Get File error for \""+newpath+"\".")
+            else:
+                response=u"File not found or inaccessible."
+                self.log("Get file \""+newpath+"\" was not found.")
+        else:
+            response=u"A file name or path must be provided."
+            self.log("Attempted to use get without a file name or path.")
+
+        return response
+
+    def performcommand_ren(self,command_context):
+        response=u""
+
+        newname=""
+        if u"?to:" in command_context["args"].lower():
+            end=command_context["args"].lower().find(u"?to:")
+            newname=command_context["args"][end+len(u"?to:"):].strip()
+            command_args=command_context["args"][:end].strip()
+
+        if command_context["args"]!=u"" and newname!=u"":
+            newname_ok=True
+            for c in newname:
+                if c in u"|<>\":\\/*?":
+                    newname_ok=False
+                    break
+            if newname_ok==True:
+                newpath=self.rel_to_abs(command_context["args"],True)
+                if self.usable_path(newpath)==True:
+                    newpath=self.proper_caps_path(newpath)
+                    end=newpath.rfind(u"\\")
+                    if end!=-1:
+                        foldername=terminate_with_backslash(newpath[:end])
+                        self.log("Requested rename \""+newpath+"\" to \""+newname+"\".")
+                        newtarget=foldername+newname
+                        if os.path.exists(newtarget)==False:
+                            try:
+                                os.rename(newpath,newtarget)
+                                response=u"Renamed \""+newpath+u"\" to \""+newname+u"\"."
+                                self.log("Renamed \""+newpath+"\" to \""+newname+"\".")
+                            except:
+                                response=u"Problem renaming."
+                                self.log("File/folder \""+newpath+"\" rename error.")
+                        else:
+                            response=u"A file or folder with the new name already exists."
+                            self.log("File/folder rename of \""+newpath+"\" failed because the new target \""+newtarget+"\" already exists.")
+                    else:
+                        response=u"Problem with path."
+                        self.log("File/folder rename \""+newpath+"\" path error.")
+                else:
+                    response=u"File/folder not found or inaccessible."
+                    self.log("File/folder to rename \""+newpath+"\" not found.")
+            else:
+                response=u"The new name must not be a path or contain invalid characters."
+                self.log("Attempted to rename \""+command_args+"\" to a new name containing invalid characters.")
+        else:
+            response=u"A name or path and a new name preceded by \"?to:\" must be provided."
+            self.log("Attempted to rename without specifying a name or path.")
+
+        return response
+
+    def performcommand_eat(self,command_context):
+        response=u""
+
+        if command_context["args"].endswith(u" ?confirm")==True:
+            command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
+            if command_context["args"]!=u"":
+                newpath=self.rel_to_abs(command_context["args"],True)
+                if self.usable_path(newpath)==True:
+                    newpath=self.proper_caps_path(newpath)
+                    self.log("Requested eat file \""+newpath+"\". Sending...")
+                    self.sendmsg(command_context["sid"],u"Eating file, please wait...")
+                    success=False
+                    try:
+                        fsize=os.path.getsize(newpath)
+                        if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
+                            self.bot_handle.Send_File(command_context["cid"],newpath)
+                            self.log("File \""+newpath+"\" sent.")
+                            success=True
+                        else:
+                            if fsize!=0:
+                                response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                                self.log("Requested file \""+newpath+"\" too large to eat.")
+                            else:
+                                response=u"File is empty."
+                                self.log("Eat file \""+newpath+"\" failed because the file is empty.")
+                    except:
+                        response=u"Problem getting file."
+                        self.log("File \""+newpath+"\" send error.")
+                    if success==True:
+                        try:
+                            self.log("File \""+newpath+"\" sent. Deleting...")
+                            os.remove(newpath)
+                            response=u"File deleted."
+                            self.log("File \""+newpath+"\" deleted.")
+                        except:
+                            response=u"Problem deleting file."
+                            self.log("File delete error for \""+newpath+"\".")
+                else:
+                    response=u"File not found or inaccessible."
+                    self.log("File to eat at \""+newpath+"\" not found.")
+            else:
+                response=u"A file name or path must be provided."
+                self.log("Attempted to eat file without specifying a name or path.")
+        else:
+            response=u"This command must end in \" ?confirm\"."
+            self.log("Attempted to delete file without confirmation.")
+
+        return response
+
+    def performcommand_del(self,command_context):
+        response=u""
+
+        if command_context["args"].endswith(u" ?confirm")==True:
+            command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
+            if command_context["args"]!="":
+                newpath=self.rel_to_abs(command_context["args"],True)
+                if self.usable_path(newpath)==True:
+                    newpath=self.proper_caps_path(newpath)
+                    self.log("Requested delete file \""+newpath+"\".")
+                    try:
+                        self.sendmsg(command_context["sid"],"Deleting file...")
+                        os.remove(newpath)
+                        response=u"File deleted."
+                        self.log("File \""+newpath+"\" deleted.")
+                    except:
+                        response=u"Problem deleting file."
+                        self.log("File \""+newpath+"\" delete error.")
+                else:
+                    response=u"File not found or inaccessible."
+                    self.log("File to delete \""+newpath+"\" not found.")
+            else:
+                response=u"A file name or path must be provided."
+                self.log("Attempted to delete file without specifying a name or path.")
+        else:
+            response=u"This command must end in \" ?confirm\"."
+            self.log("Attempted to delete file without confirmation.")
+
+        return response
+
+    def performcommand_mkdir(self,command_context):
+        response=u""
+
+        if command_context["args"]!=u"":
+            newpath=self.rel_to_abs(command_context["args"],True)
+            upper_folder=newpath
+            if upper_folder.endswith(u"\\")==True:
+                upper_folder=upper_folder[:-1]
+            if upper_folder.count(u"\\")>0:
+                upper_folder=upper_folder[:upper_folder.rfind(u"\\")+1]
+            if self.usable_dir(upper_folder)==True:
+                if os.path.isdir(newpath)==False:
+                    try:
+                        os.mkdir(newpath)
+                        response=u"Folder created."
+                        self.log("Folder created at \""+newpath+"\".")
+                    except:
+                        response=u"Problem creating folder."
+                        self.log("Folder create error at \""+newpath+"\".")
+                else:
+                    response=u"Folder already exists."
+                    self.log("Attempted to create already existing folder at \""+newpath+"\".")
+            else:
+                response=u"Path is not usable."
+                self.log("Attempted to create folder at unusable path \""+newpath+"\".")
+        else:
+            response=u"A folder name or path must be provided."
+            self.log("Attempted to create folder without specifying a name or path.")
+
+        return response
+
+    def performcommand_rmdir(self,command_context):
+        response=u""
+
+        if command_context["args"].endswith(u" ?confirm")==True:
+            command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
+            if command_context["args"]!=u"":
+                newpath=self.rel_to_abs(command_context["args"],True)
+                if self.usable_dir(newpath)==True:
+                    upper_folder=newpath
+                    if upper_folder.endswith(u"\\")==True:
+                        upper_folder=upper_folder[:-1]
+                    if upper_folder.count(u"\\")>0:
+                        upper_folder=upper_folder[:upper_folder.rfind(u"\\")+1]
+                    if self.usable_dir(upper_folder)==True:
+                        newpath=self.proper_caps_path(newpath)
+                        self.log("Requested delete folder \""+newpath+"\".")
+                        try:
+                            self.sendmsg(command_context["sid"],u"Deleting folder...")
+                            shutil.rmtree(newpath)
+                            moved_up=u""
+                            newpath=terminate_with_backslash(newpath)
+                            if self.get_last_folder().lower().endswith(newpath.lower())==True:
+                                self.set_last_folder(upper_folder)
+                                moved_up=u" Current folder is now \""+self.proper_caps_path(upper_folder)+u"\"."
+                            response=u"Folder deleted."+moved_up
+                            self.log("Folder deleted at \""+newpath+"\"."+moved_up)
+                        except:
+                            response=u"Problem deleting folder."
+                            self.log("Folder delete error at \""+newpath+"\".")
+                    else:
+                        response=u"No upper folder to switch to after removal."
+                        self.log("Attempted to delete \""+newpath+"\" at top folder.")
+                else:
+                    response=u"Folder \""+newpath+u"\" not found or inaccessible."
+                    self.log("Folder to delete not found at \""+newpath+"\".")
+            else:
+                response=u"A folder name or path must be provided."
+                self.log("No folder name or path provided for deletion.")
+        else:
+            response=u"This command must end in \" ?confirm\"."
+            self.log("Attempted to delete folder without confirmation.")
+
+        return response
+
+    def performcommand_up(self,command_context):
+        response=u""
+
+        if self.last_folder.count(u"\\")>1:
+            newpath=self.get_last_folder()
+            newpath=newpath[:-1]
+            newpath=newpath[:newpath.rfind(u"\\")+1]
+            if self.allowed_path(newpath)==True:
+                self.set_last_folder(newpath)
+                response=u"Current folder is now \""+newpath+u"\"."
+                self.log("Current folder changed to \""+newpath+"\".")
+            else:
+                response=u"Already at top folder."
+                self.log("Attempted to go up while at top folder.")
+        else:
+            response=u"Already at top folder."
+            self.log("Attempted to go up while at top folder.")
+
+        return response
+
+    def performcommand_zip(self,command_context):
+        response=u""
+
+        if command_context["args"]!=u"":
+            newpath=self.rel_to_abs(command_context["args"])
+            if os.path.exists(newpath)==False and newpath.endswith(u"\\")==True:
+                newpath=newpath[:-1]
+            if self.usable_path(newpath)==True:
+                zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
+                if zip_response["result"]=="CREATED":
+                    response=u"Issued zip command."
+                    self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
+                elif zip_response["result"]=="EXISTS":
+                    response=u"An archive \""+zip_response["full_target"]+u".7z\" already exists."
+                    self.log("Zip \""+command_context["args"]+"\" failed because target archive \""+zip_response["full_target"]+".7z\" already exists.")
+                elif zip_response["result"]=="ERROR":
+                    response=u"Problem running command."
+                    self.log("Zip \""+command_context["args"]+"\" command could not be run.")
+                elif zip_response["result"]=="MAXREACHED":
+                    response=u"Maximum concurrent archival tasks reached."
+                    self.log("Zip \""+command_context["args"]+"\" rejected due to max concurrent tasks per user limit.")
+            else:
+                response=u"File not found or inaccessible."
+                self.log("Zip \""+command_context["args"]+"\" file not found or inaccessible.")
+        else:
+            response=u"A file or folder name or path must be provided."
+            self.log("Attempted to zip without a name or path.")
+
+        return response
+
+    def performcommand_listzips(self,command_context):
+        response=u""
+
+        tasks_7zip=self.active_7zip_task_handler.GET_TASKS()
+
+        for taskdata in tasks_7zip:
+            if taskdata["user"]==self.account_username:
+                response+=u">ARCHIVING \""+self.proper_caps_path(taskdata["target"])+u"\"\n"
+
+        if response==u"":
+            response=u"No archival tasks running."
+        else:
+            response=u"Ongoing archival tasks:\n\n"+response
+
+        self.log("Requested list of running 7-ZIP archival tasks for user.")
+
+        return response
+
+    def performcommand_stopzips(self,command_context):
+        response=u"All running archival tasks will be stopped."
+        self.active_7zip_task_handler.END_TASKS([self.account_username])
+        self.log("Requested stop of any running 7-ZIP archival tasks.")
+
+        return response
+
+    def performcommand_lock(self,command_context):
+        global BOT_LOCK_PASSWORD_CHARACTERS_MIN
+        global BOT_LOCK_PASSWORD_CHARACTERS_MAX
+
+        response=""
+
+        cmdlen=len(command_context["args"])
+        if cmdlen>=BOT_LOCK_PASSWORD_CHARACTERS_MIN and cmdlen<=BOT_LOCK_PASSWORD_CHARACTERS_MAX:
+            self.bot_lock_pass=command_context["args"]
+            response=u"Bot locked."
+            self.lock_status.set()
+            self.log("User Message Handler was locked with a password.")
+        else:
+            response=u"Lock password must be between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" characters long."
+            self.log("Attempted to lock the bot with a password of invalid length.")
+
+        return response
+
+    def performcommand_unlock(self,command_context):
+        return u"The bot is already unlocked."
+
+    def performcommand_help(self,command_context):
+        global BOT_LOCK_PASSWORD_CHARACTERS_MIN
+        global BOT_LOCK_PASSWORD_CHARACTERS_MAX
+
+        response=u"AVAILABLE BOT COMMANDS:\n\n"
+        response+=u"/help: display this help screen\n"
+        response+=u"/root: display the root access folder\n"
+        response+=u"/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
+        response+=u"/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
+        if self.allow_writing==True:
+            response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+u" simultaneous tasks\n"
+            response+=u"/listzips: list all running 7-ZIP archival tasks\n"
+            response+=u"/stopzips: stop all running 7-ZIP archival tasks\n"
+            response+=u"/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
+        response+=u"/up: move up one folder from current path\n"
+        response+=u"/get <[PATH]FILE>: retrieve the file at the location to Telegram chat\n"
+        if self.allow_writing==True:
+            response+=u"/eat <[PATH]FILE>: upload the file at the location to Telegram, then delete it from its original location\n"
+            response+=u"/del <[PATH]FILE>: delete the file at the location\n"
+            response+=u"/mkdir <[PATH]FOLDER>: create the folder at the location\n"
+            response+=u"/rmdir <[PATH]FOLDER>: delete the folder at the location\n"
+        response+=u"/lock <PASSWORD>: lock the bot from responding to messages using a password between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" characters long\n"
+        response+=u"/unlock <PASSWORD>: unlock the bot\n"
+        response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
+        response+=u"File size limit for getting files from host system: "+readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES)+u"."
+        if self.allow_writing==True:
+            response+=u"\nFile size limit for putting files on host system: "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".\n"
+            response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
+        self.log(u"Help requested.")
+
+        return response
+
     def process_instructions(self,sid,msg,cid):
         global TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
         global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
@@ -1519,7 +2013,7 @@ class User_Message_Handler(object):
             if msg.lower().startswith(u"/unlock ")==True:
                 attempted_pass=msg[len(u"/unlock "):].strip()
                 attempted_pass_len=len(attempted_pass)
-                if attempted_pass_len>=4 and attempted_pass_len<=32:
+                if attempted_pass_len>=BOT_LOCK_PASSWORD_CHARACTERS_MAX and attempted_pass_len<=BOT_LOCK_PASSWORD_CHARACTERS_MAX:
                     if attempted_pass==self.bot_lock_pass:
                         self.bot_lock_pass=u""
                         self.lock_status.clear()
@@ -1542,414 +2036,20 @@ class User_Message_Handler(object):
         command_args=msg[cmd_end+1:].strip()
         response=u""
 
-        if command_type==u"start":
-            self.log("User has sent a start request.")
+        failed_to_find_cmd=False
 
-        elif command_type==u"stop":
-            self.log("User has sent a stop request.")
-
-        elif command_type==u"root":
-            if self.allowed_root!=u"*":
-                response=u"Root folder path is \""+self.allowed_root+u"\"."
+        if command_type in self.supported_commands:
+            command_info=self.supported_commands[command_type]
+            command_context={"args":command_args,"sid":sid,"cid":cid}
+            requires_write=command_info["write_only"]
+            if requires_write==False or self.allow_writing==True:
+                response=command_info["call"](command_context)
             else:
-                response=u"This user is allowed to access all host system drives."
-            self.log("Root folder path requested, which is \""+self.allowed_root+"\".")
-
-        elif command_type==u"dir":
-            extra_search=u""
-
-            if u"?f:" in command_args.lower():
-                start=command_args.lower().find(u"?f:")
-                end=command_args[start:].find(u" ")
-                if end==-1:
-                    end=len(command_args)
-                else:
-                    end+=start
-                extra_search=command_args[start+len(u"?f:"):end]
-                if command_args[:start].strip()!=u"":
-                    command_args=command_args[:start].strip()
-                else:
-                    command_args=command_args[end:].strip()
-
-            if u"?d" in command_args.lower():
-                folders_only=True
-                start=command_args.lower().find(u"?d")
-                end=start+len(u"?d")
-                if command_args[:start].strip()!=u"":
-                    command_args=command_args[:start].strip()
-                else:
-                    command_args=command_args[end:].strip()
-            else:
-                folders_only=False
-
-            self.log("Listing requested for path \""+command_args+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
-
-            if command_args==u"":
-                use_folder=self.get_last_folder()
-            else:
-                use_folder=command_args
-            use_folder=self.rel_to_abs(command_args)
-            if self.allowed_path(use_folder)==True:
-                dirlist=self.folder_list_string(use_folder,extra_search,folders_only)
-            else:
-                dirlist=u""
-                response=u"<Path is inaccessible.>"
-                self.log("Folder path \""+command_args+"\" was not accessible for listing.")
-            if dirlist!=u"<BAD_PATH>":
-                segment_list=self.segment_file_list_string(dirlist)
-                if len(segment_list)>0:
-                    for segment in segment_list:
-                        if self.sendmsg(sid,segment)==False:
-                            response=u"<Listing interrupted.>"
-                            self.log("Listing for folder path \""+command_args+"\" was interrupted.")
-                            break
-                        if self.request_exit.is_set()==True:
-                            break
-                else:
-                    response=u"<Folder is empty.>"
-                    self.log("Folder path \""+command_args+"\" was empty.")
-                if response==u"":
-                    response=u"<Listing finished.>"
-            else:
-                response=u"<Path is inaccessible.>"
-                self.log("Folder path \""+command_args+"\" was not accessible for listing.")
-
-        elif command_type==u"cd":
-            if command_args!="":
-                newpath=self.rel_to_abs(command_args)
-                if self.usable_dir(newpath)==True:
-                    try:
-                        newpath=self.proper_caps_path(newpath)
-                    except:
-                        pass
-                    newpath=self.proper_caps_path(terminate_with_backslash(newpath))
-                    self.set_last_folder(newpath)
-                    response=u"Current folder changed to \""+newpath+"\"."
-                    self.log("Current folder changed to \""+newpath+"\".")
-                else:
-                    response=u"Path could not be accessed."
-                    self.log("Path provided \""+newpath+"\" could not be accessed.")
-            else:
-                newpath=self.get_last_folder()
-                response=u"Current folder is \""+newpath+u"\"."
-                self.log("Queried current folder, which is \""+newpath+"\".")
-
-        elif command_type==u"get":
-            if command_args!=u"":
-                newpath=self.rel_to_abs(command_args,True)
-                if self.usable_path(newpath)==True:
-                    newpath=self.proper_caps_path(newpath)
-                    self.log("Requested get file \""+newpath+"\". Sending...")
-                    self.sendmsg(sid,u"Getting file, please wait...")
-                    try:
-                        fsize=os.path.getsize(newpath)
-                        if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                            self.bot_handle.Send_File(cid,newpath)
-                            self.log("File \""+newpath+"\" sent.")
-                        else:
-                            if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                                self.log("Requested file \""+newpath+"\" too large to get.")
-                            else:
-                                response=u"File is empty."
-                                self.log("Get file \""+newpath+"\" failed because the file is empty.")
-                    except:
-                        response=u"Problem getting file."
-                        self.log("Get File error for \""+newpath+"\".")
-                else:
-                    response=u"File not found or inaccessible."
-                    self.log("Get file \""+newpath+"\" was not found.")
-            else:
-                response=u"A file name or path must be provided."
-                self.log("Attempted to use get without a file name or path.")
-
-        elif command_type==u"ren" and self.allow_writing==True:
-            newname=""
-            if u"?to:" in command_args.lower():
-                end=command_args.lower().find(u"?to:")
-                newname=command_args[end+len(u"?to:"):].strip()
-                command_args=command_args[:end].strip()
-
-            if command_args!=u"" and newname!=u"":
-                newname_ok=True
-                for c in newname:
-                    if c in u"|<>\":\\/*?":
-                        newname_ok=False
-                        break
-                if newname_ok==True:
-                    newpath=self.rel_to_abs(command_args,True)
-                    if self.usable_path(newpath)==True:
-                        newpath=self.proper_caps_path(newpath)
-                        end=newpath.rfind(u"\\")
-                        if end!=-1:
-                            foldername=terminate_with_backslash(newpath[:end])
-                            self.log("Requested rename \""+newpath+"\" to \""+newname+"\".")
-                            newtarget=foldername+newname
-                            if os.path.exists(newtarget)==False:
-                                try:
-                                    os.rename(newpath,newtarget)
-                                    response=u"Renamed \""+newpath+u"\" to \""+newname+u"\"."
-                                    self.log("Renamed \""+newpath+"\" to \""+newname+"\".")
-                                except:
-                                    response=u"Problem renaming."
-                                    self.log("File/folder \""+newpath+"\" rename error.")
-                            else:
-                                response=u"A file or folder with the new name already exists."
-                                self.log("File/folder rename of \""+newpath+"\" failed because the new target \""+newtarget+"\" already exists.")
-                        else:
-                            response=u"Problem with path."
-                            self.log("File/folder rename \""+newpath+"\" path error.")
-                    else:
-                        response=u"File/folder not found or inaccessible."
-                        self.log("File/folder to rename \""+newpath+"\" not found.")
-                else:
-                    response=u"The new name must not be a path or contain invalid characters."
-                    self.log("Attempted to rename \""+command_args+"\" to a new name containing invalid characters.")
-            else:
-                response=u"A name or path and a new name preceded by \"?to:\" must be provided."
-                self.log("Attempted to rename without specifying a name or path.")
-
-        elif command_type==u"eat" and self.allow_writing==True:
-            if command_args.endswith(u" ?confirm")==True:
-                command_args=command_args[:-len(u" ?confirm")].strip()
-                if command_args!=u"":
-                    newpath=self.rel_to_abs(command_args,True)
-                    if self.usable_path(newpath)==True:
-                        newpath=self.proper_caps_path(newpath)
-                        self.log("Requested eat file \""+newpath+"\". Sending...")
-                        self.sendmsg(sid,u"Eating file, please wait...")
-                        success=False
-                        try:
-                            fsize=os.path.getsize(newpath)
-                            if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                                self.bot_handle.Send_File(cid,newpath)
-                                self.log("File \""+newpath+"\" sent.")
-                                success=True
-                            else:
-                                if fsize!=0:
-                                    response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                                    self.log("Requested file \""+newpath+"\" too large to eat.")
-                                else:
-                                    response=u"File is empty."
-                                    self.log("Eat file \""+newpath+"\" failed because the file is empty.")
-                        except:
-                            response=u"Problem getting file."
-                            self.log("File \""+newpath+"\" send error.")
-                        if success==True:
-                            try:
-                                self.log("File \""+newpath+"\" sent. Deleting...")
-                                os.remove(newpath)
-                                response=u"File deleted."
-                                self.log("File \""+newpath+"\" deleted.")
-                            except:
-                                response=u"Problem deleting file."
-                                self.log("File delete error for \""+newpath+"\".")
-                    else:
-                        response=u"File not found or inaccessible."
-                        self.log("File to eat at \""+newpath+"\" not found.")
-                else:
-                    response=u"A file name or path must be provided."
-                    self.log("Attempted to eat file without specifying a name or path.")
-            else:
-                response=u"This command must end in \" ?confirm\"."
-                self.log("Attempted to delete file without confirmation.")
-
-        elif command_type==u"del" and self.allow_writing==True:
-            if command_args.endswith(u" ?confirm")==True:
-                command_args=command_args[:-len(u" ?confirm")].strip()
-                if command_args!="":
-                    newpath=self.rel_to_abs(command_args,True)
-                    if self.usable_path(newpath)==True:
-                        newpath=self.proper_caps_path(newpath)
-                        self.log("Requested delete file \""+newpath+"\".")
-                        try:
-                            self.sendmsg(sid,"Deleting file...")
-                            os.remove(newpath)
-                            response=u"File deleted."
-                            self.log("File \""+newpath+"\" deleted.")
-                        except:
-                            response=u"Problem deleting file."
-                            self.log("File \""+newpath+"\" delete error.")
-                    else:
-                        response=u"File not found or inaccessible."
-                        self.log("File to delete \""+newpath+"\" not found.")
-                else:
-                    response=u"A file name or path must be provided."
-                    self.log("Attempted to delete file without specifying a name or path.")
-            else:
-                response=u"This command must end in \" ?confirm\"."
-                self.log("Attempted to delete file without confirmation.")
-
-        elif command_type==u"mkdir" and self.allow_writing==True:
-            if command_args!=u"":
-                newpath=self.rel_to_abs(command_args,True)
-                upper_folder=newpath
-                if upper_folder.endswith(u"\\")==True:
-                    upper_folder=upper_folder[:-1]
-                if upper_folder.count(u"\\")>0:
-                    upper_folder=upper_folder[:upper_folder.rfind(u"\\")+1]
-                if self.usable_dir(upper_folder)==True:
-                    if os.path.isdir(newpath)==False:
-                        try:
-                            os.mkdir(newpath)
-                            response=u"Folder created."
-                            self.log("Folder created at \""+newpath+"\".")
-                        except:
-                            response=u"Problem creating folder."
-                            self.log("Folder create error at \""+newpath+"\".")
-                    else:
-                        response=u"Folder already exists."
-                        self.log("Attempted to create already existing folder at \""+newpath+"\".")
-                else:
-                    response=u"Path is not usable."
-                    self.log("Attempted to create folder at unusable path \""+newpath+"\".")
-            else:
-                response=u"A folder name or path must be provided."
-                self.log("Attempted to create folder without specifying a name or path.")
-
-        elif command_type==u"rmdir" and self.allow_writing==True:
-            if command_args.endswith(u" ?confirm")==True:
-                command_args=command_args[:-len(u" ?confirm")].strip()
-                if command_args!=u"":
-                    newpath=self.rel_to_abs(command_args,True)
-                    if self.usable_dir(newpath)==True:
-                        upper_folder=newpath
-                        if upper_folder.endswith(u"\\")==True:
-                            upper_folder=upper_folder[:-1]
-                        if upper_folder.count(u"\\")>0:
-                            upper_folder=upper_folder[:upper_folder.rfind(u"\\")+1]
-                        if self.usable_dir(upper_folder)==True:
-                            newpath=self.proper_caps_path(newpath)
-                            self.log("Requested delete folder \""+newpath+"\".")
-                            try:
-                                self.sendmsg(sid,u"Deleting folder...")
-                                shutil.rmtree(newpath)
-                                moved_up=u""
-                                newpath=terminate_with_backslash(newpath)
-                                if self.get_last_folder().lower().endswith(newpath.lower())==True:
-                                    self.set_last_folder(upper_folder)
-                                    moved_up=u" Current folder is now \""+self.proper_caps_path(upper_folder)+u"\"."
-                                response=u"Folder deleted."+moved_up
-                                self.log("Folder deleted at \""+newpath+"\"."+moved_up)
-                            except:
-                                response=u"Problem deleting folder."
-                                self.log("Folder delete error at \""+newpath+"\".")
-                        else:
-                            response=u"No upper folder to switch to after removal."
-                            self.log("Attempted to delete \""+newpath+"\" at top folder.")
-                    else:
-                        response=u"Folder \""+newpath+u"\" not found or inaccessible."
-                        self.log("Folder to delete not found at \""+newpath+"\".")
-                else:
-                    response=u"A folder name or path must be provided."
-                    self.log("No folder name or path provided for deletion.")
-            else:
-                response=u"This command must end in \" ?confirm\"."
-                self.log("Attempted to delete folder without confirmation.")
-
-        elif command_type==u"up":
-            if self.last_folder.count(u"\\")>1:
-                newpath=self.get_last_folder()
-                newpath=newpath[:-1]
-                newpath=newpath[:newpath.rfind(u"\\")+1]
-                if self.allowed_path(newpath)==True:
-                    self.set_last_folder(newpath)
-                    response=u"Current folder is now \""+newpath+u"\"."
-                    self.log("Current folder changed to \""+newpath+"\".")
-                else:
-                    response=u"Already at top folder."
-                    self.log("Attempted to go up while at top folder.")
-            else:
-                response=u"Already at top folder."
-                self.log("Attempted to go up while at top folder.")
-
-        elif command_type==u"zip" and self.allow_writing==True:
-            if command_args!=u"":
-                newpath=self.rel_to_abs(command_args)
-                if os.path.exists(newpath)==False and newpath.endswith(u"\\")==True:
-                    newpath=newpath[:-1]
-                if self.usable_path(newpath)==True:
-                    zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
-                    if zip_response["result"]=="CREATED":
-                        response=u"Issued zip command."
-                        self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
-                    elif zip_response["result"]=="EXISTS":
-                        response=u"An archive \""+zip_response["full_target"]+u".7z\" already exists."
-                        self.log("Zip \""+command_args+"\" failed because target archive \""+zip_response["full_target"]+".7z\" already exists.")
-                    elif zip_response["result"]=="ERROR":
-                        response=u"Problem running command."
-                        self.log("Zip \""+command_args+"\" command could not be run.")
-                    elif zip_response["result"]=="MAXREACHED":
-                        response=u"Maximum concurrent archival tasks reached."
-                        self.log("Zip \""+command_args+"\" rejected due to max concurrent tasks per user limit.")
-                else:
-                    response=u"File not found or inaccessible."
-                    self.log("Zip \""+command_args+"\" file not found or inaccessible.")
-            else:
-                response=u"A file or folder name or path must be provided."
-                self.log("Attempted to zip without a name or path.")
-
-        elif command_type==u"listzips" and self.allow_writing==True:
-            response=u""
-            tasks_7zip=self.active_7zip_task_handler.GET_TASKS()
-
-            for taskdata in tasks_7zip:
-                if taskdata["user"]==self.account_username:
-                    response+=u">ARCHIVING \""+self.proper_caps_path(taskdata["target"])+u"\"\n"
-
-            if response==u"":
-                response=u"No archival tasks running."
-            else:
-                response=u"Ongoing archival tasks:\n\n"+response
-
-            self.log("Requested list of running 7-ZIP archival tasks for user.")
-
-        elif command_type==u"stopzips" and self.allow_writing==True:
-            response=u"All running archival tasks will be stopped."
-            self.active_7zip_task_handler.END_TASKS([self.account_username])
-            self.log("Requested stop of any running 7-ZIP archival tasks.")
-
-        elif command_type==u"lock":
-            cmdlen=len(command_args)
-            if cmdlen>=4 and cmdlen<=32:
-                self.bot_lock_pass=command_args
-                response=u"Bot locked."
-                self.lock_status.set()
-                self.log("User Message Handler was locked with a password.")
-            else:
-                response=u"Lock password must be between 4 and 32 characters long."
-                self.log("Attempted to lock the bot with a password of invalid length.")
-
-        elif command_type==u"unlock":
-            response=u"The bot is already unlocked."
-
-        elif command_type==u"help":
-            response=u"AVAILABLE BOT COMMANDS:\n\n"
-            response+=u"/help: display this help screen\n"
-            response+=u"/root: display the root access folder\n"
-            response+=u"/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
-            response+=u"/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
-            if self.allow_writing==True:
-                response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+u" simultaneous tasks\n"
-                response+=u"/listzips: list all running 7-ZIP archival tasks\n"
-                response+=u"/stopzips: stop all running 7-ZIP archival tasks\n"
-                response+=u"/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
-            response+=u"/up: move up one folder from current path\n"
-            response+=u"/get <[PATH]FILE>: retrieve the file at the location to Telegram chat\n"
-            if self.allow_writing==True:
-                response+=u"/eat <[PATH]FILE>: upload the file at the location to Telegram, then delete it from its original location\n"
-                response+=u"/del <[PATH]FILE>: delete the file at the location\n"
-                response+=u"/mkdir <[PATH]FOLDER>: create the folder at the location\n"
-                response+=u"/rmdir <[PATH]FOLDER>: delete the folder at the location\n"
-            response+=u"/lock <PASSWORD>: lock the bot from responding to messages\n"
-            response+=u"/unlock <PASSWORD>: unlock the bot\n"
-            response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
-            response+=u"File size limit for getting files from host system: "+readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES)+u"."
-            if self.allow_writing==True:
-                response+=u"\nFile size limit for putting files on host system: "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".\n"
-                response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
-            self.log(u"Help requested.")
+                failed_to_find_cmd=True
         else:
+            failed_to_find_cmd=True
+
+        if failed_to_find_cmd==True:
             response=u"Unrecognized command. Type \"/help\" for a list of commands."
 
         if response!=u"":
