@@ -1205,8 +1205,7 @@ class User_Message_Handler(object):
                                  "ren":{"write_only":True,"call":self.performcommand_ren},
                                  "rmdir":{"write_only":True,"call":self.performcommand_rmdir},
                                  "stopzips":{"write_only":True,"call":self.performcommand_stopzips},
-                                 "zip":{"write_only":True,"call":self.performcommand_zip}
-            }
+                                 "zip":{"write_only":True,"call":self.performcommand_zip}}
         return
 
     def log(self,input_text):
