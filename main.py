@@ -61,11 +61,11 @@ MAX_BOT_USERS=100
 COMMAND_HISTORY_MAX=50
 OUTPUT_ENTRIES_MAX=5000
 
-CUSTOM_UI_SCALING=1.125
+UI_SCALE_MODIFIER=1.125
 QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
-FONT_POINT_SIZE=8
-FONTS={"general":
+FONTS={"<reference_point_size>":8,
+       "general":
        {"type":"Monospace","scale":1,"properties":[]},
        "status":{"type":"Arial","scale":1,"properties":["bold"]},
        "log":{"type":"Consolas","scale":1,"properties":["bold"]}}
@@ -443,7 +443,7 @@ class Time_Provider(object):
 
             self.lock_subscribers.acquire()
             for subscriber in self.signal_subscribers:
-                subscriber.send("timesync_clock_bias",get_time_diff)
+                subscriber.send("report_timesync_clock_bias",get_time_diff)
             self.lock_subscribers.release()
         else:
             return {"success":False}
@@ -1138,7 +1138,7 @@ class Bot_Listener(object):
             self.messagelist_lock[message].release()
         return
 
-    def consume_user_messages(self,input_username):
+    def GET_NEW_USER_MESSAGES(self,input_username):
         self.messagelist_lock[input_username].acquire()
         get_messages=self.user_messages[input_username][:]
         self.user_messages[input_username]=[]
@@ -1290,7 +1290,7 @@ class User_Message_Handler(object):
                 self.log("User Message Handler unlocked by console.")
             else:
                 self.log("User Message Handler unlock was requested, but it is not locked.")
-            self.listener.consume_user_messages(self.account_username)
+            self.listener.GET_NEW_USER_MESSAGES(self.account_username)
         return
 
     def work_loop(self):
@@ -1303,7 +1303,7 @@ class User_Message_Handler(object):
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
             self.check_pending_tasks()
             if self.listen_flag.is_set()==True:
-                new_messages=self.listener.consume_user_messages(self.account_username)
+                new_messages=self.listener.GET_NEW_USER_MESSAGES(self.account_username)
                 total_new_messages=len(new_messages)
                 if total_new_messages>0:
                     self.processing_messages.set()
@@ -1335,7 +1335,7 @@ class User_Message_Handler(object):
         if new_state==True:
             if self.listen_flag.is_set()==False:
                 self.log("Listen started.")
-                self.listener.consume_user_messages(self.account_username)
+                self.listener.GET_NEW_USER_MESSAGES(self.account_username)
                 self.listen_flag.set()
             else:
                 self.log("Listen start was requested, but it is already listening.")
@@ -2216,7 +2216,7 @@ class User_Console(object):
             time.sleep(COMMAND_CHECK_INTERVAL_SECONDS)
             if last_busy_state!=self.any_user_handlers_busy():
                 last_busy_state=not last_busy_state
-                UI_SIGNAL.send("bots_busy",last_busy_state)
+                UI_SIGNAL.send("report_processing_messages_state",last_busy_state)
 
             command=self.retrieve_command()
 
@@ -2257,8 +2257,10 @@ class User_Console(object):
 
 
 class UI(object):
-    def __init__(self,input_colorscheme,input_icons_b64,input_signaller,input_minimized,input_logger=None):
+    def __init__(self,input_colorscheme,input_fonts,input_UI_scaling_modifier,input_icons_b64,input_signaller,input_minimized,input_logger=None):
         self.colorscheme=json.loads(json.dumps(input_colorscheme))
+        self.fonts=json.loads(json.dumps(input_fonts))
+        self.UI_scaling_modifier=input_UI_scaling_modifier
         self.icons_b64=input_icons_b64
         self.active_logger=input_logger
         self.start_minimized=input_minimized
@@ -2293,7 +2295,7 @@ class UI(object):
     def UI_thread_launcher(self):
         self.UI_app=QApplication([])
         self.UI_app.setStyle("fusion")
-        self.UI_window=Main_Window(self.colorscheme,self.icons_b64,self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
+        self.UI_window=Main_Window(self.colorscheme,self.fonts,self.UI_scaling_modifier,self.icons_b64,self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
         self.UI_window.show()
         self.UI_app.aboutToQuit.connect(self.UI_app.deleteLater)
         if self.start_minimized==False:
@@ -2334,11 +2336,9 @@ WINS
 
 
 class Main_Window(QMainWindow):
-    def __init__(self,input_colorscheme,input_icons_b64,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
+    def __init__(self,input_colorscheme,input_fonts,input_UI_scaling_modifier,input_icons_b64,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
         global __author__
         global __version__
-        global FONTS
-        global CUSTOM_UI_SCALING
 
         super(Main_Window,self).__init__(None)
 
@@ -2346,13 +2346,16 @@ class Main_Window(QMainWindow):
         self.is_exiting=input_is_exiting
         self.has_quit=input_has_quit
 
-        UI_SCALE=self.logicalDpiX()/96.0
-        UI_SCALE*=CUSTOM_UI_SCALING
+        self.UI_scale=self.logicalDpiX()/96.0
+        self.UI_scale*=input_UI_scaling_modifier
+        font_point_size=input_fonts["<reference_point_size>"]
+        input_fonts.pop("<reference_point_size>",None)
+        
         self.font_cache={}
-        for fontname in FONTS:
-            self.font_cache[fontname]=QFont(FONTS[fontname]["type"])
-            self.font_cache[fontname].setPointSize(FONT_POINT_SIZE*FONTS[fontname]["scale"]*CUSTOM_UI_SCALING)
-            for fontproperty in FONTS[fontname]["properties"]:
+        for fontname in input_fonts:
+            self.font_cache[fontname]=QFont(input_fonts[fontname]["type"])
+            self.font_cache[fontname].setPointSize(font_point_size*input_fonts[fontname]["scale"]*input_UI_scaling_modifier)
+            for fontproperty in input_fonts[fontname]["properties"]:
                 if fontproperty=="bold":
                     self.font_cache[fontname].setBold(True)
                 if fontproperty=="italic":
@@ -2362,7 +2365,7 @@ class Main_Window(QMainWindow):
                 if fontproperty=="strikeout":
                     self.font_cache[fontname].setStrikeOut(True)
 
-        self.setFixedSize(940*UI_SCALE,598*UI_SCALE)
+        self.setFixedSize(940*self.UI_scale,598*self.UI_scale)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
         self.setWindowFlags(self.windowFlags()|Qt.MSWindowsFixedSizeDialogHint)
 
@@ -2378,8 +2381,8 @@ class Main_Window(QMainWindow):
         self.command_history=[]
         self.output_queue=[]
         self.UI_lockstate=False
-        self.last_bots_busy_state=False
-        self.online_state=False
+        self.app_state_is_online=False
+        self.app_state_is_processing_messages=False
         self.command_history_index=-1
         self.console=None
         self.update_log_on_restore=False
@@ -2459,18 +2462,18 @@ class Main_Window(QMainWindow):
         self.options_macros["restore"].setVisible(False)
 
         self.label_botname=QGroupBox(self)
-        self.label_botname.setGeometry(-10*UI_SCALE,-100*UI_SCALE,self.width()+10*UI_SCALE,self.height()+100*UI_SCALE)
+        self.label_botname.setGeometry(-10*self.UI_scale,-100*self.UI_scale,self.width()+10*self.UI_scale,self.height()+100*self.UI_scale)
         self.label_botname.setStyleSheet("QGroupBox {"+window_colors+"}")
 
         self.label_botname=QLabel(self)
         self.label_botname.setText("Bot name:")
-        self.label_botname.setGeometry(12*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botname.setGeometry(12*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botname.setFont(self.font_cache["general"])
         self.label_botname.setAlignment(Qt.AlignLeft)
         self.label_botname.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_botname_value=QLabel(self)
-        self.label_botname_value.setGeometry(65*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botname_value.setGeometry(65*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botname_value.setFont(self.font_cache["status"])
         self.label_botname_value.setText("<not retrieved>")
         self.label_botname_value.setAlignment(Qt.AlignLeft)
@@ -2478,13 +2481,13 @@ class Main_Window(QMainWindow):
 
         self.label_botstatus=QLabel(self)
         self.label_botstatus.setText("Status:")
-        self.label_botstatus.setGeometry(384*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus.setGeometry(384*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
         self.label_botstatus.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_botstatus_value=QLabel(self)
-        self.label_botstatus_value.setGeometry(422*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_botstatus_value.setGeometry(422*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botstatus_value.setFont(self.font_cache["status"])
         self.label_botstatus_value.setText("NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
@@ -2492,13 +2495,13 @@ class Main_Window(QMainWindow):
 
         self.label_clock_bias=QLabel(self)
         self.label_clock_bias.setText("Local machine clock bias(seconds):")
-        self.label_clock_bias.setGeometry(625*UI_SCALE,6*UI_SCALE,300*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias.setGeometry(625*self.UI_scale,6*self.UI_scale,300*self.UI_scale,26*self.UI_scale)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
         self.label_clock_bias.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_clock_bias_value=QLabel(self)
-        self.label_clock_bias_value.setGeometry(796*UI_SCALE,6*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_clock_bias_value.setGeometry(796*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
         self.label_clock_bias_value.setText("UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
@@ -2508,8 +2511,8 @@ class Main_Window(QMainWindow):
         self.textbox_output=QListView(self)
         self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
-        self.textbox_output.setGeometry(9*UI_SCALE,24*UI_SCALE,922*UI_SCALE,524*UI_SCALE)
-        self.textbox_output.setStyleSheet("QListView::item:selected {border-top:"+str(int(1*UI_SCALE))+"px solid #"+colors_output_border+"; color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";} QListView::item {border-top:"+str(int(1*UI_SCALE))+"px solid #"+colors_output_border+";} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
+        self.textbox_output.setGeometry(9*self.UI_scale,24*self.UI_scale,922*self.UI_scale,524*self.UI_scale)
+        self.textbox_output.setStyleSheet("QListView::item:selected {border-top:"+str(int(1*self.UI_scale))+"px solid #"+colors_output_border+"; color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";} QListView::item {border-top:"+str(int(1*self.UI_scale))+"px solid #"+colors_output_border+";} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textbox_output.setAcceptDrops(False)
@@ -2521,19 +2524,19 @@ class Main_Window(QMainWindow):
         self.textbox_output.setFrameStyle(QFrame.NoFrame)
         self.textbox_output.setToolTipDuration(0)
         self.textbox_output.setDragEnabled(False)
-        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*UI_SCALE))+"px solid #"+colors_scrollbar_background+"; color:#"+colors_scrollbar_text+"; background-color:#"+colors_scrollbar_background+"; width:"+str(int(15*UI_SCALE))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#"+colors_scrollbar_text+"; background-color:#"+colors_scrollarea_background+"}")
+        self.textbox_output.verticalScrollBar().setStyleSheet("QScrollBar:vertical {border:"+str(int(1*self.UI_scale))+"px solid #"+colors_scrollbar_background+"; color:#"+colors_scrollbar_text+"; background-color:#"+colors_scrollbar_background+"; width:"+str(int(15*self.UI_scale))+"px;} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {color:#"+colors_scrollbar_text+"; background-color:#"+colors_scrollarea_background+"}")
         self.textbox_output.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.textbox_output.installEventFilter(self)
 
         self.label_commands=QLabel(self)
         self.label_commands.setText("INPUT COMMANDS:")
-        self.label_commands.setGeometry(410*UI_SCALE,552*UI_SCALE,120*UI_SCALE,26*UI_SCALE)
+        self.label_commands.setGeometry(410*self.UI_scale,552*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
         self.label_commands.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.input_commandfield=QLineEdit(self)
-        self.input_commandfield.setGeometry(9*UI_SCALE,566*UI_SCALE,922*UI_SCALE,22*UI_SCALE)
+        self.input_commandfield.setGeometry(9*self.UI_scale,566*self.UI_scale,922*self.UI_scale,22*self.UI_scale)
         self.input_commandfield.setFont(self.font_cache["log"])
         self.input_commandfield.setMaxLength(147)
         self.input_commandfield.setAcceptDrops(False)
@@ -2700,8 +2703,8 @@ class Main_Window(QMainWindow):
             tray_text_new+="<not retrieved>\n"
 
         tray_candidate="default"
-        if self.online_state==True:
-            if self.last_bots_busy_state==True:
+        if self.app_state_is_online==True:
+            if self.app_state_is_processing_messages==True:
                 tray_candidate="busy"
         else:
             tray_candidate="deactivated"
@@ -2809,9 +2812,9 @@ class Main_Window(QMainWindow):
         elif event_type=="close":
             self.queue_close()
 
-        elif event_type=="bots_busy":
-            if self.last_bots_busy_state!=event_data:
-                self.last_bots_busy_state=not self.last_bots_busy_state
+        elif event_type=="report_processing_messages_state":
+            if self.app_state_is_processing_messages!=event_data:
+                self.app_state_is_processing_messages=not self.app_state_is_processing_messages
                 self.update_tray_icon()
 
         elif event_type=="bot_name":
@@ -2823,14 +2826,14 @@ class Main_Window(QMainWindow):
             self.label_botstatus_value.setText(event_data)
             if event_data=="ONLINE":
                 self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
-                self.online_state=True
+                self.app_state_is_online=True
                 self.update_tray_icon()
             elif event_data=="OFFLINE":
                 self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
-                self.online_state=False
+                self.app_state_is_online=False
                 self.update_tray_icon()
 
-        elif event_type=="timesync_clock_bias":
+        elif event_type=="report_timesync_clock_bias":
             self.label_clock_bias_value.setText(event_data)
             get_number=float(event_data.replace("+","").replace("-",""))
             self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
@@ -2955,7 +2958,7 @@ CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_A
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
-Active_UI=UI(COLOR_SCHEME,APP_ICONS_B64,UI_SIGNAL,start_minimized,LOGGER)
+Active_UI=UI(COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,APP_ICONS_B64,UI_SIGNAL,start_minimized,LOGGER)
 del APP_ICONS_B64
 APP_ICONS_B64=None
 
