@@ -1964,7 +1964,7 @@ class User_Message_Handler(object):
             self.lock_status.set()
             self.log("User Message Handler was locked with a password.")
         else:
-            response=u"Lock password must be between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" characters long."
+            response=u"Lock password must be between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" characters long."
             self.log("Attempted to lock the bot with a password of invalid length.")
 
         return response
