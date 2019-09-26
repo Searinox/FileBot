@@ -1675,7 +1675,7 @@ class User_Message_Handler(object):
     def performcommand_ren(self,command_context):
         response=u""
 
-        newname=""
+        newname=u""
         if u"?to:" in command_context["args"].lower():
             end=command_context["args"].lower().find(u"?to:")
             newname=command_context["args"][end+len(u"?to:"):].strip()
