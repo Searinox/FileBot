@@ -1955,7 +1955,7 @@ class User_Message_Handler(object):
         global BOT_LOCK_PASSWORD_CHARACTERS_MIN
         global BOT_LOCK_PASSWORD_CHARACTERS_MAX
 
-        response=""
+        response=u""
 
         cmdlen=len(command_context["args"])
         if cmdlen>=BOT_LOCK_PASSWORD_CHARACTERS_MIN and cmdlen<=BOT_LOCK_PASSWORD_CHARACTERS_MAX:
