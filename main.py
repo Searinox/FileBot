@@ -2012,7 +2012,7 @@ class User_Message_Handler(object):
             if msg.lower().startswith(u"/unlock ")==True:
                 attempted_pass=msg[len(u"/unlock "):].strip()
                 attempted_pass_len=len(attempted_pass)
-                if attempted_pass_len>=BOT_LOCK_PASSWORD_CHARACTERS_MAX and attempted_pass_len<=BOT_LOCK_PASSWORD_CHARACTERS_MAX:
+                if attempted_pass_len>=BOT_LOCK_PASSWORD_CHARACTERS_MIN and attempted_pass_len<=BOT_LOCK_PASSWORD_CHARACTERS_MAX:
                     if attempted_pass==self.bot_lock_pass:
                         self.bot_lock_pass=u""
                         self.lock_status.clear()
