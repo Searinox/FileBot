@@ -52,20 +52,22 @@ TELEGRAM_API_DOWNLOAD_CHUNK_BYTES=256*256
 TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*50
 TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES=1024*1024*20
 TELEGRAM_API_MAX_IM_SIZE_BYTES=4096
+
 BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS=30
+BOT_LOCK_PASSWORD_CHARACTERS_MIN=4
+BOT_LOCK_PASSWORD_CHARACTERS_MAX=32
 
 WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
 MAX_BOT_USERS=100
-BOT_LOCK_PASSWORD_CHARACTERS_MIN=4
-BOT_LOCK_PASSWORD_CHARACTERS_MAX=32
 
-COMMAND_HISTORY_MAX=50
-OUTPUT_ENTRIES_MAX=5000
+UI_COMMAND_HISTORY_MAX=50
+UI_OUTPUT_ENTRIES_MAX=5000
 
 UI_SCALE_MODIFIER=1.125
 QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
+
 FONTS={"<reference_point_size>":8,
        "general":{"type":"Monospace","scale":1,"properties":[]},
        "status":{"type":"Arial","scale":1,"properties":["bold"]},
@@ -1213,7 +1215,7 @@ class User_Message_Handler(object):
             self.active_logger.LOG("MSGHNDLR","<"+self.account_username+"> "+input_text)
         return
 
-    def sendmsg(self,sid,msg):
+    def sendmsg(self,sender_id,message_text):
         global USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS
 
         if self.request_exit.is_set()==True:
@@ -1239,7 +1241,7 @@ class User_Message_Handler(object):
             return True
         self.last_send_time=OS_Uptime_Seconds()
         try:
-            self.bot_handle.Send_Message(sid,msg)
+            self.bot_handle.Send_Message(sender_id,message_text)
             self.lastsent_timers+=[self.last_send_time]
             excess_entries=max(0,len(self.lastsent_timers)-40)
             for _ in range(excess_entries):
@@ -1400,7 +1402,7 @@ class User_Message_Handler(object):
                 break
             if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                 if u"text" in m:
-                    self.process_instructions(m[u"from"][u"id"],m[u"text"],m[u"chat"][u"id"])
+                    self.process_instructions(m[u"from"][u"id"],m[u"chat"][u"id"],m[u"text"])
                 else:
                     if u"document" in m:
                         self.process_files(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"],m[u"document"][u"file_size"])
@@ -1436,7 +1438,7 @@ class User_Message_Handler(object):
                         self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the file name will not carry over.")
         return
 
-    def process_files(self,sid,fid,filename,filesize):
+    def process_files(self,sender_id,file_id,filename,filesize):
         global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!=u"" or self.allow_writing==False:
@@ -1445,21 +1447,21 @@ class User_Message_Handler(object):
         if filesize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES:
             foldername=self.get_last_folder()
             complete_put_path=foldername+filename
-            self.sendmsg(sid,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
+            self.sendmsg(sender_id,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
             self.log("Receiving file \""+complete_put_path+"\"...")
             if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
                     try:
-                        self.bot_handle.Get_File(fid,complete_put_path)
-                        self.sendmsg(sid,u"Finished putting file \""+complete_put_path+u"\".")
+                        self.bot_handle.Get_File(file_id,complete_put_path)
+                        self.sendmsg(sender_id,u"Finished putting file \""+complete_put_path+u"\".")
                         self.log("File download complete.")
                     except:
-                        self.sendmsg(sid,u"File \""+filename+u"\" could not be placed.")
+                        self.sendmsg(sender_id,u"File \""+filename+u"\" could not be placed.")
                         self.log("File download aborted due to unknown issue.")
             else:
-                self.sendmsg(sid,u"File \""+filename+u"\" already exists at the location.")
+                self.sendmsg(sender_id,u"File \""+filename+u"\" already exists at the location.")
                 self.log("File download aborted due to existing instance.")
         else:
-            self.sendmsg(sid,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".")
+            self.sendmsg(sender_id,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".")
             self.log("File download aborted due to size exceeding limit.")
         return
 
@@ -1598,7 +1600,7 @@ class User_Message_Handler(object):
             segment_list=self.segment_file_list_string(dirlist)
             if len(segment_list)>0:
                 for segment in segment_list:
-                    if self.sendmsg(command_context["sid"],segment)==False:
+                    if self.sendmsg(command_context["sender_id"],segment)==False:
                         response=u"<Listing interrupted.>"
                         self.log("Listing for folder path \""+command_context["args"]+"\" was interrupted.")
                         break
@@ -1647,11 +1649,11 @@ class User_Message_Handler(object):
             if self.usable_path(newpath)==True:
                 newpath=self.proper_caps_path(newpath)
                 self.log("Requested get file \""+newpath+"\". Sending...")
-                self.sendmsg(command_context["sid"],u"Getting file, please wait...")
+                self.sendmsg(command_context["sender_id"],u"Getting file, please wait...")
                 try:
                     fsize=os.path.getsize(newpath)
                     if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                        self.bot_handle.Send_File(command_context["cid"],newpath)
+                        self.bot_handle.Send_File(command_context["chat_id"],newpath)
                         self.log("File \""+newpath+"\" sent.")
                     else:
                         if fsize!=0:
@@ -1732,12 +1734,12 @@ class User_Message_Handler(object):
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
                     self.log("Requested eat file \""+newpath+"\". Sending...")
-                    self.sendmsg(command_context["sid"],u"Eating file, please wait...")
+                    self.sendmsg(command_context["sender_id"],u"Eating file, please wait...")
                     success=False
                     try:
                         fsize=os.path.getsize(newpath)
                         if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                            self.bot_handle.Send_File(command_context["cid"],newpath)
+                            self.bot_handle.Send_File(command_context["chat_id"],newpath)
                             self.log("File \""+newpath+"\" sent.")
                             success=True
                         else:
@@ -1782,7 +1784,7 @@ class User_Message_Handler(object):
                     newpath=self.proper_caps_path(newpath)
                     self.log("Requested delete file \""+newpath+"\".")
                     try:
-                        self.sendmsg(command_context["sid"],"Deleting file...")
+                        self.sendmsg(command_context["sender_id"],"Deleting file...")
                         os.remove(newpath)
                         response=u"File deleted."
                         self.log("File \""+newpath+"\" deleted.")
@@ -1849,7 +1851,7 @@ class User_Message_Handler(object):
                         newpath=self.proper_caps_path(newpath)
                         self.log("Requested delete folder \""+newpath+"\".")
                         try:
-                            self.sendmsg(command_context["sid"],u"Deleting folder...")
+                            self.sendmsg(command_context["sender_id"],u"Deleting folder...")
                             shutil.rmtree(newpath)
                             moved_up=u""
                             newpath=terminate_with_backslash(newpath)
@@ -2004,19 +2006,19 @@ class User_Message_Handler(object):
 
         return response
 
-    def process_instructions(self,sid,msg,cid):
+    def process_instructions(self,sender_id,chat_id,message_text):
         global TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
         global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!=u"":
-            if msg.lower().startswith(u"/unlock ")==True:
-                attempted_pass=msg[len(u"/unlock "):].strip()
+            if message_text.lower().startswith(u"/unlock ")==True:
+                attempted_pass=message_text[len(u"/unlock "):].strip()
                 attempted_pass_len=len(attempted_pass)
                 if attempted_pass_len>=BOT_LOCK_PASSWORD_CHARACTERS_MIN and attempted_pass_len<=BOT_LOCK_PASSWORD_CHARACTERS_MAX:
                     if attempted_pass==self.bot_lock_pass:
                         self.bot_lock_pass=u""
                         self.lock_status.clear()
-                        self.sendmsg(sid,u"Bot unlocked.")
+                        self.sendmsg(sender_id,u"Bot unlocked.")
                         self.log(u"User Message Handler unlocked by user.")
                         return
                     else:
@@ -2026,33 +2028,31 @@ class User_Message_Handler(object):
             else:
                 return
 
-        if msg[0]!=u"/":
+        if message_text.startswith(u"/")==False:
             return
-        cmd_end=msg.find(u" ")
+        cmd_end=message_text.find(u" ")
         if cmd_end==-1:
-            cmd_end=len(msg)
-        command_type=msg[1:cmd_end].strip().lower()
-        command_args=msg[cmd_end+1:].strip()
+            cmd_end=len(message_text)
+        command_type=message_text[1:cmd_end].strip().lower()
+        command_args=message_text[cmd_end+1:].strip()
         response=u""
 
-        failed_to_find_cmd=False
+        command_not_supported=False
 
         if command_type in self.supported_commands:
             command_info=self.supported_commands[command_type]
-            command_context={"args":command_args,"sid":sid,"cid":cid}
-            requires_write=command_info["write_only"]
-            if requires_write==False or self.allow_writing==True:
-                response=command_info["call"](command_context)
+            if command_info["write_only"]==False or self.allow_writing==True:
+                response=command_info["call"]({"args":command_args,"sender_id":sender_id,"chat_id":chat_id})
             else:
-                failed_to_find_cmd=True
+                command_not_supported=True
         else:
-            failed_to_find_cmd=True
+            command_not_supported=True
 
-        if failed_to_find_cmd==True:
+        if command_not_supported==True:
             response=u"Unrecognized command. Type \"/help\" for a list of commands."
 
         if response!=u"":
-            self.sendmsg(sid,response)
+            self.sendmsg(sender_id,response)
         return
 
 
@@ -2293,7 +2293,7 @@ class User_Console(object):
 
     def work_loop(self):
         global COMMAND_CHECK_INTERVAL_SECONDS
-        global COMMAND_HISTORY_MAX
+        global UI_COMMAND_HISTORY_MAX
 
         self.log("Starting User Message Handler(s)...")
         for user_handler_instance in self.user_handler_list:
@@ -2301,7 +2301,7 @@ class User_Console(object):
             user_handler_instance.START()
             user_handler_instance.LISTEN(True)
 
-        self.log("User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(COMMAND_HISTORY_MAX)+" history).")
+        self.log("User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(UI_COMMAND_HISTORY_MAX)+" history).")
         self.active_UI_signaller.send("attach_console",self)
 
         if self.user_handlers_running()==0:
@@ -2755,7 +2755,7 @@ class Main_Window(QMainWindow):
         return
 
     def update_output(self):
-        global OUTPUT_ENTRIES_MAX
+        global UI_OUTPUT_ENTRIES_MAX
 
         if self.is_exiting.is_set()==True:
             return
@@ -2769,7 +2769,7 @@ class Main_Window(QMainWindow):
 
         self.lock_output_update.acquire()
 
-        rows_to_delete=max(0,self.textbox_output_model.rowCount()+get_output_queue_len-OUTPUT_ENTRIES_MAX)
+        rows_to_delete=max(0,self.textbox_output_model.rowCount()+get_output_queue_len-UI_OUTPUT_ENTRIES_MAX)
         starting_row=self.textbox_output_model.rowCount()-rows_to_delete
         index=-1
 
@@ -2824,7 +2824,7 @@ class Main_Window(QMainWindow):
         return
 
     def add_to_output_queue(self,input_line):
-        global OUTPUT_ENTRIES_MAX
+        global UI_OUTPUT_ENTRIES_MAX
 
         if input_line.endswith("\n"):
             input_line=input_line[:-1]
@@ -2838,7 +2838,7 @@ class Main_Window(QMainWindow):
             text_color=self.output_colors["<DEFAULT>"]
         self.lock_log_queue.acquire()
         self.output_queue+=[(input_line,text_color)]
-        if len(self.output_queue)>OUTPUT_ENTRIES_MAX:
+        if len(self.output_queue)>UI_OUTPUT_ENTRIES_MAX:
             del self.output_queue[0]
         self.lock_log_queue.release()
         return
@@ -2886,7 +2886,7 @@ class Main_Window(QMainWindow):
         return
 
     def signal_response_handler(self,event):
-        global COMMAND_HISTORY_MAX
+        global UI_COMMAND_HISTORY_MAX
 
         if self.is_exiting.is_set()==True:
             return
@@ -2950,7 +2950,7 @@ class Main_Window(QMainWindow):
 
         elif event_type=="commandfield_accepted":
             self.command_history+=[self.input_commandfield.text()]
-            if len(self.command_history)>COMMAND_HISTORY_MAX:
+            if len(self.command_history)>UI_COMMAND_HISTORY_MAX:
                 del self.command_history[0]
             self.command_history_index=len(self.command_history)
             self.input_commandfield.setText("")
