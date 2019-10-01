@@ -2932,13 +2932,14 @@ class Main_Window(QMainWindow):
                 self.update_tray_icon()
 
         elif event_type=="report_timesync_clock_bias":
+            clock_bias=float(event_data.replace("+","").replace("-",""))
+            time_stylesheet="QLabel {color: #"+self.colors_status_ok+"}"
+            if clock_bias>=60:
+                time_stylesheet="QLabel {color: #"+self.colors_status_error+"}"
+            elif clock_bias>=30:
+                time_stylesheet="QLabel {color: #"+self.colors_status_warn+"}"
+            self.label_clock_bias_value.setStyleSheet(time_stylesheet)
             self.label_clock_bias_value.setText(event_data)
-            get_number=float(event_data.replace("+","").replace("-",""))
-            self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
-            if get_number>=30:
-                self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_warn+"}")
-            if get_number>=60:
-                self.label_clock_bias_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
 
         elif event_type=="commandfield_failed":
             if self.console is not None:
