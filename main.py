@@ -37,8 +37,8 @@ SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
 USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS=0.1
-UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1.2
-UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.125
+UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1
+UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.1
 TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
 TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
@@ -1063,7 +1063,7 @@ class Bot_Listener(object):
                     self.log("Stopped being able to retrieve messages.")
                     self.active_UI_signaller.send("status","OFFLINE")
 
-            self.organize_messages(response)
+            self.group_messages(response)
 
         self.is_ready.clear()
         self.log("Bot Listener has exited.")
@@ -1092,7 +1092,7 @@ class Bot_Listener(object):
         self.start_time=self.active_time_provider.GET_SERVER_TIME()
         return
 
-    def organize_messages(self,input_msglist):
+    def group_messages(self,input_msglist):
         global BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS
 
         collect_new_messages={}
@@ -1402,10 +1402,10 @@ class User_Message_Handler(object):
                 break
             if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                 if u"text" in m:
-                    self.process_instructions(m[u"from"][u"id"],m[u"chat"][u"id"],m[u"text"])
+                    self.process_bot_command(m[u"from"][u"id"],m[u"chat"][u"id"],m[u"text"])
                 else:
                     if u"document" in m:
-                        self.process_files(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"],m[u"document"][u"file_size"])
+                        self.process_bot_file(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"],m[u"document"][u"file_size"])
                     elif u"audio" in m:
                         proceed=True
                         try:
@@ -1433,12 +1433,12 @@ class User_Message_Handler(object):
                             self.sendmsg(m[u"from"][u"id"],u"Could not obtain the file name.")
                             proceed=False
                         if proceed==True:
-                            self.process_files(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename,m[u"audio"][u"file_size"])
+                            self.process_bot_file(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename,m[u"audio"][u"file_size"])
                     else:
                         self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the file name will not carry over.")
         return
 
-    def process_files(self,sender_id,file_id,filename,filesize):
+    def process_bot_file(self,sender_id,file_id,filename,filesize):
         global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
         if self.bot_lock_pass!=u"" or self.allow_writing==False:
@@ -2006,7 +2006,7 @@ class User_Message_Handler(object):
 
         return response
 
-    def process_instructions(self,sender_id,chat_id,message_text):
+    def process_bot_command(self,sender_id,chat_id,message_text):
         global TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
         global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
@@ -2077,6 +2077,15 @@ class User_Console(object):
         self.request_time_sync=input_time_sync
         self.active_7zip_task_handler=input_7zip_taskhandler
         self.pending_command=""
+        self.supported_commands={"help":self.performcommand_help,
+                                 "listusers":self.performcommand_listusers,
+                                 "listzips":self.performcommand_listzips,
+                                 "startlisten":self.performcommand_startlisten,
+                                 "stoplisten":self.performcommand_stoplisten,
+                                 "stopzips":self.performcommand_stopzips,
+                                 "synctime":self.performcommand_synctime,
+                                 "unlockusers":self.performcommand_unlockusers,
+                                 "userstats":self.performcommand_userstats}
         return
 
     def log(self,input_text):
@@ -2124,7 +2133,151 @@ class User_Console(object):
                 return True
         return False
 
-    def process_command(self,user_input):
+    def performcommand_startlisten(self,input_arguments):
+        has_acted=False
+        for user_handler_instance in self.user_handler_list:
+            if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
+                user_handler_instance.LISTEN(True)
+                has_acted=True
+        if has_acted==False:
+            self.log("No matching users were found.")
+        return True
+
+    def performcommand_stoplisten(self,input_arguments):
+        has_acted=False
+        for user_handler_instance in self.user_handler_list:
+            if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
+                user_handler_instance.LISTEN(False)
+                has_acted=True
+        if has_acted==False:
+            self.log("No matching users were found.")
+        return True
+
+    def performcommand_userstats(self,input_arguments):
+        stats_out=""
+        for user_handler_instance in self.user_handler_list:
+            if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
+                stats_out+="\nMessage handler for user \""+user_handler_instance.account_username+"\":\n"+\
+                         "Home path=\""+user_handler_instance.allowed_root+"\"\n"+\
+                         "Write mode: "+str(user_handler_instance.allow_writing).upper()+"\n"+\
+                         "Current folder=\""+user_handler_instance.get_last_folder()+"\"\n"+\
+                         "Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+"\n"+\
+                         "Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+"\n"
+        if stats_out!="":
+            stats_out="USER STATS:\n"+stats_out
+            self.log(stats_out)
+        else:
+            self.log("No matching users were found.")
+        return True
+
+    def performcommand_listusers(self,input_arguments):
+        list_out=""
+        for user_handler_instance in self.user_handler_list:
+            list_out+=user_handler_instance.account_username+", "
+        list_out=list_out[:-2]+"."
+        self.log("Allowed user(s): "+list_out)
+        return True
+
+    def performcommand_unlockusers(self,input_arguments):
+        has_acted=False
+        for user_handler_instance in self.user_handler_list:
+            if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
+                user_handler_instance.UNLOCK()
+                has_acted=True
+        if has_acted==False:
+            self.log("No matching users were found.")
+        return True
+
+    def performcommand_synctime(self,input_arguments):
+        if self.request_time_sync.is_set()==False:
+            self.log("Manual Internet time synchronization requested...")
+            self.request_time_sync.set()
+        else:
+            self.log("Manual Internet time synchronization is already in progress.")
+        return True
+
+    def performcommand_listzips(self,input_arguments):
+        tasklist=self.active_7zip_task_handler.GET_TASKS()
+        user_task_dict={}
+        for entry in tasklist:
+            if entry["user"] not in user_task_dict.keys():
+                user_task_dict[entry["user"]]=[]
+            user_task_dict[entry["user"]]+=[{"target":entry["target"],"pid":entry["pid"]}]
+        task_data_out=""
+        for username in user_task_dict:
+            if username.lower() in input_arguments or input_arguments==[]:
+                task_data_out+="USER \""+username+"\":\n"
+                for entry in user_task_dict[username]:
+                    task_data_out+=">TARGET: \""+entry["target"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
+                task_data_out+="\n"
+        if task_data_out=="":
+            self.log("Found no 7-ZIP tasks running.")
+        else:
+            if task_data_out.endswith("\n")==True:
+                task_data_out=task_data_out[:-1]
+            task_data_out="RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
+            self.log(task_data_out)
+        return True
+
+    def performcommand_stopzips(self,input_arguments):
+        usernames=[]
+        pids=[]
+
+        for arg in input_arguments:
+            arg=arg.strip()
+            if arg!="":
+                new_pid=-1
+                new_username=""
+
+                try:
+                    new_pid=int(arg)
+                    if new_pid<=4 or new_pid>2**32:
+                        new_pid=-1
+                except:
+                    invalid=False
+                    if len(arg)>=5 and len(arg)<=32:
+                        if arg[0] in "0123456789_":
+                            invalid=True
+                        else:
+                            for c in arg:
+                                if c.lower() not in "0123456789_abcdefghijklmnopqrstuvwxyz#":
+                                    invalid=True
+                                    break
+                    else:
+                        invalid=True
+
+                    if invalid==False:
+                        new_username=arg
+
+                if new_username!="":
+                    usernames+=[new_username]
+                elif new_pid!=-1:
+                    pids+=[new_pid]
+                else:
+                    self.log("One or more PIDs or users were incorrect.")
+                    return False
+
+        if len(pids)+len(usernames)>0:
+            self.active_7zip_task_handler.END_TASKS(usernames,pids)
+        else:
+            self.active_7zip_task_handler.END_TASKS(["*"])
+        return True
+
+    def performcommand_help(self,input_arguments):
+        self.log("AVAILABLE CONSOLE COMMANDS:\n"+\
+        "listusers: lists all allowed users\n"+\
+        "startlisten [USERS]: start listening to messages for listed users; leave blank to apply to all instances\n"+\
+        "stoplisten [USERS]: stop listening to messages for listed users; leave blank to apply to all instances\n"+\
+        "unlockusers [USERS]: unlock the bot for listed users; leave blank to apply to all instances\n"+\
+        "userstats [USERS]: list stats for listed users; leave blank to list all instances\n"+\
+        "listzips [USERS]: list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
+        "stopzips [PID | USERS]: stop running 7-ZIP archival tasks by listed userss or PID; leave blank to apply to all instances\n"+\
+        "synctime: manually re-synchronize bot time with Internet time\n"+\
+        "help: display help\n"+\
+        "exit: close the program\n")
+        return True
+
+    def process_console_command(self,user_input):
         user_data=user_input.split(" ")
         input_command=user_data[0].lower().strip()
         input_arguments=[]
@@ -2134,150 +2287,8 @@ class User_Console(object):
                 if new_arg!="":
                     input_arguments+=[new_arg]
 
-        if input_command=="startlisten":
-            has_acted=False
-            for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                    user_handler_instance.LISTEN(True)
-                    has_acted=True
-            if has_acted==False:
-                self.log("No matching users were found.")
-            return True
-
-        elif input_command=="stoplisten":
-            has_acted=False
-            for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                    user_handler_instance.LISTEN(False)
-                    has_acted=True
-            if has_acted==False:
-                self.log("No matching users were found.")
-            return True
-
-        elif input_command=="userstats":
-            stats_out=""
-            for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                    stats_out+="\nMessage handler for user \""+user_handler_instance.account_username+"\":\n"+\
-                             "Home path=\""+user_handler_instance.allowed_root+"\"\n"+\
-                             "Write mode: "+str(user_handler_instance.allow_writing).upper()+"\n"+\
-                             "Current folder=\""+user_handler_instance.get_last_folder()+"\"\n"+\
-                             "Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+"\n"+\
-                             "Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+"\n"
-            if stats_out!="":
-                stats_out="USER STATS:\n"+stats_out
-                self.log(stats_out)
-            else:
-                self.log("No matching users were found.")
-            return True
-
-        elif input_command=="listusers":
-            list_out=""
-            for user_handler_instance in self.user_handler_list:
-                list_out+=user_handler_instance.account_username+", "
-            list_out=list_out[:-2]+"."
-            self.log("Allowed user(s): "+list_out)
-            return True
-
-        elif input_command=="unlockusers":
-            has_acted=False
-            for user_handler_instance in self.user_handler_list:
-                if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                    user_handler_instance.UNLOCK()
-                    has_acted=True
-            if has_acted==False:
-                self.log("No matching users were found.")
-            return True
-
-        elif input_command=="synctime":
-            if self.request_time_sync.is_set()==False:
-                self.log("Manual Internet time synchronization requested...")
-                self.request_time_sync.set()
-            else:
-                self.log("Manual Internet time synchronization is already in progress.")
-            return True
-
-        elif input_command=="listzips":
-            tasklist=self.active_7zip_task_handler.GET_TASKS()
-            user_task_dict={}
-            for entry in tasklist:
-                if entry["user"] not in user_task_dict.keys():
-                    user_task_dict[entry["user"]]=[]
-                user_task_dict[entry["user"]]+=[{"target":entry["target"],"pid":entry["pid"]}]
-            task_data_out=""
-            for username in user_task_dict:
-                if username.lower() in input_arguments or input_arguments==[]:
-                    task_data_out+="USER \""+username+"\":\n"
-                    for entry in user_task_dict[username]:
-                        task_data_out+=">TARGET: \""+entry["target"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
-                    task_data_out+="\n"
-            if task_data_out=="":
-                self.log("Found no 7-ZIP tasks running.")
-            else:
-                if task_data_out.endswith("\n")==True:
-                    task_data_out=task_data_out[:-1]
-                task_data_out="RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
-                self.log(task_data_out)
-            return True
-                
-        elif input_command=="stopzips":
-            usernames=[]
-            pids=[]
-
-            for arg in input_arguments:
-                arg=arg.strip()
-                if arg!="":
-                    new_pid=-1
-                    new_username=""
-
-                    try:
-                        new_pid=int(arg)
-                        if new_pid<=4 or new_pid>2**32:
-                            new_pid=-1
-                    except:
-                        invalid=False
-                        if len(arg)>=5 and len(arg)<=32:
-                            if arg[0] in "0123456789_":
-                                invalid=True
-                            else:
-                                for c in arg:
-                                    if c.lower() not in "0123456789_abcdefghijklmnopqrstuvwxyz#":
-                                        invalid=True
-                                        break
-                        else:
-                            invalid=True
-
-                        if invalid==False:
-                            new_username=arg
-
-                    if new_username!="":
-                        usernames+=[new_username]
-                    elif new_pid!=-1:
-                        pids+=[new_pid]
-                    else:
-                        self.log("One or more PIDs or users were incorrect.")
-                        return False
-
-            if len(pids)+len(usernames)>0:
-                self.active_7zip_task_handler.END_TASKS(usernames,pids)
-            else:
-                self.active_7zip_task_handler.END_TASKS(["*"])
-            return True
-
-        elif input_command=="help":
-            self.log("AVAILABLE CONSOLE COMMANDS:\n"+\
-            "listusers: lists all allowed users\n"+\
-            "startlisten [USERS]: start listening to messages for listed users; leave blank to apply to all instances\n"+\
-            "stoplisten [USERS]: stop listening to messages for listed users; leave blank to apply to all instances\n"+\
-            "unlockusers [USERS]: unlock the bot for listed users; leave blank to apply to all instances\n"+\
-            "userstats [USERS]: list stats for listed users; leave blank to list all instances\n"+\
-            "listzips [USERS]: list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
-            "stopzips [PID | USERS]: stop running 7-ZIP archival tasks by listed userss or PID; leave blank to apply to all instances\n"+\
-            "synctime: manually re-synchronize bot time with Internet time\n"+\
-            "help: display help\n"+\
-            "exit: close the program\n")
-            return True
-
+        if input_command in self.supported_commands:
+            return self.supported_commands[input_command](input_arguments)
         else:
             self.log("Unrecognized command. Type \"help\" for a list of commands.")
             return False
@@ -2325,7 +2336,7 @@ class User_Console(object):
                     self.log("Exit requested. Closing...")
                     self.REQUEST_STOP()
                 else:
-                    result=self.process_command(command)
+                    result=self.process_console_command(command)
 
                 if result==True:
                     UI_SIGNAL.send("commandfield_accepted",{})
@@ -2694,7 +2705,7 @@ class Main_Window(QMainWindow):
         self.timer_clipboard.start(0)
         return
 
-    def queue_close(self):
+    def queue_close_event(self):
         if self.is_exiting.is_set()==True:
             return
 
@@ -2908,7 +2919,7 @@ class Main_Window(QMainWindow):
             self.update_UI_usability()
 
         elif event_type=="close":
-            self.queue_close()
+            self.queue_close_event()
 
         elif event_type=="report_processing_messages_state":
             if self.app_state_is_processing_messages!=event_data:
@@ -2933,11 +2944,12 @@ class Main_Window(QMainWindow):
 
         elif event_type=="report_timesync_clock_bias":
             clock_bias=float(event_data.replace("+","").replace("-",""))
-            time_stylesheet="QLabel {color: #"+self.colors_status_ok+"}"
             if clock_bias>=60:
                 time_stylesheet="QLabel {color: #"+self.colors_status_error+"}"
             elif clock_bias>=30:
                 time_stylesheet="QLabel {color: #"+self.colors_status_warn+"}"
+            else:
+                time_stylesheet="QLabel {color: #"+self.colors_status_ok+"}"
             self.label_clock_bias_value.setStyleSheet(time_stylesheet)
             self.label_clock_bias_value.setText(event_data)
 
