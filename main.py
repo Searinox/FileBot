@@ -64,6 +64,8 @@ MAX_BOT_USERS=100
 UI_COMMAND_HISTORY_MAX=50
 UI_OUTPUT_ENTRIES_MAX=5000
 
+TLS_BANNED_ALGORITHMS=["AES128","AES_128","CHACHA","CBC"]
+
 UI_SCALE_MODIFIER=1.125
 QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
 APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
@@ -140,15 +142,48 @@ def log(input_text):
         LOGGER.LOG("MAINTHRD",input_text)
     return
 
-def SSL_Connection_Pool():
+def Get_TLS_Allowed_Algorithms():
+    global TLS_BANNED_ALGORITHMS
+
+    cipherlist=ssl.create_default_context().get_ciphers()
+
+    cipherstring=""
+    for cipher in cipherlist:
+        ciphername=cipher["name"].upper()
+
+        contains_banned_method=False
+
+        for banned_method in TLS_BANNED_ALGORITHMS:
+            banned_method=banned_method.upper()
+            if banned_method+"-" in ciphername or "-"+banned_method in ciphername or banned_method+"_" in ciphername or "_"+banned_method in ciphername:
+                contains_banned_method=True
+                break
+
+        if contains_banned_method==False:
+            cipherstring+=":"+ciphername
+
+    if cipherstring.startswith(":"):
+        cipherstring=cipherstring[1:]
+
+    return cipherstring
+
+def TLS_Connection_Pool():
+    global TLS_ALLOWED_ALGORITHMS
+
     ssl_cert_context=ssl.create_default_context()
     ssl_cert_context.check_hostname=True
+    ssl_cert_context.set_ciphers(TLS_ALLOWED_ALGORITHMS)
     ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
+    ssl_cert_context.options|=ssl.OP_NO_SSLv2
+    ssl_cert_context.options|=ssl.OP_NO_SSLv3
+    ssl_cert_context.options|=ssl.OP_NO_TLSv1
+    ssl_cert_context.options|=ssl.OP_NO_TLSv1_1
     return urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
 
 def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_event):
     global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
     global MAINTHREAD_HEARTBEAT_SECONDS
+    global SERVER_TIME_RESYNC_INTERVAL_SECONDS
 
     last_process_priority_check=GetTickCount64()-MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000
     last_server_time_check=datetime.datetime.utcnow()
@@ -412,7 +447,7 @@ class Time_Provider(object):
     def __init__(self):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
 
-        self.request_pool=SSL_Connection_Pool()
+        self.request_pool=TLS_Connection_Pool()
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
@@ -791,7 +826,7 @@ class Telegram_Bot(object):
         global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
         global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
 
-        self.request_pool=SSL_Connection_Pool()
+        self.request_pool=TLS_Connection_Pool()
         self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
@@ -3047,6 +3082,8 @@ MAIN
 
 environment_info=Get_Runtime_Environment()
 PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
+
+TLS_ALLOWED_ALGORITHMS=Get_TLS_Allowed_Algorithms()
 
 start_minimized=False
 stdout_output=False
