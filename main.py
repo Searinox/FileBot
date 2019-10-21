@@ -64,7 +64,7 @@ MAX_BOT_USERS=100
 UI_COMMAND_HISTORY_MAX=50
 UI_OUTPUT_ENTRIES_MAX=5000
 
-TLS_BANNED_ALGORITHMS=["AES128","AES_128","CHACHA","CBC"]
+TLS_BANNED_ALGORITHMS=["ANY","SHA1","DHE","CHACHA20-POLY1305","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
 
 UI_SCALE_MODIFIER=1.125
 QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
@@ -146,23 +146,73 @@ def Get_TLS_Allowed_Algorithms():
     global TLS_BANNED_ALGORITHMS
 
     cipherlist=ssl.create_default_context().get_ciphers()
+    banned_algorithms=[i.upper() for i in TLS_BANNED_ALGORITHMS]
 
     cipherstring=""
     for cipher in cipherlist:
-        ciphername=cipher["name"].upper()
+        if "digest" in cipher and "auth" in cipher and "symmetric" in cipher and "kea" in cipher:
+            ciphername=cipher["name"]
 
-        contains_banned_method=False
+            if cipher["digest"] is not None:
+                cipher_digest=cipher["digest"].upper()
+            else:
+                cipher_digest=""
 
-        for banned_method in TLS_BANNED_ALGORITHMS:
-            banned_method=banned_method.upper()
-            if banned_method+"-" in ciphername or "-"+banned_method in ciphername or banned_method+"_" in ciphername or "_"+banned_method in ciphername:
-                contains_banned_method=True
-                break
+            if cipher["auth"] is not None:
+                cipher_auth=cipher["auth"].upper()
+                if cipher_auth.startswith("AUTH-"):
+                    cipher_auth=cipher_auth[len("AUTH-"):]
+            else:
+                cipher_auth=""
 
-        if contains_banned_method==False:
-            cipherstring+=":"+ciphername
+            if cipher["symmetric"] is not None:
+                cipher_symmetric=cipher["symmetric"].upper()
+            else:
+                cipher_symmetric=""
 
-    if cipherstring.startswith(":"):
+            if cipher["kea"] is not None:
+                cipher_kea=cipher["kea"].upper()
+                if cipher_kea.startswith("KX-"):
+                    cipher_kea=cipher_kea[len("KX-"):]
+            else:
+                cipher_kea=""
+
+            digest_ok=False
+            auth_ok=False
+            symmetric_ok=False
+            kea_ok=False
+
+            if cipher_digest!="":
+                if cipher_digest not in banned_algorithms:
+                    digest_ok=True
+            else:
+                digest_ok=True
+
+            if digest_ok==True:            
+                if cipher_auth!="":
+                    if cipher_auth not in banned_algorithms:
+                        auth_ok=True
+                else:
+                    auth_ok=True
+
+            if digest_ok==True and auth_ok==True:
+                if cipher_symmetric!="":
+                    if cipher_symmetric not in banned_algorithms:
+                        symmetric_ok=True
+                else:
+                    symmetric_ok=True
+
+            if digest_ok==True and auth_ok==True and symmetric_ok==True:
+                if cipher_kea!="":
+                    if cipher_kea not in banned_algorithms:
+                        kea_ok=True
+                else:
+                    kea_ok=True
+
+            if digest_ok==True and auth_ok==True and symmetric_ok==True and kea_ok==True:
+                cipherstring+=":"+ciphername
+
+    if cipherstring.startswith(":")==True:
         cipherstring=cipherstring[1:]
 
     return cipherstring
