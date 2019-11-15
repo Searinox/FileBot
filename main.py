@@ -1825,7 +1825,6 @@ class User_Message_Handler(object):
                         fsize=os.path.getsize(newpath)
                         if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                             self.bot_handle.Send_File(command_context["chat_id"],newpath)
-                            self.log("File \""+newpath+"\" sent.")
                             success=True
                         else:
                             if fsize!=0:
@@ -1838,8 +1837,8 @@ class User_Message_Handler(object):
                         response=u"Problem getting file."
                         self.log("File \""+newpath+"\" send error.")
                     if success==True:
+                        self.log("File \""+newpath+"\" sent. Deleting...")
                         try:
-                            self.log("File \""+newpath+"\" sent. Deleting...")
                             os.remove(newpath)
                             response=u"File deleted."
                             self.log("File \""+newpath+"\" deleted.")
