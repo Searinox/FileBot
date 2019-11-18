@@ -419,6 +419,7 @@ class Logger(object):
         except:
             pass
         self.is_active.set()
+        self.LOG("WARNING: Default target log file could not be written to. Logging will not save to file.")
         return
 
     def SET_STDOUT(self,input_state):
@@ -461,6 +462,7 @@ class Logger(object):
         else:
             source_literal=""
             input_literal=str(source)
+            source=""
         if source!="":
             source_literal=" ["+source_literal+"] "
         else:
@@ -3147,11 +3149,10 @@ for argument in environment_info["arguments"]:
 if environment_info["running_from_source"]==True:
     stdout_output=True
 
+CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
+
 LOGGER=Logger(os.path.join(environment_info["working_dir"],u"log.txt"))
 LOGGER.SET_STDOUT(stdout_output)
-LOGGER.ACTIVATE()
-
-CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 
 UI_SIGNAL=UI_Signaller()
 LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
@@ -3161,6 +3162,8 @@ APP_ICONS_B64=None
 
 while Active_UI.IS_READY()==False:
     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+
+LOGGER.ACTIVATE()
 
 log("==================================== FileBot ====================================")
 log("Author: "+str(__author__))
