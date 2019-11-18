@@ -414,12 +414,17 @@ class Logger(object):
         return
 
     def ACTIVATE(self):
+        log_file_ok=True
+
         try:
             self.log_handle=open(self.logging_path,"a")
         except:
-            pass
+            log_file_ok=False
+
         self.is_active.set()
-        self.LOG("WARNING: Default target log file could not be written to. Logging will not save to file.")
+
+        if log_file_ok==False:
+            self.LOG("WARNING: Default target log file could not be written to. Logging will not save to file.")
         return
 
     def SET_STDOUT(self,input_state):
