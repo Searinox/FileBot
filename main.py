@@ -381,10 +381,7 @@ class ShellProcess(object):
         return
 
     def IS_RUNNING(self): 
-        exit_code=win32process.GetExitCodeProcess(self.process_handle)
-        if exit_code!=win32con.STILL_ACTIVE:
-            return False
-        return True
+        return win32process.GetExitCodeProcess(self.process_handle)==win32con.STILL_ACTIVE
 
     def PID(self):
         return self.process_ID
@@ -414,16 +411,14 @@ class Logger(object):
         return
 
     def ACTIVATE(self):
-        log_file_ok=True
-
         try:
             self.log_handle=open(self.logging_path,"a")
         except:
-            log_file_ok=False
+            pass
 
         self.is_active.set()
 
-        if log_file_ok==False:
+        if self.log_handle is None:
             self.LOG("WARNING: Default target log file could not be written to. Logging will not save to file.")
         return
 
