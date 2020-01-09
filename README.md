@@ -2,7 +2,7 @@
 
 7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/
 
-The bot serves files from the host machine to allowed users. Folder navigation and listing with filters are also possible. Users with write privileges can also upload their own files, create and delete files and folders, and archive files and folders.
+The bot serves files from the host machine to allowed users. Folder navigation and listing with filters are also possible. Users with write privileges can also upload their own files, create and delete files and folders, and archive files and folders. The bot window can be minimized to tray.
 
 Type "help" in the console for a list of commands.
 
