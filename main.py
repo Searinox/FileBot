@@ -1,4 +1,4 @@
-__version__="1.90"
+__version__="1.91"
 __author__="Searinox Navras"
 
 
@@ -1710,11 +1710,8 @@ class User_Message_Handler(object):
         if command_context["args"]!="":
             newpath=self.rel_to_abs(command_context["args"])
             if self.usable_dir(newpath)==True:
-                try:
-                    newpath=self.proper_caps_path(newpath)
-                except:
-                    pass
-                newpath=self.proper_caps_path(terminate_with_backslash(newpath))
+                newpath=self.proper_caps_path(newpath)
+                newpath=terminate_with_backslash(newpath)
                 self.set_last_folder(newpath)
                 response=u"Current folder changed to \""+newpath+"\"."
                 self.log("Current folder changed to \""+newpath+"\".")
