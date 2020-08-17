@@ -1,4 +1,4 @@
-__version__="1.91"
+__version__="1.92"
 __author__="Searinox Navras"
 
 
@@ -319,7 +319,7 @@ def User_Entry_From_String(from_string):
 
         if len(segments)==1:
             raise ValueError("Home path was not present.")
-        if len(segments)>2:
+        elif len(segments)>2:
             raise ValueError("Wrong number of \"|\"-separated characters.")
 
         retval["username"]=segments[0]
@@ -660,6 +660,7 @@ class Task_Handler_7ZIP(object):
             folder_path=target_path[:target_path[:-1].rfind(u"\\")+1]
             if folder_path==u"":
                 folder_path=target_path[:target_path[:-1].rfind(u":")+1]
+
         archive_filename=target_path[target_path.rfind(u"\\")+1:]
         if archive_filename==u"":
             archive_filename=target_path[target_path[:-1].rfind(u"\\")+1:]
@@ -667,12 +668,14 @@ class Task_Handler_7ZIP(object):
                 archive_filename=archive_filename[:-1]
         archive_filename_path=archive_filename
         archive_filename=archive_filename.replace(u":",u"")
+
         zip_command=u"\""+self.path_7zip_bin+u"\" a -mx9 -t7z \""+archive_filename+u".7z.TMP\" \""+archive_filename_path+u"\""
         folder_command=u"cd/ & cd /d \""+folder_path+u"\""
         rename_command=u"ren \""+archive_filename+u".7z.TMP\" \""+archive_filename+u".7z\""
         prompt_commands=folder_command+u" & "+zip_command+u" & "+rename_command
         folder_path=terminate_with_backslash(folder_path)
         full_target=folder_path+archive_filename.lower()
+
         if os.path.exists(full_target+u".7z")==False:
             self.lock_instances_7zip.acquire()
             user_task_total=0
@@ -903,6 +906,7 @@ class Telegram_Bot(object):
             response=json.loads(response.data)
         except:
             pass
+
         if response is not None:
             if "ok" in response:
                 if "description" in response:
@@ -984,6 +988,7 @@ class Telegram_Bot(object):
         file_handle=open(input_file_path,"rb",buffering=0)
         response=self.perform_file_request("POST",self.base_web_url+"sendDocument",{"chat_id":input_chat_id,"document":(filename,file_handle)})
         file_handle.close()
+
         if response is not None:
             return response
 
@@ -1128,7 +1133,7 @@ class Bot_Listener(object):
         if self.request_exit.is_set()==False:
             self.catch_up_IDs()
             self.log("Bot Listener for \""+self.name+"\" is now active.")
-            self.active_UI_signaller.send("bot_name",self.name)
+            self.active_UI_signaller.send("set_bot_name",self.name)
             self.is_ready.set()
 
         while self.request_exit.is_set()==False:
@@ -1145,10 +1150,10 @@ class Bot_Listener(object):
                 last_check_status=check_status
                 if check_status==True:
                     self.log("Message retrieval is now online.")
-                    self.active_UI_signaller.send("status","ONLINE")
+                    self.active_UI_signaller.send("set_status","ONLINE")
                 else:
                     self.log("Stopped being able to retrieve messages.")
-                    self.active_UI_signaller.send("status","OFFLINE")
+                    self.active_UI_signaller.send("set_status","OFFLINE")
 
             self.group_messages(response)
 
@@ -1257,6 +1262,7 @@ class User_Message_Handler(object):
         self.last_send_time=0
         self.account_username=input_user
         self.lastsent_timers=[]
+        self.blacklisted_paths=[]
         self.bot_lock_pass=u""
         self.allowed_root=input_root
         self.pending_lockclear=threading.Event()
@@ -1267,16 +1273,16 @@ class User_Message_Handler(object):
         self.processing_messages=threading.Event()
         self.processing_messages.clear()
         self.bot_handle=Telegram_Bot(input_token)
+
         if self.allowed_root==u"*":
             self.set_last_folder(PATH_WINDOWS_SYSTEM32[0].upper()+u":\\")
         else:
             self.set_last_folder(self.allowed_root)
-        if self.allowed_root!=u"*":
             self.blacklisted_paths=input_blacklisted_paths
-        else:
-            self.blacklisted_paths=[]
+
         for i in range(len(self.blacklisted_paths)):
             self.blacklisted_paths[i]=self.blacklisted_paths[i].lower()
+
         self.supported_commands={"cd":{"write_only":False,"call":self.performcommand_cd},
                                  "dir":{"write_only":False,"call":self.performcommand_dir},
                                  "get":{"write_only":False,"call":self.performcommand_get},
@@ -1377,7 +1383,7 @@ class User_Message_Handler(object):
                     return False
         return False
 
-    def rel_to_abs(self,raw_command_args,isfile=False):
+    def relative_to_absolute_path(self,raw_command_args,isfile=False):
         command_args=raw_command_args.replace(u"/",u"\\")
         if u":" in command_args:
             newpath=command_args
@@ -1676,7 +1682,7 @@ class User_Message_Handler(object):
             use_folder=self.get_last_folder()
         else:
             use_folder=command_context["args"]
-        use_folder=self.rel_to_abs(use_folder)
+        use_folder=self.relative_to_absolute_path(use_folder)
         if self.allowed_path(use_folder)==True:
             dirlist=self.folder_list_string(use_folder,extra_search,folders_only)
         else:
@@ -1698,6 +1704,7 @@ class User_Message_Handler(object):
                 self.log("Folder path \""+command_context["args"]+"\" was empty.")
             if response==u"":
                 response=u"<Listing finished.>"
+                self.log("Folder path \""+command_context["args"]+"\" listing completed.")
         else:
             response=u"<Path is inaccessible.>"
             self.log("Folder path \""+command_context["args"]+"\" was not accessible for listing.")
@@ -1708,7 +1715,7 @@ class User_Message_Handler(object):
         response=u""
 
         if command_context["args"]!="":
-            newpath=self.rel_to_abs(command_context["args"])
+            newpath=self.relative_to_absolute_path(command_context["args"])
             if self.usable_dir(newpath)==True:
                 newpath=self.proper_caps_path(newpath)
                 newpath=terminate_with_backslash(newpath)
@@ -1729,7 +1736,7 @@ class User_Message_Handler(object):
         response=u""
 
         if command_context["args"]!=u"":
-            newpath=self.rel_to_abs(command_context["args"],True)
+            newpath=self.relative_to_absolute_path(command_context["args"],True)
             if self.usable_path(newpath)==True:
                 newpath=self.proper_caps_path(newpath)
                 self.log("Requested get file \""+newpath+"\". Sending...")
@@ -1774,7 +1781,7 @@ class User_Message_Handler(object):
                     newname_ok=False
                     break
             if newname_ok==True:
-                newpath=self.rel_to_abs(command_context["args"],True)
+                newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
                     end=newpath.rfind(u"\\")
@@ -1814,7 +1821,7 @@ class User_Message_Handler(object):
         if command_context["args"].endswith(u" ?confirm")==True:
             command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
             if command_context["args"]!=u"":
-                newpath=self.rel_to_abs(command_context["args"],True)
+                newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
                     self.log("Requested eat file \""+newpath+"\". Sending...")
@@ -1862,7 +1869,7 @@ class User_Message_Handler(object):
         if command_context["args"].endswith(u" ?confirm")==True:
             command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
             if command_context["args"]!="":
-                newpath=self.rel_to_abs(command_context["args"],True)
+                newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
                     self.log("Requested delete file \""+newpath+"\".")
@@ -1890,7 +1897,7 @@ class User_Message_Handler(object):
         response=u""
 
         if command_context["args"]!=u"":
-            newpath=self.rel_to_abs(command_context["args"],True)
+            newpath=self.relative_to_absolute_path(command_context["args"],True)
             upper_folder=newpath
             if upper_folder.endswith(u"\\")==True:
                 upper_folder=upper_folder[:-1]
@@ -1923,7 +1930,7 @@ class User_Message_Handler(object):
         if command_context["args"].endswith(u" ?confirm")==True:
             command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
             if command_context["args"]!=u"":
-                newpath=self.rel_to_abs(command_context["args"],True)
+                newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_dir(newpath)==True:
                     upper_folder=newpath
                     if upper_folder.endswith(u"\\")==True:
@@ -1985,7 +1992,7 @@ class User_Message_Handler(object):
         response=u""
 
         if command_context["args"]!=u"":
-            newpath=self.rel_to_abs(command_context["args"])
+            newpath=self.relative_to_absolute_path(command_context["args"])
             if os.path.exists(newpath)==False and newpath.endswith(u"\\")==True:
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True:
@@ -2550,16 +2557,28 @@ class Main_Window(QMainWindow):
             for fontproperty in input_fonts[fontname]["properties"]:
                 if fontproperty=="bold":
                     self.font_cache[fontname].setBold(True)
-                if fontproperty=="italic":
+                elif fontproperty=="italic":
                     self.font_cache[fontname].setItalic(True)
-                if fontproperty=="underline":
+                elif fontproperty=="underline":
                     self.font_cache[fontname].setUnderline(True)
-                if fontproperty=="strikeout":
+                elif fontproperty=="strikeout":
                     self.font_cache[fontname].setStrikeOut(True)
 
         self.setFixedSize(940*self.UI_scale,598*self.UI_scale)
         self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
         self.setWindowFlags(self.windowFlags()|Qt.MSWindowsFixedSizeDialogHint)
+
+        self.signal_response_calls={"logger_newline":self.signal_logger_newline,
+                                    "attach_console":self.signal_attach_console,
+                                    "detach_console":self.signal_detach_console,
+                                    "close":self.signal_close,
+                                    "report_processing_messages_state":self.signal_report_processing_messages_state,
+                                    "set_bot_name":self.signal_set_bot_name,
+                                    "set_status":self.signal_set_status,
+                                    "report_timesync_clock_bias":self.signal_report_timesync_clock_bias,
+                                    "commandfield_failed":self.signal_commandfield_failed,
+                                    "commandfield_accepted":self.signal_commandfield_accepted,
+                                    "close_standby":self.signal_close_standby}
 
         self.lock_log_queue=threading.Lock()
         self.lock_output_update=threading.Lock()
@@ -2980,82 +2999,91 @@ class Main_Window(QMainWindow):
         return
 
     def signal_response_handler(self,event):
-        global UI_COMMAND_HISTORY_MAX
-
         if self.is_exiting.is_set()==True:
             return
 
-        event_type=event["type"]
-        event_data=event["data"]
+        self.signal_response_calls[event["type"]](event["data"])
+        return
 
-        if event["type"]=="logger_newline":
-            self.add_output_line(event_data)
+    def signal_logger_newline(self,event_data):
+        self.add_output_line(event_data)
+        return
 
-        elif event_type=="attach_console":
-            self.console=event_data
-            self.input_commandfield.setEnabled(not self.UI_lockstate)
-            self.update_UI_usability()
+    def signal_attach_console(self,event_data):
+        self.console=event_data
+        self.input_commandfield.setEnabled(not self.UI_lockstate)
+        self.update_UI_usability()
+        return
 
-        elif event_type=="detach_console":
-            self.console=None
-            self.input_commandfield.setEnabled(False)
-            self.update_UI_usability()
+    def signal_detach_console(self,event_data):
+        self.console=None
+        self.input_commandfield.setEnabled(False)
+        self.update_UI_usability()
+        return
 
-        elif event_type=="close":
-            self.queue_close_event()
+    def signal_close(self,event_data):
+        self.queue_close_event()
+        return
 
-        elif event_type=="report_processing_messages_state":
-            if self.app_state_is_processing_messages!=event_data:
-                self.app_state_is_processing_messages=not self.app_state_is_processing_messages
-                self.update_tray_icon()
-
-        elif event_type=="bot_name":
-            self.label_botname_value.setText(event_data)
-            self.label_botname_value.setStyleSheet("QLabel {color: #"+self.colors_status_username+"}")
+    def signal_report_processing_messages_state(self,event_data):
+        if self.app_state_is_processing_messages!=event_data:
+            self.app_state_is_processing_messages=not self.app_state_is_processing_messages
             self.update_tray_icon()
+        return
 
-        elif event_type=="status":
-            self.label_botstatus_value.setText(event_data)
-            if event_data=="ONLINE":
-                self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
-                self.app_state_is_online=True
-                self.update_tray_icon()
-            elif event_data=="OFFLINE":
-                self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
-                self.app_state_is_online=False
-                self.update_tray_icon()
+    def signal_set_bot_name(self,event_data):
+        self.label_botname_value.setText(event_data)
+        self.label_botname_value.setStyleSheet("QLabel {color: #"+self.colors_status_username+"}")
+        self.update_tray_icon()
+        return
 
-        elif event_type=="report_timesync_clock_bias":
-            clock_bias=float(event_data.replace("+","").replace("-",""))
-            if clock_bias>=60:
-                time_stylesheet="QLabel {color: #"+self.colors_status_error+"}"
-            elif clock_bias>=30:
-                time_stylesheet="QLabel {color: #"+self.colors_status_warn+"}"
-            else:
-                time_stylesheet="QLabel {color: #"+self.colors_status_ok+"}"
-            self.label_clock_bias_value.setStyleSheet(time_stylesheet)
-            self.label_clock_bias_value.setText(event_data)
+    def signal_set_status(self,event_data):
+        self.label_botstatus_value.setText(event_data)
+        if event_data=="ONLINE":
+            self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
+            self.app_state_is_online=True
+            self.update_tray_icon()
+        elif event_data=="OFFLINE":
+            self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
+            self.app_state_is_online=False
+            self.update_tray_icon()
+        return
 
-        elif event_type=="commandfield_failed":
-            if self.console is not None:
-                do_enable=not self.UI_lockstate
-                self.input_commandfield.setEnabled(do_enable)
-                if do_enable==True:
-                    self.input_commandfield.selectAll()
-                    self.input_commandfield.setFocus()
+    def signal_report_timesync_clock_bias(self,event_data):
+        clock_bias=float(event_data.replace("+","").replace("-",""))
+        if clock_bias>=60:
+            time_stylesheet="QLabel {color: #"+self.colors_status_error+"}"
+        elif clock_bias>=30:
+            time_stylesheet="QLabel {color: #"+self.colors_status_warn+"}"
+        else:
+            time_stylesheet="QLabel {color: #"+self.colors_status_ok+"}"
+        self.label_clock_bias_value.setStyleSheet(time_stylesheet)
+        self.label_clock_bias_value.setText(event_data)
+        return
 
-        elif event_type=="commandfield_accepted":
-            self.command_history+=[self.input_commandfield.text()]
-            if len(self.command_history)>UI_COMMAND_HISTORY_MAX:
-                del self.command_history[0]
-            self.command_history_index=len(self.command_history)
-            self.input_commandfield.setText("")
-            self.input_commandfield.setFocus()
+    def signal_commandfield_failed(self,event_data):
+        if self.console is not None:
+            do_enable=not self.UI_lockstate
+            self.input_commandfield.setEnabled(do_enable)
+            if do_enable==True:
+                self.input_commandfield.selectAll()
+                self.input_commandfield.setFocus()
+        return
 
-        elif event_type=="close_standby":
-            self.textbox_output.setEnabled(True)
-            self.input_commandfield.setEnabled(False)
+    def signal_commandfield_accepted(self,event_data):
+        global UI_COMMAND_HISTORY_MAX
 
+        self.command_history+=[self.input_commandfield.text()]
+        if len(self.command_history)>UI_COMMAND_HISTORY_MAX:
+            del self.command_history[0]
+        self.command_history_index=len(self.command_history)
+        self.input_commandfield.setText("")
+        self.input_commandfield.setFocus()
+        return
+
+    def signal_close_standby(self,event_data):
+        self.textbox_output.setEnabled(True)
+        self.input_commandfield.setEnabled(False)
         return
 
     def hideEvent(self,event):
