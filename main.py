@@ -617,7 +617,7 @@ class Task_Handler_7ZIP(object):
                     try:
                         write_7z_binary.close()
                     except:
-                        pass
+                        write_7z_binary=None
             raise Exception(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
 
         return
