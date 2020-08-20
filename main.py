@@ -29,20 +29,9 @@ def Get_B64_Resource(input_path):
     import resources_base64
     return resources_base64.Get_Resource(input_path)
 
-MAINTHREAD_HEARTBEAT_SECONDS=0.085
-PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.05
-MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
-COMMAND_CHECK_INTERVAL_SECONDS=0.2
-SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
-BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
-USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
-USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS=0.1
-UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1
-UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.1
-TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
-TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
-UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS=0.055
+MAX_BOT_USERS=100
+USER_TOKEN_MAX_LENGTH_BYTES=256
+USER_ENTRY_LINE_MAX_LENGTH_BYTES=768
 
 TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
 TELEGRAM_API_MAX_GLOBAL_IMS=30
@@ -59,10 +48,24 @@ BOT_LOCK_PASSWORD_CHARACTERS_MAX=32
 
 WEB_REQUEST_CONNECT_TIMEOUT_SECONDS=5
 MAX_7ZIP_TASKS_PER_USER=3
-MAX_BOT_USERS=100
 
 UI_COMMAND_HISTORY_MAX=50
 UI_OUTPUT_ENTRIES_MAX=5000
+
+MAINTHREAD_HEARTBEAT_SECONDS=0.085
+PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.05
+MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
+COMMAND_CHECK_INTERVAL_SECONDS=0.2
+SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
+BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
+USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
+USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS=0.1
+UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1
+UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS=0.1
+TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS=0.2
+TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
+TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
+UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS=0.055
 
 TLS_BANNED_ALGORITHMS=["ANY","SHA1","DHE","CHACHA20-POLY1305","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
 
@@ -289,10 +292,10 @@ def readable_size(input_size):
         return str(round(input_size/1024.0**2,2))+" MB"
     return str(round(input_size/1024.0**3,2))+" GB"
 
-def Bot_Token_From_String(from_string):
-    retval=from_string
+def Bot_Token_From_Bytes(input_bytes):
+    retval=input_bytes
     try:
-        retval=str(retval.strip())
+        retval=str(retval,"utf8").strip()
     except:
         return ""
     if len(retval)==0 or len(retval)>64:
@@ -306,13 +309,13 @@ def Bot_Token_From_String(from_string):
         return ""
     return retval
 
-def User_Entry_From_String(from_string):
+def User_Entry_From_String(input_string):
     retval={"username":u"","home":u"","allow_write":False,"error_message":""}
 
     segments=[]
 
     try:
-        segments=from_string.split("|")
+        segments=input_string.split("|")
         for i in range(len(segments)):
             segments[i]=segments[i].strip()
 
@@ -356,11 +359,12 @@ def User_Entry_From_String(from_string):
         if (retval["home"].count(u"*")>1 and len(retval["home"])>1) or retval["home"].count(u":")>1 or retval["home"].startswith(u"\\")==True:
             raise ValueError(u"Home path contains invalid characters.")
 
-        if u"\\.\\" in retval["home"] or u"\\..\\" in retval["home"] or retval["home"].startswith(u"\\\\")==True or len(retval["home"])>255:
+        if u"\\.\\" in retval["home"] or u"\\..\\" in retval["home"] or u"\\...\\" in retval["home"] or retval["home"].startswith(u"\\\\")==True or len(retval["home"])>255:
             raise ValueError(u"Home path format is invalid.")
 
     except:
-        return {"error_message":u"User entry \""+from_string+u"\" was not validly formatted: "+str(sys.exc_info()[0])+u" "+str(sys.exc_info()[1]),"username":u"","home":u"","allow_write":False}
+        return {"error_message":u"User entry \""+input_string+u"\" was not validly formatted: "+str(sys.exc_info()[0])+u" "+str(sys.exc_info()[1]),"username":u"","home":u"","allow_write":False}
+
     return retval
 
 
@@ -3228,15 +3232,15 @@ collect_user_file_entries=[]
 collect_allowed_users=[]
 
 try:
-    file_handle=open(os.path.join(environment_info["working_dir"],u"token.txt"),"r")
-    collect_bot_token=file_handle.read(128)
+    file_handle=open(os.path.join(environment_info["working_dir"],u"token.txt"),"rb")
+    collect_bot_token=file_handle.read(USER_TOKEN_MAX_LENGTH_BYTES)
     file_handle.close()
 except:
     log(u"ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
     fatal_error=True
 
 if fatal_error==False:
-    collect_bot_token=Bot_Token_From_String(collect_bot_token)
+    collect_bot_token=Bot_Token_From_Bytes(collect_bot_token)
     if collect_bot_token=="":
         log(u"ERROR: Make sure the token is correctly written in \"token.txt\".")
         fatal_error=True
@@ -3244,19 +3248,20 @@ if fatal_error==False:
 if fatal_error==False:
     file_handle=None
     try:
-        file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"r")
-        all_lines=file_handle.readlines(384*MAX_BOT_USERS)
+        file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"rb")
+        all_lines=str(file_handle.read(USER_ENTRY_LINE_MAX_LENGTH_BYTES*MAX_BOT_USERS),"utf8").split(u"\n")
+        file_handle.close()
+        file_handle=None
         for line in all_lines:
             line=line.strip()
             if line!=u"":
                 collect_user_file_entries+=[line]
-        file_handle.close()
     except:
         if file_handle is not None:
             try:
                 file_handle.close()
             except:
-                pass
+                file_handle=None
         log(u"ERROR: Could not obtain any valid user entries from \"userlist.txt\".")
         fatal_error=True
 
