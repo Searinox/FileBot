@@ -1,5 +1,5 @@
-__version__="1.92"
-__author__="Searinox Navras"
+__version__="1.921"
+__author__=u"Searinox Navras"
 
 
 """
@@ -112,7 +112,7 @@ def Flush_Std_Buffers():
     return
 
 def Get_Runtime_Environment():
-    retval={"working_dir":"","process_binary":"","running_from_source":False,"architecture":0,"process_id":-1,"arguments":[]}
+    retval={"working_dir":u"","process_binary":u"","running_from_source":False,"architecture":0,"process_id":-1,"arguments":[]}
 
     sys_exe=sys.executable
     retval["arguments"]=sys.argv
@@ -217,7 +217,7 @@ def Get_TLS_Allowed_Algorithms():
 
     return cipherstring
 
-def TLS_Connection_Pool():
+def Make_TLS_Connection_Pool():
     global TLS_ALLOWED_ALGORITHMS
 
     ssl_cert_context=ssl.create_default_context()
@@ -247,20 +247,19 @@ def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_even
             try:
                 if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
                     win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
-                    log("Idle process priority set.")
+                    log(u"Idle process priority set.")
             except:
-                log("Error managing process priority.")
+                log(u"Error managing process priority.")
             last_process_priority_check=GetTickCount64()
 
         if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
-            log("Performing time synchronization via Internet...")
+            log(u"Performing time synchronization via Internet...")
             sync_result=input_timeobject.SYNC()
             if sync_result["success"]==True:
-                log("Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+" second(s).")
+                log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
             else:
-                log("Time synchronization failed.")
-            if input_timesync_request_event.is_set()==True:
-                input_timesync_request_event.clear()
+                log(u"Time synchronization failed.")
+            input_timesync_request_event.clear()
             last_server_time_check=datetime.datetime.utcnow()
 
     return
@@ -308,7 +307,7 @@ def Bot_Token_From_String(from_string):
     return retval
 
 def User_Entry_From_String(from_string):
-    retval={"username":"","home":u"","allow_write":False,"error_message":""}
+    retval={"username":u"","home":u"","allow_write":False,"error_message":""}
 
     segments=[]
 
@@ -318,28 +317,28 @@ def User_Entry_From_String(from_string):
             segments[i]=segments[i].strip()
 
         if len(segments)==1:
-            raise ValueError("Home path was not present.")
+            raise ValueError(u"Home path was not present.")
         elif len(segments)>2:
-            raise ValueError("Wrong number of \"|\"-separated characters.")
+            raise ValueError(u"Wrong number of \"|\"-separated characters.")
 
         retval["username"]=segments[0]
         retval["home"]=segments[1].strip()
         retval["allow_write"]=False
 
-        if retval["username"].count("#")!=2 and retval["username"].count("#")!=0:
-            raise ValueError("Username contained an incorrect number of \"#\" characters.")
+        if retval["username"].count(u"#")!=2 and retval["username"].count(u"#")!=0:
+            raise ValueError(u"Username contained an incorrect number of \"#\" characters.")
 
-        username_nohashes=retval["username"].replace("#","")
+        username_nohashes=retval["username"].replace(u"#",u"")
 
-        if username_nohashes=="":
+        if username_nohashes==u"":
             raise ValueError("Username was empty.")
 
-        if username_nohashes[0] in "_0123456789":
-            raise ValueError("Username cannot begin with a number or underscore.")
+        if username_nohashes[0] in u"_0123456789":
+            raise ValueError(u"Username cannot begin with a number or underscore.")
 
         for c in username_nohashes:
-            if c.lower() not in "_0123456789abcdefghijklmnopqrstuvwxyz":
-                raise ValueError("Username contains invalid characters.")
+            if c.lower() not in u"_0123456789abcdefghijklmnopqrstuvwxyz":
+                raise ValueError(u"Username contains invalid characters.")
 
         if retval["home"].startswith(u">")==True:
             retval["allow_write"]=True
@@ -352,16 +351,16 @@ def User_Entry_From_String(from_string):
 
         for c in retval["home"]:
             if c in u"|<>?":
-                raise ValueError("Home path contains invalid characters.")
+                raise ValueError(u"Home path contains invalid characters.")
 
         if (retval["home"].count(u"*")>1 and len(retval["home"])>1) or retval["home"].count(u":")>1 or retval["home"].startswith(u"\\")==True:
-            raise ValueError("Home path contains invalid characters.")
+            raise ValueError(u"Home path contains invalid characters.")
 
         if u"\\.\\" in retval["home"] or u"\\..\\" in retval["home"] or retval["home"].startswith(u"\\\\")==True or len(retval["home"])>255:
-            raise ValueError("Home path format is invalid.")
+            raise ValueError(u"Home path format is invalid.")
 
     except:
-        return {"error_message":"User entry \""+from_string+"\" was not validly formatted: "+str(sys.exc_info()[0])+" "+str(sys.exc_info()[1]),"username":"","home":u"","allow_write":False}
+        return {"error_message":u"User entry \""+from_string+u"\" was not validly formatted: "+str(sys.exc_info()[0])+u" "+str(sys.exc_info()[1]),"username":u"","home":u"","allow_write":False}
     return retval
 
 
@@ -419,7 +418,7 @@ class Logger(object):
         self.is_active.set()
 
         if self.log_handle is None:
-            self.LOG("WARNING: Default target log file could not be written to. Logging will not save to file.")
+            self.LOG(u"WARNING: Default target log file could not be written to. Logging will not save to file.")
         return
 
     def SET_STDOUT(self,input_state):
@@ -450,25 +449,25 @@ class Logger(object):
         self.log_lock.release()
         return
 
-    def LOG(self,source,input_data=""):
+    def LOG(self,source,input_data=u""):
         global UI_SIGNAL
 
         if self.is_active.is_set()==False:
             return
 
-        if input_data!="":
+        if input_data!=u"":
             source_literal=str(source)
             input_literal=str(input_data)
         else:
-            source_literal=""
+            source_literal=u""
             input_literal=str(source)
             source=""
         if source!="":
-            source_literal=" ["+source_literal+"] "
+            source_literal=u" ["+source_literal+u"] "
         else:
-            source_literal=" "
+            source_literal=u" "
 
-        msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal+"\n"
+        msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal+u"\n"
 
         self.log_lock.acquire()
 
@@ -499,7 +498,7 @@ class Time_Provider(object):
     def __init__(self):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
 
-        self.request_pool=TLS_Connection_Pool()
+        self.request_pool=Make_TLS_Connection_Pool()
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
@@ -547,7 +546,7 @@ class Time_Provider(object):
         if response.status==200:
             timestr=str(response.data,"utf8")
         else:
-            raise Exception("Could not get time.")
+            raise Exception(u"Could not get time.")
         quot1=timestr.find("\ndatetime: ")
         quot1+=len("\ndatetime: ")
         quot2=quot1+timestr[quot1+1:].find("+")
@@ -615,7 +614,7 @@ class Task_Handler_7ZIP(object):
                         write_7z_binary.close()
                     except:
                         pass
-            raise Exception("The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
+            raise Exception(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
 
         return
 
@@ -727,7 +726,7 @@ class Task_Handler_7ZIP(object):
         get_end_task_list_PIDs=[]
         get_end_task_list_users=[]
 
-        self.log("7-ZIP Task Handler started.")
+        self.log(u"7-ZIP Task Handler started.")
         last_update=GetTickCount64()-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000
         while self.request_exit.is_set()==False:
             time.sleep(TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS)
@@ -750,9 +749,9 @@ class Task_Handler_7ZIP(object):
                 get_end_task_list_users=[]
 
         self.update_7zip_tasks()
-        self.end_7zip_tasks(["*"])
+        self.end_7zip_tasks([u"*"])
 
-        self.log("7-ZIP Task Handler has exited.")
+        self.log(u"7-ZIP Task Handler has exited.")
         self.has_quit.set()
         return
 
@@ -762,14 +761,14 @@ class Task_Handler_7ZIP(object):
         for i in reversed(range(len(self.instances_7zip))):
             if self.instances_7zip[i]["new"]==True:
                 self.instances_7zip[i]["new"]=False
-                self.log("Task with PID="+str(self.instances_7zip[i]["process"].PID())+" TEMP=\""+self.instances_7zip[i]["temp_file"]+"\" has been added.")
+                self.log(u"Task with PID="+str(self.instances_7zip[i]["process"].PID())+u" TEMP=\""+self.instances_7zip[i]["temp_file"]+u"\" has been added.")
             still_running=True
             try:
                 still_running=self.instances_7zip[i]["process"].IS_RUNNING()
             except:
                 pass
             if still_running==False:
-                self.log("Task with PID="+str(self.instances_7zip[i]["process"].PID())+" TEMP=\""+self.instances_7zip[i]["temp_file"]+"\" has finished.")
+                self.log(u"Task with PID="+str(self.instances_7zip[i]["process"].PID())+u" TEMP=\""+self.instances_7zip[i]["temp_file"]+u"\" has finished.")
                 del self.instances_7zip[i]
 
         self.lock_instances_7zip.release()
@@ -785,7 +784,7 @@ class Task_Handler_7ZIP(object):
         terminated_total=0
 
         if len(list_users)==1:
-            if list_users[0]=="*":
+            if list_users[0]==u"*":
                 terminate_all=True
 
         self.lock_instances_7zip.acquire()
@@ -807,8 +806,8 @@ class Task_Handler_7ZIP(object):
                         break
 
             if terminate==True:
-                self.log("Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+"\".")
-                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+str(get_PID)),u"file":self.instances_7zip[i][u"temp_file"]}]
+                self.log(u"Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+u" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+u"\".")
+                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+str(get_PID)),"file":self.instances_7zip[i]["temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
@@ -828,7 +827,7 @@ class Task_Handler_7ZIP(object):
                     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
 
         if terminated_total==0:
-            self.log("No 7-ZIP tasks were terminated.")
+            self.log(u"No 7-ZIP tasks were terminated.")
 
         return
 
@@ -881,7 +880,7 @@ class Telegram_Bot(object):
         global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
         global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
 
-        self.request_pool=TLS_Connection_Pool()
+        self.request_pool=Make_TLS_Connection_Pool()
         self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
@@ -1075,7 +1074,7 @@ class Bot_Listener(object):
         self.working_thread=threading.Thread(target=self.work_loop)
         self.working_thread.daemon=True
         self.listen_users=username_list
-        self.name=""
+        self.name=u""
         self.messagelist_lock={}
         for username in self.listen_users:
             self.messagelist_lock[username]=threading.Lock()
@@ -1122,17 +1121,17 @@ class Bot_Listener(object):
                 bot_bind_ok=True
             except Exception as ex:
                 if str(ex)=="Invalid token.":
-                    self.log("ERROR: The provided bot token is invalid. Startup cannot proceed.")
+                    self.log(u"ERROR: The provided bot token is invalid. Startup cannot proceed.")
                     self.REQUEST_STOP()
                 else:
                     if activation_fail_announce==False:
-                        self.log("Bot Listener activation error. Will keep trying...")
+                        self.log(u"Bot Listener activation error. Will keep trying...")
                         activation_fail_announce=True
                     time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
 
         if self.request_exit.is_set()==False:
             self.catch_up_IDs()
-            self.log("Bot Listener for \""+self.name+"\" is now active.")
+            self.log(u"Bot Listener for \""+self.name+u"\" is now active.")
             self.active_UI_signaller.send("set_bot_name",self.name)
             self.is_ready.set()
 
@@ -1149,16 +1148,16 @@ class Bot_Listener(object):
             if check_status!=last_check_status:
                 last_check_status=check_status
                 if check_status==True:
-                    self.log("Message retrieval is now online.")
-                    self.active_UI_signaller.send("set_status","ONLINE")
+                    self.log(u"Message retrieval is now online.")
+                    self.active_UI_signaller.send("set_status",u"ONLINE")
                 else:
-                    self.log("Stopped being able to retrieve messages.")
-                    self.active_UI_signaller.send("set_status","OFFLINE")
+                    self.log(u"Stopped being able to retrieve messages.")
+                    self.active_UI_signaller.send("set_status",u"OFFLINE")
 
             self.group_messages(response)
 
         self.is_ready.clear()
-        self.log("Bot Listener has exited.")
+        self.log(u"Bot Listener has exited.")
         self.has_quit.set()
         return
 
@@ -1172,10 +1171,10 @@ class Bot_Listener(object):
             try:
                 responses=self.bot_handle.Get_Messages(self.last_ID_checked+1)
                 retrieved=True
-                self.log("Caught up with messages.")
+                self.log(u"Caught up with messages.")
             except:
                 if announced_fail==False:
-                    self.log("Failed to catch up with messages. Will keep trying...")
+                    self.log(u"Failed to catch up with messages. Will keep trying...")
                     announced_fail=True
                 time.sleep(BOT_LISTENER_THREAD_HEARTBEAT_SECONDS)
         if len(responses)>0:
@@ -1255,7 +1254,7 @@ class User_Message_Handler(object):
         self.has_quit=threading.Event()
         self.has_quit.clear()
         self.lock_last_folder=threading.Lock()
-        self.last_folder=""
+        self.last_folder=u""
         self.allow_writing=input_write
         self.listen_flag=threading.Event()
         self.listen_flag.clear()
@@ -1283,29 +1282,29 @@ class User_Message_Handler(object):
         for i in range(len(self.blacklisted_paths)):
             self.blacklisted_paths[i]=self.blacklisted_paths[i].lower()
 
-        self.supported_commands={"cd":{"write_only":False,"call":self.performcommand_cd},
-                                 "dir":{"write_only":False,"call":self.performcommand_dir},
-                                 "get":{"write_only":False,"call":self.performcommand_get},
-                                 "help":{"write_only":False,"call":self.performcommand_help},
-                                 "lock":{"write_only":False,"call":self.performcommand_lock},
-                                 "root":{"write_only":False,"call":self.performcommand_root},
-                                 "start":{"write_only":False,"call":self.performcommand_start},
-                                 "stop":{"write_only":False,"call":self.performcommand_stop},
-                                 "unlock":{"write_only":False,"call":self.performcommand_unlock},
-                                 "up":{"write_only":False,"call":self.performcommand_up},
-                                 "del":{"write_only":True,"call":self.performcommand_del},
-                                 "eat":{"write_only":True,"call":self.performcommand_eat},
-                                 "listzips":{"write_only":True,"call":self.performcommand_listzips},
-                                 "mkdir":{"write_only":True,"call":self.performcommand_mkdir},
-                                 "ren":{"write_only":True,"call":self.performcommand_ren},
-                                 "rmdir":{"write_only":True,"call":self.performcommand_rmdir},
-                                 "stopzips":{"write_only":True,"call":self.performcommand_stopzips},
-                                 "zip":{"write_only":True,"call":self.performcommand_zip}}
+        self.supported_commands={u"cd":{"write_only":False,"call":self.performcommand_cd},
+                                 u"dir":{"write_only":False,"call":self.performcommand_dir},
+                                 u"get":{"write_only":False,"call":self.performcommand_get},
+                                 u"help":{"write_only":False,"call":self.performcommand_help},
+                                 u"lock":{"write_only":False,"call":self.performcommand_lock},
+                                 u"root":{"write_only":False,"call":self.performcommand_root},
+                                 u"start":{"write_only":False,"call":self.performcommand_start},
+                                 u"stop":{"write_only":False,"call":self.performcommand_stop},
+                                 u"unlock":{"write_only":False,"call":self.performcommand_unlock},
+                                 u"up":{"write_only":False,"call":self.performcommand_up},
+                                 u"del":{"write_only":True,"call":self.performcommand_del},
+                                 u"eat":{"write_only":True,"call":self.performcommand_eat},
+                                 u"listzips":{"write_only":True,"call":self.performcommand_listzips},
+                                 u"mkdir":{"write_only":True,"call":self.performcommand_mkdir},
+                                 u"ren":{"write_only":True,"call":self.performcommand_ren},
+                                 u"rmdir":{"write_only":True,"call":self.performcommand_rmdir},
+                                 u"stopzips":{"write_only":True,"call":self.performcommand_stopzips},
+                                 u"zip":{"write_only":True,"call":self.performcommand_zip}}
         return
 
     def log(self,input_text):
         if self.active_logger is not None:
-            self.active_logger.LOG("MSGHNDLR","<"+self.account_username+"> "+input_text)
+            self.active_logger.LOG("MSGHNDLR",u"<"+self.account_username+u"> "+input_text)
         return
 
     def sendmsg(self,sender_id,message_text):
@@ -1341,7 +1340,7 @@ class User_Message_Handler(object):
                 del self.lastsent_timers[0]
             return True
         except:
-            self.log("User Message Handler was unable to respond.")
+            self.log(u"User Message Handler was unable to respond.")
             return False
 
     def allowed_path(self,input_path):
@@ -1401,9 +1400,9 @@ class User_Message_Handler(object):
             self.pending_lockclear.clear()
             if self.bot_lock_pass!=u"":
                 self.bot_lock_pass=u""
-                self.log("User Message Handler unlocked by console.")
+                self.log(u"User Message Handler unlocked by console.")
             else:
-                self.log("User Message Handler unlock was requested, but it is not locked.")
+                self.log(u"User Message Handler unlock was requested, but it is not locked.")
             self.listener.GET_NEW_USER_MESSAGES(self.account_username)
         return
 
@@ -1411,7 +1410,7 @@ class User_Message_Handler(object):
         global BOT_LISTENER_THREAD_HEARTBEAT_SECONDS
         global USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS
 
-        self.log("User Message Handler started, home path is \""+self.allowed_root+"\", allow writing: "+str(self.allow_writing).upper()+".")
+        self.log(u"User Message Handler started, home path is \""+self.allowed_root+u"\", allow writing: "+str(self.allow_writing).upper()+u".")
 
         while self.request_exit.is_set()==False:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
@@ -1421,11 +1420,11 @@ class User_Message_Handler(object):
                 total_new_messages=len(new_messages)
                 if total_new_messages>0:
                     self.processing_messages.set()
-                    self.log(str(total_new_messages)+" new message(s) received.")
+                    self.log(str(total_new_messages)+u" new message(s) received.")
                     self.process_messages(new_messages)
                     self.processing_messages.clear()
 
-        self.log("User Message Handler has exited.")
+        self.log(u"User Message Handler has exited.")
         self.has_quit.set()
         return
 
@@ -1448,17 +1447,17 @@ class User_Message_Handler(object):
     def LISTEN(self,new_state):
         if new_state==True:
             if self.listen_flag.is_set()==False:
-                self.log("Listen started.")
+                self.log(u"Listen started.")
                 self.listener.GET_NEW_USER_MESSAGES(self.account_username)
                 self.listen_flag.set()
             else:
-                self.log("Listen start was requested, but it is already listening.")
+                self.log(u"Listen start was requested, but it is already listening.")
         else:
             if self.listen_flag.is_set()==True:
-                self.log("Listen stopped.")
+                self.log(u"Listen stopped.")
                 self.listen_flag.clear()
             else:
-                self.log("Listen stop was requested, but it is not currently listening.")
+                self.log(u"Listen stop was requested, but it is not currently listening.")
         return
 
     def ATTACH_MESSAGE_RATE_LIMITER(self,input_ratelimiter):
@@ -1505,8 +1504,8 @@ class User_Message_Handler(object):
                             filename=self.bot_handle.Get_File_Info(m[u"audio"][u"file_id"])[u"file_path"]
                             filename=filename[filename.rfind(u"/")+1:]
                             fileext=filename[filename.rfind(u".")+1:]
-                            filetitle=""
-                            fileperformer=""
+                            filetitle=u""
+                            fileperformer=u""
                             if u"title" in m[u"audio"]:
                                 filetitle=m[u"audio"][u"title"]
                             if u"performer" in m[u"audio"]:
@@ -1541,21 +1540,21 @@ class User_Message_Handler(object):
             foldername=self.get_last_folder()
             complete_put_path=foldername+filename
             self.sendmsg(sender_id,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
-            self.log("Receiving file \""+complete_put_path+"\"...")
+            self.log(u"Receiving file \""+complete_put_path+u"\"...")
             if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
                     try:
                         self.bot_handle.Get_File(file_id,complete_put_path)
                         self.sendmsg(sender_id,u"Finished putting file \""+complete_put_path+u"\".")
-                        self.log("File download complete.")
+                        self.log(u"File download complete.")
                     except:
                         self.sendmsg(sender_id,u"File \""+filename+u"\" could not be placed.")
-                        self.log("File download aborted due to unknown issue.")
+                        self.log(u"File download aborted due to unknown issue.")
             else:
                 self.sendmsg(sender_id,u"File \""+filename+u"\" already exists at the location.")
-                self.log("File download aborted due to existing instance.")
+                self.log(u"File download aborted due to existing instance.")
         else:
             self.sendmsg(sender_id,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".")
-            self.log("File download aborted due to size exceeding limit.")
+            self.log(u"File download aborted due to size exceeding limit.")
         return
 
     def segment_file_list_string(self,input_string):
@@ -1627,12 +1626,12 @@ class User_Message_Handler(object):
         return response
 
     def performcommand_start(self,command_context):
-        self.log("User has sent a start request.")
+        self.log(u"User has sent a start request.")
 
         return u""
 
     def performcommand_stop(self,command_context):
-        self.log("User has sent a stop request.")
+        self.log(u"User has sent a stop request.")
 
         return u""
 
@@ -1643,7 +1642,7 @@ class User_Message_Handler(object):
             response=u"Root folder path is \""+self.allowed_root+u"\"."
         else:
             response=u"This user is allowed to access all host system drives."
-        self.log("Root folder path requested, which is \""+self.allowed_root+"\".")
+        self.log(u"Root folder path requested, which is \""+self.allowed_root+u"\".")
 
         return response
 
@@ -1676,7 +1675,7 @@ class User_Message_Handler(object):
         else:
             folders_only=False
 
-        self.log("Listing requested for path \""+command_context["args"]+"\" with search string \""+extra_search+"\", folders only="+str(folders_only).upper()+".")
+        self.log(u"Listing requested for path \""+command_context["args"]+u"\" with search string \""+extra_search+u"\", folders only="+str(folders_only).upper()+u"...")
 
         if command_context["args"]==u"":
             use_folder=self.get_last_folder()
@@ -1688,47 +1687,48 @@ class User_Message_Handler(object):
         else:
             dirlist=u""
             response=u"<Path is inaccessible.>"
-            self.log("Folder path \""+command_context["args"]+"\" was not accessible for listing.")
+            self.log(u"Folder path \""+command_context["args"]+u"\" was inaccessible for listing.")
+
         if dirlist!=u"<BAD_PATH>":
             segment_list=self.segment_file_list_string(dirlist)
             if len(segment_list)>0:
                 for segment in segment_list:
                     if self.sendmsg(command_context["sender_id"],segment)==False:
                         response=u"<Listing interrupted.>"
-                        self.log("Listing for folder path \""+command_context["args"]+"\" was interrupted.")
+                        self.log(u"Listing for folder path \""+command_context["args"]+u"\" was interrupted.")
                         break
                     if self.request_exit.is_set()==True:
                         break
             else:
                 response=u"<Folder is empty.>"
-                self.log("Folder path \""+command_context["args"]+"\" was empty.")
+                self.log(u"Folder path \""+command_context["args"]+u"\" was empty.")
             if response==u"":
                 response=u"<Listing finished.>"
-                self.log("Folder path \""+command_context["args"]+"\" listing completed.")
+                self.log(u"Folder path \""+command_context["args"]+u"\" listing completed.")
         else:
             response=u"<Path is inaccessible.>"
-            self.log("Folder path \""+command_context["args"]+"\" was not accessible for listing.")
+            self.log(u"Folder path \""+command_context["args"]+u"\" was inaccessible for listing.")
 
         return response
 
     def performcommand_cd(self,command_context):
         response=u""
 
-        if command_context["args"]!="":
+        if command_context["args"]!=u"":
             newpath=self.relative_to_absolute_path(command_context["args"])
             if self.usable_dir(newpath)==True:
                 newpath=self.proper_caps_path(newpath)
                 newpath=terminate_with_backslash(newpath)
                 self.set_last_folder(newpath)
-                response=u"Current folder changed to \""+newpath+"\"."
-                self.log("Current folder changed to \""+newpath+"\".")
+                response=u"Current folder changed to \""+newpath+u"\"."
+                self.log(u"Current folder was changed to \""+newpath+u"\".")
             else:
                 response=u"Path could not be accessed."
-                self.log("Path provided \""+newpath+"\" could not be accessed.")
+                self.log(u"Path provided \""+newpath+u"\" could not be accessed.")
         else:
             newpath=self.get_last_folder()
             response=u"Current folder is \""+newpath+u"\"."
-            self.log("Queried current folder, which is \""+newpath+"\".")
+            self.log(u"Queried current folder, which is \""+newpath+u"\".")
 
         return response
 
@@ -1739,29 +1739,29 @@ class User_Message_Handler(object):
             newpath=self.relative_to_absolute_path(command_context["args"],True)
             if self.usable_path(newpath)==True:
                 newpath=self.proper_caps_path(newpath)
-                self.log("Requested get file \""+newpath+"\". Sending...")
+                self.log(u"Requested get file \""+newpath+u"\". Sending...")
                 self.sendmsg(command_context["sender_id"],u"Getting file, please wait...")
                 try:
                     fsize=os.path.getsize(newpath)
                     if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
                         self.bot_handle.Send_File(command_context["chat_id"],newpath)
-                        self.log("File \""+newpath+"\" sent.")
+                        self.log(u"File \""+newpath+u"\" sent.")
                     else:
                         if fsize!=0:
                             response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                            self.log("Requested file \""+newpath+"\" too large to get.")
+                            self.log(u"Requested file \""+newpath+u"\" too large to get.")
                         else:
                             response=u"File is empty."
-                            self.log("Get file \""+newpath+"\" failed because the file is empty.")
+                            self.log(u"Get file \""+newpath+u"\" failed because the file is empty.")
                 except:
                     response=u"Problem getting file."
-                    self.log("Get File error for \""+newpath+"\".")
+                    self.log(u"Get File error for \""+newpath+u"\".")
             else:
                 response=u"File not found or inaccessible."
-                self.log("Get file \""+newpath+"\" was not found.")
+                self.log(u"Get file \""+newpath+u"\" was not found.")
         else:
             response=u"A file name or path must be provided."
-            self.log("Attempted to use get without a file name or path.")
+            self.log(u"Attempted to use get without a file name or path.")
 
         return response
 
@@ -1787,31 +1787,31 @@ class User_Message_Handler(object):
                     end=newpath.rfind(u"\\")
                     if end!=-1:
                         foldername=terminate_with_backslash(newpath[:end])
-                        self.log("Requested rename \""+newpath+"\" to \""+newname+"\".")
+                        self.log(u"Requested rename \""+newpath+u"\" to \""+newname+u"\".")
                         newtarget=foldername+newname
                         if os.path.exists(newtarget)==False:
                             try:
                                 os.rename(newpath,newtarget)
                                 response=u"Renamed \""+newpath+u"\" to \""+newname+u"\"."
-                                self.log("Renamed \""+newpath+"\" to \""+newname+"\".")
+                                self.log(u"Renamed \""+newpath+u"\" to \""+newname+u"\".")
                             except:
                                 response=u"Problem renaming."
-                                self.log("File/folder \""+newpath+"\" rename error.")
+                                self.log(u"File/folder \""+newpath+u"\" rename error.")
                         else:
                             response=u"A file or folder with the new name already exists."
-                            self.log("File/folder rename of \""+newpath+"\" failed because the new target \""+newtarget+"\" already exists.")
+                            self.log(u"File/folder rename of \""+newpath+u"\" failed because the new target \""+newtarget+u"\" already exists.")
                     else:
                         response=u"Problem with path."
-                        self.log("File/folder rename \""+newpath+"\" path error.")
+                        self.log(u"File/folder rename \""+newpath+u"\" path error.")
                 else:
                     response=u"File/folder not found or inaccessible."
-                    self.log("File/folder to rename \""+newpath+"\" not found.")
+                    self.log(u"File/folder to rename \""+newpath+u"\" not found.")
             else:
                 response=u"The new name must not be a path or contain invalid characters."
-                self.log("Attempted to rename \""+command_args+"\" to a new name containing invalid characters.")
+                self.log(u"Attempted to rename \""+command_args+u"\" to a new name containing invalid characters.")
         else:
             response=u"A name or path and a new name preceded by \"?to:\" must be provided."
-            self.log("Attempted to rename without specifying a name or path.")
+            self.log(u"Attempted to rename without specifying a name or path.")
 
         return response
 
@@ -1824,7 +1824,7 @@ class User_Message_Handler(object):
                 newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
-                    self.log("Requested eat file \""+newpath+"\". Sending...")
+                    self.log(u"Requested eat file \""+newpath+u"\". Sending...")
                     self.sendmsg(command_context["sender_id"],u"Eating file, please wait...")
                     success=False
                     try:
@@ -1835,31 +1835,31 @@ class User_Message_Handler(object):
                         else:
                             if fsize!=0:
                                 response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                                self.log("Requested file \""+newpath+"\" too large to eat.")
+                                self.log(u"Requested file \""+newpath+u"\" too large to eat.")
                             else:
                                 response=u"File is empty."
-                                self.log("Eat file \""+newpath+"\" failed because the file is empty.")
+                                self.log(u"Eat file \""+newpath+u"\" failed because the file is empty.")
                     except:
                         response=u"Problem getting file."
-                        self.log("File \""+newpath+"\" send error.")
+                        self.log(u"File \""+newpath+u"\" send error.")
                     if success==True:
-                        self.log("File \""+newpath+"\" sent. Deleting...")
+                        self.log(u"File \""+newpath+u"\" sent. Deleting...")
                         try:
                             os.remove(newpath)
                             response=u"File deleted."
-                            self.log("File \""+newpath+"\" deleted.")
+                            self.log(u"File \""+newpath+u"\" deleted.")
                         except:
                             response=u"Problem deleting file."
-                            self.log("File delete error for \""+newpath+"\".")
+                            self.log(u"File delete error for \""+newpath+u"\".")
                 else:
                     response=u"File not found or inaccessible."
-                    self.log("File to eat at \""+newpath+"\" not found.")
+                    self.log(u"File to eat at \""+newpath+u"\" not found.")
             else:
                 response=u"A file name or path must be provided."
-                self.log("Attempted to eat file without specifying a name or path.")
+                self.log(u"Attempted to eat file without specifying a name or path.")
         else:
             response=u"This command must end in \" ?confirm\"."
-            self.log("Attempted to delete file without confirmation.")
+            self.log(u"Attempted to delete file without confirmation.")
 
         return response
 
@@ -1868,28 +1868,28 @@ class User_Message_Handler(object):
 
         if command_context["args"].endswith(u" ?confirm")==True:
             command_context["args"]=command_context["args"][:-len(u" ?confirm")].strip()
-            if command_context["args"]!="":
+            if command_context["args"]!=u"":
                 newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
-                    self.log("Requested delete file \""+newpath+"\".")
+                    self.log(u"Requested delete file \""+newpath+u"\".")
                     try:
                         self.sendmsg(command_context["sender_id"],"Deleting file...")
                         os.remove(newpath)
                         response=u"File deleted."
-                        self.log("File \""+newpath+"\" deleted.")
+                        self.log(u"File \""+newpath+u"\" deleted.")
                     except:
                         response=u"Problem deleting file."
-                        self.log("File \""+newpath+"\" delete error.")
+                        self.log(u"File \""+newpath+u"\" delete error.")
                 else:
                     response=u"File not found or inaccessible."
-                    self.log("File to delete \""+newpath+"\" not found.")
+                    self.log(u"File to delete \""+newpath+u"\" not found.")
             else:
                 response=u"A file name or path must be provided."
-                self.log("Attempted to delete file without specifying a name or path.")
+                self.log(u"Attempted to delete file without specifying a name or path.")
         else:
             response=u"This command must end in \" ?confirm\"."
-            self.log("Attempted to delete file without confirmation.")
+            self.log(u"Attempted to delete file without confirmation.")
 
         return response
 
@@ -1908,19 +1908,19 @@ class User_Message_Handler(object):
                     try:
                         os.mkdir(newpath)
                         response=u"Folder created."
-                        self.log("Folder created at \""+newpath+"\".")
+                        self.log(u"Folder created at \""+newpath+u"\".")
                     except:
                         response=u"Problem creating folder."
-                        self.log("Folder create error at \""+newpath+"\".")
+                        self.log(u"Folder create error at \""+newpath+u"\".")
                 else:
                     response=u"Folder already exists."
-                    self.log("Attempted to create already existing folder at \""+newpath+"\".")
+                    self.log(u"Attempted to create already existing folder at \""+newpath+u"\".")
             else:
                 response=u"Path is not usable."
-                self.log("Attempted to create folder at unusable path \""+newpath+"\".")
+                self.log(u"Attempted to create folder at unusable path \""+newpath+u"\".")
         else:
             response=u"A folder name or path must be provided."
-            self.log("Attempted to create folder without specifying a name or path.")
+            self.log(u"Attempted to create folder without specifying a name or path.")
 
         return response
 
@@ -1939,7 +1939,7 @@ class User_Message_Handler(object):
                         upper_folder=upper_folder[:upper_folder.rfind(u"\\")+1]
                     if self.usable_dir(upper_folder)==True:
                         newpath=self.proper_caps_path(newpath)
-                        self.log("Requested delete folder \""+newpath+"\".")
+                        self.log(u"Requested delete folder \""+newpath+u"\"...")
                         try:
                             self.sendmsg(command_context["sender_id"],u"Deleting folder...")
                             shutil.rmtree(newpath)
@@ -1949,22 +1949,22 @@ class User_Message_Handler(object):
                                 self.set_last_folder(upper_folder)
                                 moved_up=u" Current folder is now \""+self.proper_caps_path(upper_folder)+u"\"."
                             response=u"Folder deleted."+moved_up
-                            self.log("Folder deleted at \""+newpath+"\"."+moved_up)
+                            self.log(u"Folder deleted at \""+newpath+u"\"."+moved_up)
                         except:
                             response=u"Problem deleting folder."
-                            self.log("Folder delete error at \""+newpath+"\".")
+                            self.log(u"Folder delete error at \""+newpath+u"\".")
                     else:
                         response=u"No upper folder to switch to after removal."
-                        self.log("Attempted to delete \""+newpath+"\" at top folder.")
+                        self.log(u"Attempted to delete \""+newpath+u"\" at top folder.")
                 else:
                     response=u"Folder \""+newpath+u"\" not found or inaccessible."
-                    self.log("Folder to delete not found at \""+newpath+"\".")
+                    self.log(u"Folder to delete not found at \""+newpath+u"\".")
             else:
                 response=u"A folder name or path must be provided."
-                self.log("No folder name or path provided for deletion.")
+                self.log(u"No folder name or path provided for deletion.")
         else:
             response=u"This command must end in \" ?confirm\"."
-            self.log("Attempted to delete folder without confirmation.")
+            self.log(u"Attempted to delete folder without confirmation.")
 
         return response
 
@@ -1978,13 +1978,13 @@ class User_Message_Handler(object):
             if self.allowed_path(newpath)==True:
                 self.set_last_folder(newpath)
                 response=u"Current folder is now \""+newpath+u"\"."
-                self.log("Current folder changed to \""+newpath+"\".")
+                self.log(u"Current folder changed to \""+newpath+u"\".")
             else:
                 response=u"Already at top folder."
-                self.log("Attempted to go up while at top folder.")
+                self.log(u"Attempted to go up while at top folder.")
         else:
             response=u"Already at top folder."
-            self.log("Attempted to go up while at top folder.")
+            self.log(u"Attempted to go up while at top folder.")
 
         return response
 
@@ -1999,22 +1999,22 @@ class User_Message_Handler(object):
                 zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
                 if zip_response["result"]=="CREATED":
                     response=u"Issued zip command."
-                    self.log("Zip command launched on \""+zip_response["full_target"]+"\".")
+                    self.log(u"Zip command launched on \""+zip_response["full_target"]+u"\".")
                 elif zip_response["result"]=="EXISTS":
                     response=u"An archive \""+zip_response["full_target"]+u".7z\" already exists."
-                    self.log("Zip \""+command_context["args"]+"\" failed because target archive \""+zip_response["full_target"]+".7z\" already exists.")
+                    self.log(u"Zip \""+command_context["args"]+u"\" failed because target archive \""+zip_response["full_target"]+u".7z\" already exists.")
                 elif zip_response["result"]=="ERROR":
                     response=u"Problem running command."
-                    self.log("Zip \""+command_context["args"]+"\" command could not be run.")
+                    self.log(u"Zip \""+command_context["args"]+u"\" command could not be run.")
                 elif zip_response["result"]=="MAXREACHED":
                     response=u"Maximum concurrent archival tasks reached."
-                    self.log("Zip \""+command_context["args"]+"\" rejected due to max concurrent tasks per user limit.")
+                    self.log(u"Zip \""+command_context["args"]+u"\" rejected due to max concurrent tasks per user limit.")
             else:
                 response=u"File not found or inaccessible."
-                self.log("Zip \""+command_context["args"]+"\" file not found or inaccessible.")
+                self.log(u"Zip \""+command_context["args"]+u"\" file not found or inaccessible.")
         else:
             response=u"A file or folder name or path must be provided."
-            self.log("Attempted to zip without a name or path.")
+            self.log(u"Attempted to zip without a name or path.")
 
         return response
 
@@ -2032,14 +2032,14 @@ class User_Message_Handler(object):
         else:
             response=u"Ongoing archival tasks:\n\n"+response
 
-        self.log("Requested list of running 7-ZIP archival tasks for user.")
+        self.log(u"Requested list of running 7-ZIP archival tasks for user.")
 
         return response
 
     def performcommand_stopzips(self,command_context):
         response=u"All running archival tasks will be stopped."
         self.active_7zip_task_handler.END_TASKS([self.account_username])
-        self.log("Requested stop of any running 7-ZIP archival tasks.")
+        self.log(u"Requested stop of any running 7-ZIP archival tasks.")
 
         return response
 
@@ -2054,10 +2054,10 @@ class User_Message_Handler(object):
             self.bot_lock_pass=command_context["args"]
             response=u"Bot locked."
             self.lock_status.set()
-            self.log("User Message Handler was locked with a password.")
+            self.log(u"User Message Handler was locked with a password.")
         else:
-            response=u"Lock password must be between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" characters long."
-            self.log("Attempted to lock the bot with a password of invalid length.")
+            response=u"Lock password must be between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+u" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+u" characters long."
+            self.log(u"Attempted to lock the bot with a password of invalid length.")
 
         return response
 
@@ -2085,7 +2085,7 @@ class User_Message_Handler(object):
             response+=u"/del <[PATH]FILE>: delete the file at the location\n"
             response+=u"/mkdir <[PATH]FOLDER>: create the folder at the location\n"
             response+=u"/rmdir <[PATH]FOLDER>: delete the folder at the location\n"
-        response+=u"/lock <PASSWORD>: lock the bot from responding to messages using a password between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+" characters long\n"
+        response+=u"/lock <PASSWORD>: lock the bot from responding to messages using a password between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+u" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+u" characters long\n"
         response+=u"/unlock <PASSWORD>: unlock the bot\n"
         response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
         response+=u"File size limit for getting files from host system: "+readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES)+u"."
@@ -2166,16 +2166,16 @@ class User_Console(object):
         self.lock_command=threading.Lock()
         self.request_time_sync=input_time_sync
         self.active_7zip_task_handler=input_7zip_taskhandler
-        self.pending_command=""
-        self.supported_commands={"help":self.performcommand_help,
-                                 "listusers":self.performcommand_listusers,
-                                 "listzips":self.performcommand_listzips,
-                                 "startlisten":self.performcommand_startlisten,
-                                 "stoplisten":self.performcommand_stoplisten,
-                                 "stopzips":self.performcommand_stopzips,
-                                 "synctime":self.performcommand_synctime,
-                                 "unlockusers":self.performcommand_unlockusers,
-                                 "userstats":self.performcommand_userstats}
+        self.pending_command=u""
+        self.supported_commands={u"help":self.performcommand_help,
+                                 u"listusers":self.performcommand_listusers,
+                                 u"listzips":self.performcommand_listzips,
+                                 u"startlisten":self.performcommand_startlisten,
+                                 u"stoplisten":self.performcommand_stoplisten,
+                                 u"stopzips":self.performcommand_stopzips,
+                                 u"synctime":self.performcommand_synctime,
+                                 u"unlockusers":self.performcommand_unlockusers,
+                                 u"userstats":self.performcommand_userstats}
         return
 
     def log(self,input_text):
@@ -2203,7 +2203,7 @@ class User_Console(object):
         self.working_thread.join()
         return
 
-    def COMMAND_SEND(self,input_command):
+    def SEND_COMMAND(self,input_command):
         if self.request_exit.is_set()==False:
             self.lock_command.acquire()
             self.pending_command=input_command
@@ -2230,7 +2230,7 @@ class User_Console(object):
                 user_handler_instance.LISTEN(True)
                 has_acted=True
         if has_acted==False:
-            self.log("No matching users were found.")
+            self.log(u"No matching users were found.")
         return True
 
     def performcommand_stoplisten(self,input_arguments):
@@ -2240,32 +2240,32 @@ class User_Console(object):
                 user_handler_instance.LISTEN(False)
                 has_acted=True
         if has_acted==False:
-            self.log("No matching users were found.")
+            self.log(u"No matching users were found.")
         return True
 
     def performcommand_userstats(self,input_arguments):
-        stats_out=""
+        stats_out=u""
         for user_handler_instance in self.user_handler_list:
             if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                stats_out+="\nMessage handler for user \""+user_handler_instance.account_username+"\":\n"+\
-                         "Home path=\""+user_handler_instance.allowed_root+"\"\n"+\
-                         "Write mode: "+str(user_handler_instance.allow_writing).upper()+"\n"+\
-                         "Current folder=\""+user_handler_instance.get_last_folder()+"\"\n"+\
-                         "Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+"\n"+\
-                         "Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+"\n"
-        if stats_out!="":
-            stats_out="USER STATS:\n"+stats_out
+                stats_out+=u"\nMessage handler for user \""+user_handler_instance.account_username+u"\":\n"+\
+                         u"Home path=\""+user_handler_instance.allowed_root+u"\"\n"+\
+                         u"Write mode: "+str(user_handler_instance.allow_writing).upper()+u"\n"+\
+                         u"Current folder=\""+user_handler_instance.get_last_folder()+u"\"\n"+\
+                         u"Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+u"\n"+\
+                         u"Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+u"\n"
+        if stats_out!=u"":
+            stats_out=u"USER STATS:\n"+stats_out
             self.log(stats_out)
         else:
-            self.log("No matching users were found.")
+            self.log(u"No matching users were found.")
         return True
 
     def performcommand_listusers(self,input_arguments):
-        list_out=""
+        list_out=u""
         for user_handler_instance in self.user_handler_list:
-            list_out+=user_handler_instance.account_username+", "
-        list_out=list_out[:-2]+"."
-        self.log("Allowed user(s): "+list_out)
+            list_out+=user_handler_instance.account_username+u", "
+        list_out=list_out[:-2]+u"."
+        self.log(u"Allowed user(s): "+list_out)
         return True
 
     def performcommand_unlockusers(self,input_arguments):
@@ -2275,15 +2275,15 @@ class User_Console(object):
                 user_handler_instance.UNLOCK()
                 has_acted=True
         if has_acted==False:
-            self.log("No matching users were found.")
+            self.log(u"No matching users were found.")
         return True
 
     def performcommand_synctime(self,input_arguments):
         if self.request_time_sync.is_set()==False:
-            self.log("Manual Internet time synchronization requested...")
+            self.log(u"Manual Internet time synchronization requested...")
             self.request_time_sync.set()
         else:
-            self.log("Manual Internet time synchronization is already in progress.")
+            self.log(u"Manual Internet time synchronization is already in progress.")
         return True
 
     def performcommand_listzips(self,input_arguments):
@@ -2293,19 +2293,19 @@ class User_Console(object):
             if entry["user"] not in user_task_dict.keys():
                 user_task_dict[entry["user"]]=[]
             user_task_dict[entry["user"]]+=[{"target":entry["target"],"pid":entry["pid"]}]
-        task_data_out=""
+        task_data_out=u""
         for username in user_task_dict:
             if username.lower() in input_arguments or input_arguments==[]:
-                task_data_out+="USER \""+username+"\":\n"
+                task_data_out+=u"USER \""+username+u"\":\n"
                 for entry in user_task_dict[username]:
-                    task_data_out+=">TARGET: \""+entry["target"]+"\" BATCH PID: "+str(entry["pid"])+"\n"
-                task_data_out+="\n"
-        if task_data_out=="":
-            self.log("Found no 7-ZIP tasks running.")
+                    task_data_out+=u">TARGET: \""+entry["target"]+u"\" BATCH PID: "+str(entry["pid"])+u"\n"
+                task_data_out+=u"\n"
+        if task_data_out==u"":
+            self.log(u"Found no 7-ZIP tasks running.")
         else:
-            if task_data_out.endswith("\n")==True:
+            if task_data_out.endswith(u"\n")==True:
                 task_data_out=task_data_out[:-1]
-            task_data_out="RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
+            task_data_out=u"RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
             self.log(task_data_out)
         return True
 
@@ -2315,9 +2315,9 @@ class User_Console(object):
 
         for arg in input_arguments:
             arg=arg.strip()
-            if arg!="":
+            if arg!=u"":
                 new_pid=-1
-                new_username=""
+                new_username=u""
 
                 try:
                     new_pid=int(arg)
@@ -2326,11 +2326,11 @@ class User_Console(object):
                 except:
                     invalid=False
                     if len(arg)>=5 and len(arg)<=32:
-                        if arg[0] in "0123456789_":
+                        if arg[0] in u"0123456789_":
                             invalid=True
                         else:
                             for c in arg:
-                                if c.lower() not in "0123456789_abcdefghijklmnopqrstuvwxyz#":
+                                if c.lower() not in u"0123456789_abcdefghijklmnopqrstuvwxyz#":
                                     invalid=True
                                     break
                     else:
@@ -2339,56 +2339,56 @@ class User_Console(object):
                     if invalid==False:
                         new_username=arg
 
-                if new_username!="":
+                if new_username!=u"":
                     usernames+=[new_username]
                 elif new_pid!=-1:
                     pids+=[new_pid]
                 else:
-                    self.log("One or more PIDs or users were incorrect.")
+                    self.log(u"One or more PIDs or users were incorrect.")
                     return False
 
         if len(pids)+len(usernames)>0:
             self.active_7zip_task_handler.END_TASKS(usernames,pids)
         else:
-            self.active_7zip_task_handler.END_TASKS(["*"])
+            self.active_7zip_task_handler.END_TASKS([u"*"])
         return True
 
     def performcommand_help(self,input_arguments):
-        self.log("AVAILABLE CONSOLE COMMANDS:\n"+\
-        "listusers: lists all allowed users\n"+\
-        "startlisten [USERS]: start listening to messages for listed users; leave blank to apply to all instances\n"+\
-        "stoplisten [USERS]: stop listening to messages for listed users; leave blank to apply to all instances\n"+\
-        "unlockusers [USERS]: unlock the bot for listed users; leave blank to apply to all instances\n"+\
-        "userstats [USERS]: list stats for listed users; leave blank to list all instances\n"+\
-        "listzips [USERS]: list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
-        "stopzips [PID | USERS]: stop running 7-ZIP archival tasks by listed userss or PID; leave blank to apply to all instances\n"+\
-        "synctime: manually re-synchronize bot time with Internet time\n"+\
-        "help: display help\n"+\
-        "exit: close the program\n")
+        self.log(u"AVAILABLE CONSOLE COMMANDS:\n"+\
+        u"listusers: lists all allowed users\n"+\
+        u"startlisten [USERS]: start listening to messages for listed users; leave blank to apply to all instances\n"+\
+        u"stoplisten [USERS]: stop listening to messages for listed users; leave blank to apply to all instances\n"+\
+        u"unlockusers [USERS]: unlock the bot for listed users; leave blank to apply to all instances\n"+\
+        u"userstats [USERS]: list stats for listed users; leave blank to list all instances\n"+\
+        u"listzips [USERS]: list running 7-ZIP archival tasks for listed users; leave blank to list all instances\n"+\
+        u"stopzips [PID | USERS]: stop running 7-ZIP archival tasks by listed userss or PID; leave blank to apply to all instances\n"+\
+        u"synctime: manually re-synchronize bot time with Internet time\n"+\
+        u"help: display help\n"+\
+        u"exit: close the program\n")
         return True
 
     def process_console_command(self,user_input):
-        user_data=user_input.split(" ")
+        user_data=user_input.split(u" ")
         input_command=user_data[0].lower().strip()
         input_arguments=[]
         if len(user_data)>1:
             for i in range(1,len(user_data)):
                 new_arg=user_data[i].lower().strip()
-                if new_arg!="":
+                if new_arg!=u"":
                     input_arguments+=[new_arg]
 
         if input_command in self.supported_commands:
             return self.supported_commands[input_command](input_arguments)
         else:
-            self.log("Unrecognized command. Type \"help\" for a list of commands.")
+            self.log(u"Unrecognized command. Type \"help\" for a list of commands.")
             return False
 
     def retrieve_command(self):
-        retval=""
+        retval=u""
         if self.request_exit.is_set()==False:
             self.lock_command.acquire()
             retval=self.pending_command
-            self.pending_command=""
+            self.pending_command=u""
             self.lock_command.release()
         return retval
 
@@ -2396,13 +2396,13 @@ class User_Console(object):
         global COMMAND_CHECK_INTERVAL_SECONDS
         global UI_COMMAND_HISTORY_MAX
 
-        self.log("Starting User Message Handler(s)...")
+        self.log(u"Starting User Message Handler(s)...")
         for user_handler_instance in self.user_handler_list:
             user_handler_instance.ATTACH_MESSAGE_RATE_LIMITER(self.message_rate_limiter)
             user_handler_instance.START()
             user_handler_instance.LISTEN(True)
 
-        self.log("User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(UI_COMMAND_HISTORY_MAX)+" history).")
+        self.log(u"User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(UI_COMMAND_HISTORY_MAX)+u" history).")
         self.active_UI_signaller.send("attach_console",self)
 
         if self.user_handlers_running()==0:
@@ -2413,17 +2413,18 @@ class User_Console(object):
 
         while continue_processing==True:
             time.sleep(COMMAND_CHECK_INTERVAL_SECONDS)
+
             if last_busy_state!=self.any_user_handlers_busy():
                 last_busy_state=not last_busy_state
                 UI_SIGNAL.send("report_processing_messages_state",last_busy_state)
 
             command=self.retrieve_command()
 
-            if command!="":
+            if command!=u"":
                 result=False
 
-                if command.lower()=="exit":
-                    self.log("Exit requested. Closing...")
+                if command.lower()==u"exit":
+                    self.log(u"Exit requested. Closing...")
                     self.REQUEST_STOP()
                 else:
                     result=self.process_console_command(command)
@@ -2435,20 +2436,20 @@ class User_Console(object):
                 self.is_exiting.set()
 
             if self.is_exiting.is_set()==False:
-                if command!="":
+                if command!=u"":
                     self.active_UI_signaller.send("commandfield_failed",{})
             else:
                 continue_processing=False
 
-                self.log("Requesting stop to Message Handler(s)...")
+                self.log(u"Requesting stop to Message Handler(s)...")
                 for user_handler_instance in self.user_handler_list:
                     user_handler_instance.REQUEST_STOP()
 
                 for user_handler_instance in self.user_handler_list:
                     user_handler_instance.CONCLUDE()
-                self.log("Confirmed User Message Handler(s) exit.")
+                self.log(u"Confirmed User Message Handler(s) exit.")
 
-        self.log("User Console exiting...")
+        self.log(u"User Console exiting...")
         self.active_UI_signaller.send("detach_console",{})
         self.active_UI_signaller.send("close",{})
         self.has_quit.set()
@@ -2565,7 +2566,7 @@ class Main_Window(QMainWindow):
                     self.font_cache[fontname].setStrikeOut(True)
 
         self.setFixedSize(940*self.UI_scale,598*self.UI_scale)
-        self.setWindowTitle("FileBot   v"+str(__version__)+"   by "+str(__author__))
+        self.setWindowTitle(u"FileBot   v"+str(__version__)+u"   by "+str(__author__))
         self.setWindowFlags(self.windowFlags()|Qt.MSWindowsFixedSizeDialogHint)
 
         self.signal_response_calls={"logger_newline":self.signal_logger_newline,
@@ -2597,7 +2598,7 @@ class Main_Window(QMainWindow):
         self.command_history_index=-1
         self.console=None
         self.update_log_on_restore=False
-        self.clipboard_queue=""
+        self.clipboard_queue=u""
         self.log_is_updating=False
         self.last_log_update_duration=0
         self.last_clipboard_selection_time=GetTickCount64()
@@ -2632,7 +2633,7 @@ class Main_Window(QMainWindow):
         self.output_colors=input_colorscheme["output"]
 
         self.tray_current_state="deactivated"
-        self.tray_current_text="FileBot"
+        self.tray_current_text=u"FileBot"
         self.tray_icon=QSystemTrayIcon(self)
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
@@ -2660,11 +2661,11 @@ class Main_Window(QMainWindow):
         self.options_macros={}
         self.tray_menu=QMenu(self)
         self.tray_menu.setStyleSheet("QMenu {"+window_colors+"} QMenu::item:selected {color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";}")
-        self.options_macros["restore"]=self.tray_menu.addAction("Restore")
+        self.options_macros["restore"]=self.tray_menu.addAction(u"Restore")
         self.options_macros["restore"].triggered.connect(self.traymenu_restore_onselect)
         self.options_macros["restore"].setFont(self.font_cache["general"])
         self.tray_menu.addSeparator()
-        self.options_macros["exit"]=self.tray_menu.addAction("Exit")
+        self.options_macros["exit"]=self.tray_menu.addAction(u"Exit")
         self.options_macros["exit"].triggered.connect(self.traymenu_exit_onselect)
         self.options_macros["exit"].setFont(self.font_cache["general"])
         self.tray_icon.setContextMenu(self.tray_menu)
@@ -2677,7 +2678,7 @@ class Main_Window(QMainWindow):
         self.label_botname.setStyleSheet("QGroupBox {"+window_colors+"}")
 
         self.label_botname=QLabel(self)
-        self.label_botname.setText("Bot name:")
+        self.label_botname.setText(u"Bot name:")
         self.label_botname.setGeometry(12*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botname.setFont(self.font_cache["general"])
         self.label_botname.setAlignment(Qt.AlignLeft)
@@ -2691,7 +2692,7 @@ class Main_Window(QMainWindow):
         self.label_botname_value.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_botstatus=QLabel(self)
-        self.label_botstatus.setText("Status:")
+        self.label_botstatus.setText(u"Status:")
         self.label_botstatus.setGeometry(384*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botstatus.setFont(self.font_cache["general"])
         self.label_botstatus.setAlignment(Qt.AlignLeft)
@@ -2700,12 +2701,12 @@ class Main_Window(QMainWindow):
         self.label_botstatus_value=QLabel(self)
         self.label_botstatus_value.setGeometry(422*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_botstatus_value.setFont(self.font_cache["status"])
-        self.label_botstatus_value.setText("NOT STARTED")
+        self.label_botstatus_value.setText(u"NOT STARTED")
         self.label_botstatus_value.setAlignment(Qt.AlignLeft)
         self.label_botstatus_value.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
         self.label_clock_bias=QLabel(self)
-        self.label_clock_bias.setText("Local machine clock bias(seconds):")
+        self.label_clock_bias.setText(u"Local machine clock bias(seconds):")
         self.label_clock_bias.setGeometry(625*self.UI_scale,6*self.UI_scale,300*self.UI_scale,26*self.UI_scale)
         self.label_clock_bias.setFont(self.font_cache["general"])
         self.label_clock_bias.setAlignment(Qt.AlignLeft)
@@ -2714,7 +2715,7 @@ class Main_Window(QMainWindow):
         self.label_clock_bias_value=QLabel(self)
         self.label_clock_bias_value.setGeometry(796*self.UI_scale,6*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_clock_bias_value.setFont(self.font_cache["status"])
-        self.label_clock_bias_value.setText("UNKNOWN")
+        self.label_clock_bias_value.setText(u"UNKNOWN")
         self.label_clock_bias_value.setAlignment(Qt.AlignLeft)
         self.label_clock_bias_value.setStyleSheet("QLabel {color:#"+colors_window_text+"}")
 
@@ -2740,7 +2741,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.installEventFilter(self)
 
         self.label_commands=QLabel(self)
-        self.label_commands.setText("INPUT COMMANDS:")
+        self.label_commands.setText(u"INPUT COMMANDS:")
         self.label_commands.setGeometry(410*self.UI_scale,552*self.UI_scale,120*self.UI_scale,26*self.UI_scale)
         self.label_commands.setFont(self.font_cache["general"])
         self.label_commands.setAlignment(Qt.AlignLeft)
@@ -2793,12 +2794,12 @@ class Main_Window(QMainWindow):
         while self.active_clipboard.text()!=self.clipboard_queue and (GetTickCount64()-start_time)/1000.0<UI_CLIPBOARD_COPY_TIMEOUT_SECONDS:
             self.active_clipboard.setText(self.clipboard_queue)
             QCoreApplication.processEvents()
-        self.clipboard_queue=""
+        self.clipboard_queue=u""
         self.lock_clipboard.release()
         return
 
     def queue_clipboard_insert(self,input_text):
-        if input_text=="":
+        if input_text==u"":
             return
 
         self.lock_clipboard.acquire()
@@ -2835,7 +2836,7 @@ class Main_Window(QMainWindow):
                                 self.input_commandfield.setText(self.command_history[self.command_history_index])
                                 self.input_commandfield.selectAll()
                             else:
-                                self.input_commandfield.setText("")
+                                self.input_commandfield.setText(u"")
                         return True
 
         elif widget==self.textbox_output:
@@ -2843,16 +2844,16 @@ class Main_Window(QMainWindow):
                 key_pressed=event.key()
                 if key_pressed==Qt.Key_Escape:
                     rows=self.textbox_output.selectionModel().clearSelection()
-                elif key_pressed==Qt.Key_C:
+                elif key_pressed==Qt.Key_C or key_pressed==Qt.Key_Insert:
                     if event.modifiers()&Qt.ControlModifier:
                         if (GetTickCount64()-self.last_clipboard_selection_time)/1000.0>UI_CLIPBOARD_COPY_MAX_REPEAT_INTERVAL_SECONDS:
                             self.last_clipboard_selection_time=GetTickCount64()
                             rows=self.textbox_output.selectionModel().selectedRows()
                             if len(rows)>0:
-                                clipboard_data=""
+                                clipboard_data=u""
                                 cache_model=self.textbox_output.model()
                                 for row in rows:
-                                    clipboard_data+=cache_model.itemData(row)[0]+"\n"
+                                    clipboard_data+=cache_model.itemData(row)[0]+u"\n"
                                 self.queue_clipboard_insert(clipboard_data)
                         return True
 
@@ -2896,6 +2897,7 @@ class Main_Window(QMainWindow):
             self.textbox_output_model.setData(self.textbox_output_model.index(target_row,0),entry[1],Qt.ForegroundRole)
         self.textbox_output.scrollToBottom()
         self.textbox_output.setUpdatesEnabled(True)
+
         self.last_log_update_time=GetTickCount64()
         self.last_log_update_duration=self.last_log_update_time-self.last_log_update_duration
         self.log_is_updating=False
@@ -2907,11 +2909,11 @@ class Main_Window(QMainWindow):
     def update_tray_icon(self):
         global __version__
 
-        tray_text_new="FileBot v"+str(__version__)+"\nBot name: "
-        if self.label_botname_value.text()!="<not retrieved>":
-            tray_text_new+="\""+self.label_botname_value.text()+"\"\nStatus: "
+        tray_text_new=u"FileBot v"+str(__version__)+u"\nBot name: "
+        if self.label_botname_value.text()!=u"<not retrieved>":
+            tray_text_new+=u"\""+self.label_botname_value.text()+u"\"\nStatus: "
         else:
-            tray_text_new+="<not retrieved>\n"
+            tray_text_new+=u"<not retrieved>\n"
 
         tray_candidate="default"
         if self.app_state_is_online==True:
@@ -2921,11 +2923,11 @@ class Main_Window(QMainWindow):
             tray_candidate="deactivated"
 
         if tray_candidate=="default":
-            tray_text_new+="ONLINE"
+            tray_text_new+=u"ONLINE"
         elif tray_candidate=="deactivated":
-            tray_text_new+="OFFLINE"
+            tray_text_new+=u"OFFLINE"
         elif tray_candidate=="busy":
-            tray_text_new+="ONLINE (processing messages)"
+            tray_text_new+=u"ONLINE (processing messages)"
 
         if self.tray_current_text!=tray_text_new:
             self.tray_current_text=tray_text_new
@@ -2943,8 +2945,11 @@ class Main_Window(QMainWindow):
             input_line=input_line[:-1]
         text_source=""
         if len(input_line)>=29:
-            if input_line[20]=="[" and input_line[29]=="]":
-                text_source=input_line[21:29]
+            if input_line[20]==u"[" and input_line[29]==u"]":
+                try:
+                    text_source=str(input_line[21:29])
+                except:
+                    pass
         if text_source in self.output_colors:
             text_color=self.output_colors[text_source]
         else:
@@ -2967,9 +2972,9 @@ class Main_Window(QMainWindow):
         return
 
     def input_commandfield_onsend(self):
-        clean_text=str(self.input_commandfield.text().strip())
+        clean_text=self.input_commandfield.text().strip()
         self.input_commandfield.setText(clean_text)
-        if clean_text=="":
+        if clean_text==u"":
             return
         self.send_console_command(clean_text)
         return
@@ -2978,7 +2983,7 @@ class Main_Window(QMainWindow):
         if self.console is None:
             return
         self.input_commandfield.setEnabled(False)
-        self.console.COMMAND_SEND(input_command)
+        self.console.SEND_COMMAND(input_command)
         return
 
     def set_UI_lock(self,new_state):
@@ -3002,7 +3007,11 @@ class Main_Window(QMainWindow):
         if self.is_exiting.is_set()==True:
             return
 
-        self.signal_response_calls[event["type"]](event["data"])
+        event_type=event["type"]
+        if event_type in self.signal_response_calls:
+            self.signal_response_calls[event_type](event["data"])
+        else:
+            self.log(u"ERROR: Received unsupported signal event type: \""+event_type+u"\".")
         return
 
     def signal_logger_newline(self,event_data):
@@ -3039,11 +3048,11 @@ class Main_Window(QMainWindow):
 
     def signal_set_status(self,event_data):
         self.label_botstatus_value.setText(event_data)
-        if event_data=="ONLINE":
+        if event_data==u"ONLINE":
             self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_ok+"}")
             self.app_state_is_online=True
             self.update_tray_icon()
-        elif event_data=="OFFLINE":
+        elif event_data==u"OFFLINE":
             self.label_botstatus_value.setStyleSheet("QLabel {color: #"+self.colors_status_error+"}")
             self.app_state_is_online=False
             self.update_tray_icon()
@@ -3139,7 +3148,7 @@ class Main_Window(QMainWindow):
         if self.is_exiting.is_set()==True:
             return
 
-        self.log("UI closing...")
+        self.log(u"UI closing...")
 
         self.is_exiting.set()
 
@@ -3190,28 +3199,28 @@ while Active_UI.IS_READY()==False:
 
 LOGGER.ACTIVATE()
 
-log("==================================== FileBot ====================================")
-log("Author: "+str(__author__))
-log("Version: "+str(__version__))
-log("=================================================================================")
-log("7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/\n")
-log("\n\nREQUIREMENTS:\n"+\
-    "-bot token in \"token.txt\"\n"+\
-    "-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n"+\
-    "Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+\
-    "If a user has no username, you can add them via first name and last name with a \"#\" before each. EXAMPLE:\n"+\
-    "FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+\
-    "Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n"+\
-    "Note that users without \"*\" home path will be disallowed from accessing FileBot's running folder even if it's a valid subfolder.\n\n"+\
-    "EXAMPLE ENTRIES:\n"+\
-    "JohnDoe|C:\\MySharedFiles\n"+\
-    "TrustedUser|>*\n\n"+\
-    "A maximum of "+str(MAX_BOT_USERS)+" users are supported.\n\n"+\
-    "COMMAND LINE:\n"+\
-    "/minimized: starts the application minimized to system tray\n"+\
-    "/stdout: output log to stdout in addition to window\n")
+log(u"==================================== FileBot ====================================")
+log(u"Author: "+str(__author__))
+log(u"Version: "+str(__version__))
+log(u"=================================================================================")
+log(u"7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/\n")
+log(u"\n\nREQUIREMENTS:\n"+\
+    u"-bot token in \"token.txt\"\n"+\
+    u"-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n"+\
+    u"Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+\
+    u"If a user has no username, you can add them via first name and last name with a \"#\" before each. EXAMPLE:\n"+\
+    u"FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+\
+    u"Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n"+\
+    u"Note that users without \"*\" home path will be disallowed from accessing FileBot's running folder even if it's a valid subfolder.\n\n"+\
+    u"EXAMPLE ENTRIES:\n"+\
+    u"JohnDoe|C:\\MySharedFiles\n"+\
+    u"TrustedUser|>*\n\n"+\
+    u"A maximum of "+str(MAX_BOT_USERS)+u" users are supported.\n\n"+\
+    u"COMMAND LINE:\n"+\
+    u"/minimized: starts the application minimized to system tray\n"+\
+    u"/stdout: output log to stdout in addition to window\n")
 
-log("Process ID is "+str(environment_info["process_id"])+". FileBot architecture is "+str(environment_info["architecture"])+"-bit.")
+log(u"Process ID is "+str(environment_info["process_id"])+u". FileBot architecture is "+str(environment_info["architecture"])+u"-bit.")
 
 fatal_error=False
 collect_bot_token=""
@@ -3223,13 +3232,13 @@ try:
     collect_bot_token=file_handle.read(128)
     file_handle.close()
 except:
-    log("ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
+    log(u"ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
     fatal_error=True
 
 if fatal_error==False:
     collect_bot_token=Bot_Token_From_String(collect_bot_token)
     if collect_bot_token=="":
-        log("ERROR: Make sure the token is correctly written in \"token.txt\".")
+        log(u"ERROR: Make sure the token is correctly written in \"token.txt\".")
         fatal_error=True
 
 if fatal_error==False:
@@ -3248,52 +3257,52 @@ if fatal_error==False:
                 file_handle.close()
             except:
                 pass
-        log("ERROR: Could not obtain any valid user entries from \"userlist.txt\".")
+        log(u"ERROR: Could not obtain any valid user entries from \"userlist.txt\".")
         fatal_error=True
 
 if fatal_error==False:
     for entry in collect_user_file_entries:
         new_user=User_Entry_From_String(entry)
-        if new_user["error_message"]=="":
+        if new_user["error_message"]==u"":
             collect_allowed_users+=[new_user]
             if len(collect_allowed_users)==MAX_BOT_USERS:
                 break
         else:
-            log("WARNING: "+new_user["error_message"])
+            log(u"WARNING: "+new_user["error_message"])
 
     collect_user_file_entries=[]
     if len(collect_allowed_users)>0:
-        log("Number of users to listen for: "+str(len(collect_allowed_users))+".")
+        log(u"Number of users to listen for: "+str(len(collect_allowed_users))+u".")
     else:
-        log("ERROR: There were no valid user entries to add.")
+        log(u"ERROR: There were no valid user entries to add.")
         fatal_error=True
 
 if fatal_error==False:
     try:
         Active_7ZIP_Handler=Task_Handler_7ZIP(environment_info["working_dir"],Get_B64_Resource("binaries/7zipx"+str(environment_info["architecture"])),MAX_7ZIP_TASKS_PER_USER,LOGGER)
     except:
-        log("The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
+        log(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
         fatal_error=True
 
 if fatal_error==False:
     Active_Time_Provider=Time_Provider()
     Active_Time_Provider.ADD_SUBSCRIBER(UI_SIGNAL)
 
-    log("Starting 7-ZIP Task Handler...")
+    log(u"Starting 7-ZIP Task Handler...")
     Active_7ZIP_Handler.START()
 
     initial_time_sync_failed_once=False
-    log("Performing initial time synchronization via Internet...")
+    log(u"Performing initial time synchronization via Internet...")
     sync_result={"success":False}
     while sync_result["success"]==False and Active_UI.IS_RUNNING()==True:
         sync_result=Active_Time_Provider.SYNC()
         if initial_time_sync_failed_once==False:
             if sync_result["success"]==False:
                 initial_time_sync_failed_once=True
-                log("Initial time synchronization failed. Will keep trying...")
+                log(u"Initial time synchronization failed. Will keep trying...")
 
     if sync_result["success"]==True:
-        log("Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+" second(s).")
+        log(u"Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
 
         UserHandleInstances=[]
 
@@ -3302,7 +3311,7 @@ if fatal_error==False:
             collect_allowed_usernames+=[sender["username"]]
 
         Active_BotListener=Bot_Listener(collect_bot_token,collect_allowed_usernames,Active_Time_Provider,UI_SIGNAL,LOGGER)
-        log("Starting Bot Listener...")
+        log(u"Starting Bot Listener...")
         Active_BotListener.START()
 
         while Active_BotListener.IS_READY()==False and Active_UI.IS_RUNNING()==True:
@@ -3310,7 +3319,7 @@ if fatal_error==False:
 
         if Active_UI.IS_RUNNING()==True:
 
-            log("User message handler(s) starting up...")
+            log(u"User message handler(s) starting up...")
             for sender in collect_allowed_users:
                 UserHandleInstances+=[User_Message_Handler(collect_bot_token,sender["home"],sender["username"],sender["allow_write"],[environment_info["working_dir"]],Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
 
@@ -3318,35 +3327,35 @@ if fatal_error==False:
             request_sync_time.clear()
 
             Active_User_Console=User_Console(UserHandleInstances,UI_SIGNAL,Active_7ZIP_Handler,request_sync_time,LOGGER)
-            log("Starting User Console...")
+            log(u"Starting User Console...")
             Active_User_Console.START()
 
-            log("Startup complete. Waiting for UI thread to finish...")
+            log(u"Startup complete. Waiting for UI thread to finish...")
             Main_Wait_Loop(Active_Time_Provider,Active_UI,request_sync_time)
-            log("Left UI thread waiting loop.")
+            log(u"Left UI thread waiting loop.")
 
             Active_Time_Provider.REMOVE_SUBSCRIBER(UI_SIGNAL)
 
-            log("Requesting stop to User Console...")
+            log(u"Requesting stop to User Console...")
             Active_User_Console.REQUEST_STOP()
 
             Active_User_Console.CONCLUDE()
             del Active_User_Console
-            log("Confirm User Console exit.")
+            log(u"Confirm User Console exit.")
 
-        log("Requesting stop to 7-ZIP Task Handler...")
+        log(u"Requesting stop to 7-ZIP Task Handler...")
         Active_7ZIP_Handler.REQUEST_STOP()
 
-        log("Requesting stop to Bot Listener...")
+        log(u"Requesting stop to Bot Listener...")
         Active_BotListener.REQUEST_STOP()
 
         Active_BotListener.CONCLUDE()
         del Active_BotListener
-        log("Confirm Bot Listener exit.")
+        log(u"Confirm Bot Listener exit.")
 
         Active_7ZIP_Handler.CONCLUDE()
         del Active_7ZIP_Handler
-        log("Confirm 7-ZIP Task Handler exit.")
+        log(u"Confirm 7-ZIP Task Handler exit.")
 
         while len(UserHandleInstances)>0:
             del UserHandleInstances[0]
@@ -3358,8 +3367,8 @@ else:
 LOGGER.DETACH_SIGNALLER()
 Active_UI.CONCLUDE()
 del Active_UI
-log("Confirm UI exit.")
+log(u"Confirm UI exit.")
 
-log("Main thread exit; program has finished.")
+log(u"Main thread exit; program has finished.")
 LOGGER.DEACTIVATE()
 Flush_Std_Buffers()
