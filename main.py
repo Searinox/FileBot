@@ -1,4 +1,4 @@
-__version__="1.921"
+__version__="1.922"
 __author__=u"Searinox Navras"
 
 
@@ -89,7 +89,7 @@ COLOR_SCHEME={"window_text":"000000",
               "scrollarea_background":"E8E8BB",
               "status_username":"000090",
               "status_ok":"009000",
-              "status_warn":"909000",
+              "status_warn":"908F00",
               "status_error":"900000",
               "output_border":"282828",
               "output":{"<DEFAULT>":"FFFFFF",
@@ -233,40 +233,6 @@ def Make_TLS_Connection_Pool():
     ssl_cert_context.options|=ssl.OP_NO_TLSv1_1
     return urllib3.PoolManager(cert_reqs="CERT_REQUIRED",ssl_context=ssl_cert_context)
 
-def Main_Wait_Loop(input_timeobject,input_waitobject,input_timesync_request_event):
-    global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
-    global MAINTHREAD_HEARTBEAT_SECONDS
-    global SERVER_TIME_RESYNC_INTERVAL_SECONDS
-
-    last_process_priority_check=GetTickCount64()-MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000
-    last_server_time_check=datetime.datetime.utcnow()
-
-    while input_waitobject.IS_RUNNING()==True:
-        time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-
-        Flush_Std_Buffers()
-
-        if GetTickCount64()-last_process_priority_check>=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000:
-            try:
-                if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
-                    win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
-                    log(u"Idle process priority set.")
-            except:
-                log(u"Error managing process priority.")
-            last_process_priority_check=GetTickCount64()
-
-        if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
-            log(u"Performing time synchronization via Internet...")
-            sync_result=input_timeobject.SYNC()
-            if sync_result["success"]==True:
-                log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
-            else:
-                log(u"Time synchronization failed.")
-            input_timesync_request_event.clear()
-            last_server_time_check=datetime.datetime.utcnow()
-
-    return
-
 def terminate_with_backslash(input_string):
     if input_string.endswith(u"\\")==False:
         return input_string+u"\\"
@@ -367,6 +333,41 @@ def User_Entry_From_String(input_string):
 
     return retval
 
+def Main_Wait_Loop(input_timesync_object,input_UI_object,input_timesync_request_event):
+    global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
+    global MAINTHREAD_HEARTBEAT_SECONDS
+    global SERVER_TIME_RESYNC_INTERVAL_SECONDS
+
+    priority_check_interval_milliseconds=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000
+    last_process_priority_check=GetTickCount64()-priority_check_interval_milliseconds
+    last_server_time_check=datetime.datetime.utcnow()
+
+    while input_UI_object.IS_RUNNING()==True:
+        time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
+
+        Flush_Std_Buffers()
+
+        if GetTickCount64()-last_process_priority_check>=priority_check_interval_milliseconds:
+            try:
+                if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
+                    win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
+                    log(u"Idle process priority set.")
+            except:
+                log(u"Error managing process priority.")
+            last_process_priority_check=GetTickCount64()
+
+        if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
+            log(u"Performing time synchronization via Internet...")
+            sync_result=input_timesync_object.SYNC()
+            if sync_result["success"]==True:
+                log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
+            else:
+                log(u"Time synchronization failed.")
+            input_timesync_request_event.clear()
+            last_server_time_check=datetime.datetime.utcnow()
+
+    return
+
 
 """
 OBJS
@@ -402,7 +403,7 @@ class Logger(object):
         global PATH_WINDOWS_SYSTEM32
 
         self.logging_path=input_log_path
-        self.log_handle=None
+        self.log_file_handle=None
         self.log_lock=threading.Lock()
         self.output_stdout=threading.Event()
         self.output_stdout.clear()
@@ -415,13 +416,17 @@ class Logger(object):
 
     def ACTIVATE(self):
         try:
-            self.log_handle=open(self.logging_path,"a")
+            self.log_file_handle=open(self.logging_path,"a")
         except:
-            pass
+            try:
+                self.log_file_handle.close()
+            except:
+                pass
+            self.log_file_handle=None
 
         self.is_active.set()
 
-        if self.log_handle is None:
+        if self.log_file_handle is None:
             self.LOG(u"WARNING: Default target log file could not be written to. Logging will not save to file.")
         return
 
@@ -433,12 +438,18 @@ class Logger(object):
         return
 
     def DEACTIVATE(self):
+        self.log_lock.acquire()
         self.is_active.clear()
         try:
-            if self.log_handle is not None:
-                self.log_handle.close()
+            if self.log_file_handle is not None:
+                try:
+                    self.log_file_handle.close()
+                except:
+                    pass
+                self.log_file_handle=None
         except:
             pass
+        self.log_lock.release()
         return
 
     def ATTACH_SIGNALLER(self,input_signaller):
@@ -454,8 +465,6 @@ class Logger(object):
         return
 
     def LOG(self,source,input_data=u""):
-        global UI_SIGNAL
-
         if self.is_active.is_set()==False:
             return
 
@@ -475,10 +484,14 @@ class Logger(object):
 
         self.log_lock.acquire()
 
-        if self.log_handle is not None:
+        if self.is_active.is_set()==False:
+            self.log_lock.release()
+            return
+
+        if self.log_file_handle is not None:
             try:
-                self.log_handle.write(msg)
-                self.log_handle.flush()
+                self.log_file_handle.write(msg)
+                self.log_file_handle.flush()
             except:
                 pass
 
@@ -490,7 +503,7 @@ class Logger(object):
 
         if self.active_signaller is not None:
             try:
-                self.active_signaller.send("logger_newline",msg)
+                self.active_signaller.send("logger_new_entry",msg)
             except:
                 pass
 
@@ -585,6 +598,8 @@ class Time_Provider(object):
 
 class Task_Handler_7ZIP(object):
     def __init__(self,input_path_7zip,input_7zip_binary_base64,input_max_per_user,input_logger=None):
+        global TASKS_7ZIP_DELETE_TIMEOUT_SECONDS
+
         self.instances_7zip=[]
         self.lock_instances_7zip=threading.Lock()
         self.lock_list_end_tasks=threading.Lock()
@@ -599,7 +614,8 @@ class Task_Handler_7ZIP(object):
         self.max_tasks_per_user=input_max_per_user
         self.list_end_tasks_PIDs=[]
         self.list_end_tasks_users=[]
-
+        self.task_delete_timeout_milliseconds=TASKS_7ZIP_DELETE_TIMEOUT_SECONDS*1000
+        
         input_path_7zip=input_path_7zip
         input_path_7zip=input_path_7zip.replace(u"/",u"\\")
         input_path_7zip=terminate_with_backslash(input_path_7zip)
@@ -615,9 +631,12 @@ class Task_Handler_7ZIP(object):
             for close_binary in [write_7z_binary,self.binary_7z_read]:
                 if close_binary is not None:
                     try:
-                        write_7z_binary.close()
+                        close_binary.close()
                     except:
-                        write_7z_binary=None
+                        pass
+
+            write_7z_binary=None
+            self.binary_7zip_read=None
             raise Exception(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
 
         return
@@ -642,9 +661,9 @@ class Task_Handler_7ZIP(object):
             time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
         self.working_thread.join()
         try:
-            Active_7ZIP_Handler.binary_7zip_read.close()
+            self.binary_7zip_read.close()
         except:
-            pass
+            self.binary_7zip_read=None
         return
     
     def IS_RUNNING(self):
@@ -729,13 +748,14 @@ class Task_Handler_7ZIP(object):
 
         get_end_task_list_PIDs=[]
         get_end_task_list_users=[]
+        update_interval_milliseconds=TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000
 
         self.log(u"7-ZIP Task Handler started.")
-        last_update=GetTickCount64()-TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000
+        last_update=GetTickCount64()-update_interval_milliseconds
         while self.request_exit.is_set()==False:
             time.sleep(TASKS_7ZIP_THREAD_HEARTBEAT_SECONDS)
 
-            if GetTickCount64()-last_update>=TASKS_7ZIP_UPDATE_INTERVAL_SECONDS*1000:
+            if GetTickCount64()-last_update>=update_interval_milliseconds:
                 self.update_7zip_tasks()
                 last_update=GetTickCount64()
 
@@ -781,7 +801,6 @@ class Task_Handler_7ZIP(object):
     def end_7zip_tasks(self,list_users,list_PIDs=[]):
         global PATH_WINDOWS_SYSTEM32
         global PENDING_ACTIVITY_HEARTBEAT_SECONDS
-        global TASKS_7ZIP_DELETE_TIMEOUT_SECONDS
 
         taskkill_list=[]
         terminate_all=False
@@ -823,7 +842,7 @@ class Task_Handler_7ZIP(object):
         for taskkill in taskkill_list:
             delete_attempt_made=False
             start_time=GetTickCount64()
-            while (os.path.isfile(taskkill["file"])==True and GetTickCount64()-start_time<TASKS_7ZIP_DELETE_TIMEOUT_SECONDS*1000) or delete_attempt_made==False:
+            while (os.path.isfile(taskkill["file"])==True and GetTickCount64()-start_time<self.task_delete_timeout_milliseconds) or delete_attempt_made==False:
                 try:
                     delete_attempt_made=True
                     os.remove(taskkill["file"])
@@ -840,7 +859,7 @@ class Telegram_Message_Rate_Limiter(object):
     def __init__(self,input_max_messages,input_time_interval_seconds):
         self.timer_list=[]
         self.max_messages=input_max_messages
-        self.time_interval_ms=input_time_interval_seconds*1000
+        self.time_interval_milliseconds=input_time_interval_seconds*1000
         self.request_exit=threading.Event()
         self.request_exit.clear()
         self.lock_timerlist=threading.Lock()
@@ -848,7 +867,7 @@ class Telegram_Message_Rate_Limiter(object):
 
     def timer_list_size_and_cleanup(self):
         for i in reversed(range(len(self.timer_list))):
-            if self.timer_list[i]<GetTickCount64()-self.time_interval_ms:
+            if self.timer_list[i]<GetTickCount64()-self.time_interval_milliseconds:
                 del self.timer_list[i]
             else:
                 break
@@ -2420,7 +2439,7 @@ class User_Console(object):
 
             if last_busy_state!=self.any_user_handlers_busy():
                 last_busy_state=not last_busy_state
-                UI_SIGNAL.send("report_processing_messages_state",last_busy_state)
+                self.active_UI_signaller.send("report_processing_messages_state",last_busy_state)
 
             command=self.retrieve_command()
 
@@ -2434,7 +2453,7 @@ class User_Console(object):
                     result=self.process_console_command(command)
 
                 if result==True:
-                    UI_SIGNAL.send("commandfield_accepted",{})
+                    self.active_UI_signaller.send("commandfield_accepted",{})
 
             if self.request_exit.is_set()==True:
                 self.is_exiting.set()
@@ -2476,7 +2495,7 @@ class UI(object):
         self.has_quit=threading.Event()
         self.has_quit.clear()
         self.UI_signaller=input_signaller
-        self.working_thread=threading.Thread(target=self.UI_thread_launcher)
+        self.working_thread=threading.Thread(target=self.UI_runner)
         self.working_thread.daemon=True
         self.working_thread.start()
         return
@@ -2493,10 +2512,10 @@ class UI(object):
             if msg_string.startswith(entry):
                 return
 
-        sys.stderr.write(msg_string+"\n")
+        sys.stderr.write(msg_string+u"\n")
         return
 
-    def UI_thread_launcher(self):
+    def UI_runner(self):
         self.UI_app=QApplication([])
         self.UI_app.setStyle("fusion")
         self.UI_window=Main_Window(self.colorscheme,self.fonts,self.UI_scaling_modifier,self.icons_b64,self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
@@ -2543,6 +2562,7 @@ class Main_Window(QMainWindow):
     def __init__(self,input_colorscheme,input_fonts,input_UI_scaling_modifier,input_icons_b64,input_is_ready,input_is_exiting,input_has_quit,input_signaller,start_minimized,input_logger=None):
         global __author__
         global __version__
+        global UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS
 
         super(Main_Window,self).__init__(None)
 
@@ -2573,7 +2593,7 @@ class Main_Window(QMainWindow):
         self.setWindowTitle(u"FileBot   v"+str(__version__)+u"   by "+str(__author__))
         self.setWindowFlags(self.windowFlags()|Qt.MSWindowsFixedSizeDialogHint)
 
-        self.signal_response_calls={"logger_newline":self.signal_logger_newline,
+        self.signal_response_calls={"logger_new_entry":self.signal_logger_new_entry,
                                     "attach_console":self.signal_attach_console,
                                     "detach_console":self.signal_detach_console,
                                     "close":self.signal_close,
@@ -2592,6 +2612,8 @@ class Main_Window(QMainWindow):
         self.UI_signaller=input_signaller
         self.UI_signaller.active_signal.connect(self.signal_response_handler)
 
+        self.minimum_log_update_interval_milliseconds=UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS*1000.0
+        self.close_standby=False
         self.is_minimized=False
         self.disable_hide=False
         self.command_history=[]
@@ -2864,12 +2886,10 @@ class Main_Window(QMainWindow):
         return QWidget.eventFilter(self,widget,event)
 
     def queue_log_update(self):
-        global UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS
-
         if self.log_is_updating==False:
             self.log_is_updating=True
             extra_timer=max(self.last_log_update_duration-GetTickCount64()+self.last_log_update_time,0)*1.1
-            self.timer_update_output.start(max(0,self.last_log_update_time+UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS*1000.0+extra_timer-GetTickCount64()))
+            self.timer_update_output.start(max(0,self.last_log_update_time+self.minimum_log_update_interval_milliseconds+extra_timer-GetTickCount64()))
         return
 
     def update_output(self):
@@ -2954,15 +2974,18 @@ class Main_Window(QMainWindow):
                     text_source=str(input_line[21:29])
                 except:
                     pass
+
         if text_source in self.output_colors:
             text_color=self.output_colors[text_source]
         else:
             text_color=self.output_colors["<DEFAULT>"]
+
         self.lock_log_queue.acquire()
         self.output_queue+=[(input_line,text_color)]
         if len(self.output_queue)>UI_OUTPUT_ENTRIES_MAX:
             del self.output_queue[0]
         self.lock_log_queue.release()
+
         return
 
     def add_output_line(self,input_line):
@@ -2972,7 +2995,6 @@ class Main_Window(QMainWindow):
             self.queue_log_update()
         else:
             self.update_log_on_restore=True
-
         return
 
     def input_commandfield_onsend(self):
@@ -2997,7 +3019,7 @@ class Main_Window(QMainWindow):
             self.lock_output_update.acquire()
             self.textbox_output.setDisabled(self.UI_lockstate)
             self.lock_output_update.release()
-            self.input_commandfield.setDisabled(do_console_disable)
+            self.input_commandfield.setDisabled(do_console_disable or self.close_standby)
             if do_console_disable==False:
                 self.input_commandfield.setFocus()
         return
@@ -3018,13 +3040,13 @@ class Main_Window(QMainWindow):
             self.log(u"ERROR: Received unsupported signal event type: \""+event_type+u"\".")
         return
 
-    def signal_logger_newline(self,event_data):
+    def signal_logger_new_entry(self,event_data):
         self.add_output_line(event_data)
         return
 
     def signal_attach_console(self,event_data):
         self.console=event_data
-        self.input_commandfield.setEnabled(not self.UI_lockstate)
+        self.input_commandfield.setEnabled(not self.UI_lockstate and not self.close_standby)
         self.update_UI_usability()
         return
 
@@ -3077,7 +3099,7 @@ class Main_Window(QMainWindow):
     def signal_commandfield_failed(self,event_data):
         if self.console is not None:
             do_enable=not self.UI_lockstate
-            self.input_commandfield.setEnabled(do_enable)
+            self.input_commandfield.setEnabled(do_enable and not self.close_standby)
             if do_enable==True:
                 self.input_commandfield.selectAll()
                 self.input_commandfield.setFocus()
@@ -3090,11 +3112,12 @@ class Main_Window(QMainWindow):
         if len(self.command_history)>UI_COMMAND_HISTORY_MAX:
             del self.command_history[0]
         self.command_history_index=len(self.command_history)
-        self.input_commandfield.setText("")
+        self.input_commandfield.setText(u"")
         self.input_commandfield.setFocus()
         return
 
     def signal_close_standby(self,event_data):
+        self.close_standby=True
         self.textbox_output.setEnabled(True)
         self.input_commandfield.setEnabled(False)
         return
@@ -3171,30 +3194,29 @@ MAIN
 
 environment_info=Get_Runtime_Environment()
 PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
-
 TLS_ALLOWED_ALGORITHMS=Get_TLS_Allowed_Algorithms()
+CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 
-start_minimized=False
-stdout_output=False
+argument_start_minimized=False
+argument_stdout_output=False
+
 for argument in environment_info["arguments"]:
     argument=argument.lower().strip()
 
     if argument==u"/minimized":
-        start_minimized=True
+        argument_start_minimized=True
     elif argument==u"/stdout":
-        stdout_output=True
+        argument_stdout_output=True
 
 if environment_info["running_from_source"]==True:
-    stdout_output=True
-
-CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
+    argument_stdout_output=True
 
 LOGGER=Logger(os.path.join(environment_info["working_dir"],u"log.txt"))
-LOGGER.SET_STDOUT(stdout_output)
+LOGGER.SET_STDOUT(argument_stdout_output)
 
-UI_SIGNAL=UI_Signaller()
-LOGGER.ATTACH_SIGNALLER(UI_SIGNAL)
-Active_UI=UI(COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,APP_ICONS_B64,UI_SIGNAL,start_minimized,LOGGER)
+UI_Signal=UI_Signaller()
+LOGGER.ATTACH_SIGNALLER(UI_Signal)
+Active_UI=UI(COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,APP_ICONS_B64,UI_Signal,argument_start_minimized,LOGGER)
 del APP_ICONS_B64
 APP_ICONS_B64=None
 
@@ -3291,7 +3313,7 @@ if fatal_error==False:
 
 if fatal_error==False:
     Active_Time_Provider=Time_Provider()
-    Active_Time_Provider.ADD_SUBSCRIBER(UI_SIGNAL)
+    Active_Time_Provider.ADD_SUBSCRIBER(UI_Signal)
 
     log(u"Starting 7-ZIP Task Handler...")
     Active_7ZIP_Handler.START()
@@ -3315,7 +3337,7 @@ if fatal_error==False:
         for sender in collect_allowed_users:
             collect_allowed_usernames+=[sender["username"]]
 
-        Active_BotListener=Bot_Listener(collect_bot_token,collect_allowed_usernames,Active_Time_Provider,UI_SIGNAL,LOGGER)
+        Active_BotListener=Bot_Listener(collect_bot_token,collect_allowed_usernames,Active_Time_Provider,UI_Signal,LOGGER)
         log(u"Starting Bot Listener...")
         Active_BotListener.START()
 
@@ -3331,7 +3353,7 @@ if fatal_error==False:
             request_sync_time=threading.Event()
             request_sync_time.clear()
 
-            Active_User_Console=User_Console(UserHandleInstances,UI_SIGNAL,Active_7ZIP_Handler,request_sync_time,LOGGER)
+            Active_User_Console=User_Console(UserHandleInstances,UI_Signal,Active_7ZIP_Handler,request_sync_time,LOGGER)
             log(u"Starting User Console...")
             Active_User_Console.START()
 
@@ -3339,7 +3361,7 @@ if fatal_error==False:
             Main_Wait_Loop(Active_Time_Provider,Active_UI,request_sync_time)
             log(u"Left UI thread waiting loop.")
 
-            Active_Time_Provider.REMOVE_SUBSCRIBER(UI_SIGNAL)
+            Active_Time_Provider.REMOVE_SUBSCRIBER(UI_Signal)
 
             log(u"Requesting stop to User Console...")
             Active_User_Console.REQUEST_STOP()
@@ -3367,7 +3389,8 @@ if fatal_error==False:
 
 else:
 
-    UI_SIGNAL.send("close_standby")
+    log(u"The program can now be closed.")
+    UI_Signal.send("close_standby")
 
 LOGGER.DETACH_SIGNALLER()
 Active_UI.CONCLUDE()
@@ -3376,4 +3399,6 @@ log(u"Confirm UI exit.")
 
 log(u"Main thread exit; program has finished.")
 LOGGER.DEACTIVATE()
+del LOGGER
+
 Flush_Std_Buffers()
