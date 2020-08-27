@@ -1,4 +1,4 @@
-__version__="1.922"
+__version__="1.923"
 __author__=u"Searinox Navras"
 
 
@@ -503,7 +503,7 @@ class Logger(object):
 
         if self.active_signaller is not None:
             try:
-                self.active_signaller.send("logger_new_entry",msg)
+                self.active_signaller.SEND_EVENT("logger_new_entry",msg)
             except:
                 pass
 
@@ -519,8 +519,9 @@ class Time_Provider(object):
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
-        self.time_delta=0
         self.lock_subscribers=threading.Lock()
+        self.lock_sync=threading.Lock()
+        self.time_delta=0
         self.signal_subscribers=[]
         return
 
@@ -540,23 +541,28 @@ class Time_Provider(object):
         self.lock_subscribers.release()
         return
 
-    def GET_SERVER_TIME(self):
+    def CURRENT_SERVER_TIME(self):
         self.lock_time_delta.acquire()
         get_delta=self.time_delta
         self.lock_time_delta.release()
         return round(OS_Uptime_Seconds()+get_delta,3)
 
-    def SYNC(self,input_signaller=None):
-        if self.update_server_time()==True:
-            get_time_diff=self.get_local_machine_time_delta_str()
+    def SYNC(self):
+        time_difference=0
+
+        self.lock_sync.acquire()
+
+        success=self.update_server_time_from_internet()
+        if success==True:
+            time_difference=self.current_local_machine_time_delta_str()
 
             self.lock_subscribers.acquire()
             for subscriber in self.signal_subscribers:
-                subscriber.send("report_timesync_clock_bias",get_time_diff)
+                subscriber.SEND_EVENT("report_timesync_clock_bias",time_difference)
             self.lock_subscribers.release()
-        else:
-            return {"success":False}
-        return {"success":True,"time_difference":get_time_diff}
+
+        self.lock_sync.release()
+        return {"success":success,"time_difference":time_difference}
 
     def retrieve_current_UTC_internet_time(self):
         response=self.request_pool.request(method="GET",url="https://worldtimeapi.org/api/timezone/Etc/UTC.txt",preload_content=True,chunked=False,timeout=self.request_timeout)
@@ -571,7 +577,7 @@ class Time_Provider(object):
         timestr=timestr[quot1:quot2-3]
         return (datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")-self.origin_time).total_seconds()
 
-    def update_server_time(self):
+    def update_server_time_from_internet(self):
         update_success=False
 
         try:
@@ -587,8 +593,8 @@ class Time_Provider(object):
 
         return update_success
 
-    def get_local_machine_time_delta_str(self):
-        time_difference=round(float((datetime.datetime.utcnow()-self.origin_time).total_seconds())-self.GET_SERVER_TIME(),3)
+    def current_local_machine_time_delta_str(self):
+        time_difference=round(float((datetime.datetime.utcnow()-self.origin_time).total_seconds())-self.CURRENT_SERVER_TIME(),3)
         if time_difference>0:
             retval="+"+str(time_difference)
         else:
@@ -1155,7 +1161,7 @@ class Bot_Listener(object):
         if self.request_exit.is_set()==False:
             self.catch_up_IDs()
             self.log(u"Bot Listener for \""+self.name+u"\" is now active.")
-            self.active_UI_signaller.send("set_bot_name",self.name)
+            self.active_UI_signaller.SEND_EVENT("set_bot_name",self.name)
             self.is_ready.set()
 
         while self.request_exit.is_set()==False:
@@ -1172,10 +1178,10 @@ class Bot_Listener(object):
                 last_check_status=check_status
                 if check_status==True:
                     self.log(u"Message retrieval is now online.")
-                    self.active_UI_signaller.send("set_status",u"ONLINE")
+                    self.active_UI_signaller.SEND_EVENT("set_status",u"ONLINE")
                 else:
                     self.log(u"Stopped being able to retrieve messages.")
-                    self.active_UI_signaller.send("set_status",u"OFFLINE")
+                    self.active_UI_signaller.SEND_EVENT("set_status",u"OFFLINE")
 
             self.group_messages(response)
 
@@ -1203,7 +1209,7 @@ class Bot_Listener(object):
         if len(responses)>0:
             self.last_ID_checked=responses[-1][u"update_id"]
         responses=[]
-        self.start_time=self.active_time_provider.GET_SERVER_TIME()
+        self.start_time=self.active_time_provider.CURRENT_SERVER_TIME()
         return
 
     def group_messages(self,input_msglist):
@@ -1226,7 +1232,7 @@ class Bot_Listener(object):
                 except:
                     msg_send_time=0
                 if msg_send_time>=self.start_time:
-                    if self.active_time_provider.GET_SERVER_TIME()-msg_send_time<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
+                    if self.active_time_provider.CURRENT_SERVER_TIME()-msg_send_time<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                         if u"username" in input_msglist[i][u"message"][u"from"]:
                             msg_user=input_msglist[i][u"message"][u"from"][u"username"]
                         else:
@@ -1250,7 +1256,7 @@ class Bot_Listener(object):
             if len(collect_new_messages[message])>0:
                 self.user_messages[message]+=collect_new_messages[message]
             for i in reversed(range(len(self.user_messages[message]))):
-                if self.active_time_provider.GET_SERVER_TIME()-self.user_messages[message][i][u"date"]>BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
+                if self.active_time_provider.CURRENT_SERVER_TIME()-self.user_messages[message][i][u"date"]>BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                     del self.user_messages[message][i]
             self.messagelist_lock[message].release()
         return
@@ -1515,7 +1521,7 @@ class User_Message_Handler(object):
         for m in input_msglist:
             if self.request_exit.is_set()==True:
                 break
-            if self.active_time_provider.GET_SERVER_TIME()-m[u"date"]<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
+            if self.active_time_provider.CURRENT_SERVER_TIME()-m[u"date"]<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
                 if u"text" in m:
                     self.process_bot_command(m[u"from"][u"id"],m[u"chat"][u"id"],m[u"text"])
                 else:
@@ -2426,7 +2432,7 @@ class User_Console(object):
             user_handler_instance.LISTEN(True)
 
         self.log(u"User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(UI_COMMAND_HISTORY_MAX)+u" history).")
-        self.active_UI_signaller.send("attach_console",self)
+        self.active_UI_signaller.SEND_EVENT("attach_console",self)
 
         if self.user_handlers_running()==0:
             self.is_exiting.set()
@@ -2439,7 +2445,7 @@ class User_Console(object):
 
             if last_busy_state!=self.any_user_handlers_busy():
                 last_busy_state=not last_busy_state
-                self.active_UI_signaller.send("report_processing_messages_state",last_busy_state)
+                self.active_UI_signaller.SEND_EVENT("report_processing_messages_state",last_busy_state)
 
             command=self.retrieve_command()
 
@@ -2453,14 +2459,14 @@ class User_Console(object):
                     result=self.process_console_command(command)
 
                 if result==True:
-                    self.active_UI_signaller.send("commandfield_accepted",{})
+                    self.active_UI_signaller.SEND_EVENT("commandfield_accepted")
 
             if self.request_exit.is_set()==True:
                 self.is_exiting.set()
 
             if self.is_exiting.is_set()==False:
                 if command!=u"":
-                    self.active_UI_signaller.send("commandfield_failed",{})
+                    self.active_UI_signaller.SEND_EVENT("commandfield_failed")
             else:
                 continue_processing=False
 
@@ -2473,8 +2479,8 @@ class User_Console(object):
                 self.log(u"Confirmed User Message Handler(s) exit.")
 
         self.log(u"User Console exiting...")
-        self.active_UI_signaller.send("detach_console",{})
-        self.active_UI_signaller.send("close",{})
+        self.active_UI_signaller.SEND_EVENT("detach_console")
+        self.active_UI_signaller.SEND_EVENT("close")
         self.has_quit.set()
         return
 
@@ -2495,7 +2501,7 @@ class UI(object):
         self.has_quit=threading.Event()
         self.has_quit.clear()
         self.UI_signaller=input_signaller
-        self.working_thread=threading.Thread(target=self.UI_runner)
+        self.working_thread=threading.Thread(target=self.run_UI)
         self.working_thread.daemon=True
         self.working_thread.start()
         return
@@ -2515,7 +2521,7 @@ class UI(object):
         sys.stderr.write(msg_string+u"\n")
         return
 
-    def UI_runner(self):
+    def run_UI(self):
         self.UI_app=QApplication([])
         self.UI_app.setStyle("fusion")
         self.UI_window=Main_Window(self.colorscheme,self.fonts,self.UI_scaling_modifier,self.icons_b64,self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
@@ -2547,10 +2553,13 @@ class UI_Signaller(QObject):
         super(UI_Signaller,self).__init__(None)
         return
 
-    def send(self,input_type,input_data={}):
+    def SEND_EVENT(self,input_type,input_data={}):
         output_signal_info={"type":input_type,"data":input_data}
-        self.active_signal.emit(output_signal_info)
-        return
+        try:
+            self.active_signal.emit(output_signal_info)
+            return True
+        except:
+            return False
 
 
 """
@@ -3390,7 +3399,7 @@ if fatal_error==False:
 else:
 
     log(u"The program can now be closed.")
-    UI_Signal.send("close_standby")
+    UI_Signal.SEND_EVENT("close_standby")
 
 LOGGER.DETACH_SIGNALLER()
 Active_UI.CONCLUDE()
