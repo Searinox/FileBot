@@ -56,7 +56,8 @@ UI_OUTPUT_ENTRIES_MAX=5000
 MAINTHREAD_HEARTBEAT_SECONDS=0.1
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.05
 MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
-COMMAND_CHECK_INTERVAL_SECONDS=0.18
+COMMAND_CHECK_INTERVAL_ACTIVE_SECONDS=0.18
+COMMAND_CHECK_INTERVAL_MINIMIZED_SECONDS=0.4
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
@@ -2230,6 +2231,8 @@ class User_Console(object):
         self.has_quit.clear()
         self.request_exit=threading.Event()
         self.request_exit.clear()
+        self.minimized_state=threading.Event()
+        self.minimized_state.set()
         self.lock_command=threading.Lock()
         self.request_time_sync=input_time_sync
         self.active_7zip_task_handler=input_7zip_taskhandler
@@ -2275,6 +2278,13 @@ class User_Console(object):
             self.lock_command.acquire()
             self.pending_command=input_command
             self.lock_command.release()
+        return
+
+    def NOTIFY_MINIMIZED_STATE(self,input_state):
+        if input_state:
+            self.minimized_state.set()
+        else:
+            self.minimized_state.clear()
         return
 
     def user_handlers_running(self):
@@ -2462,7 +2472,8 @@ class User_Console(object):
         return retval
 
     def work_loop(self):
-        global COMMAND_CHECK_INTERVAL_SECONDS
+        global COMMAND_CHECK_INTERVAL_ACTIVE_SECONDS
+        global COMMAND_CHECK_INTERVAL_MINIMIZED_SECONDS
         global UI_COMMAND_HISTORY_MAX
 
         self.log(u"Starting User Message Handler(s)...")
@@ -2481,7 +2492,10 @@ class User_Console(object):
         last_busy_state=False
 
         while continue_processing==True:
-            time.sleep(COMMAND_CHECK_INTERVAL_SECONDS)
+            if self.minimized_state.is_set()==False:
+                time.sleep(COMMAND_CHECK_INTERVAL_ACTIVE_SECONDS)
+            else:
+                time.sleep(COMMAND_CHECK_INTERVAL_MINIMIZED_SECONDS)
 
             if last_busy_state!=self.any_user_handlers_busy():
                 last_busy_state=not last_busy_state
@@ -2853,7 +2867,7 @@ class Main_Window(QMainWindow):
 
     def minimize_window(self):
         self.options_macros["restore"].setVisible(True)
-        self.is_minimized=True
+        self.update_minimized_state(True)
         self.setWindowState(Qt.WindowMinimized)
         self.hide()
         return
@@ -3061,6 +3075,12 @@ class Main_Window(QMainWindow):
         self.console.SEND_COMMAND(input_command)
         return
 
+    def notify_console_minimized(self,input_state):
+        if self.console is None:
+            return
+        self.console.NOTIFY_MINIMIZED_STATE(input_state)
+        return
+
     def set_UI_lock(self,new_state):
         if new_state!=self.UI_lockstate:
             self.UI_lockstate=new_state
@@ -3095,14 +3115,17 @@ class Main_Window(QMainWindow):
 
     def signal_attach_console(self,event_data):
         self.console=event_data
+        self.notify_console_minimized(self.is_minimized)
         self.input_commandfield.setEnabled(not self.UI_lockstate and not self.close_standby)
         self.update_UI_usability()
         return
 
     def signal_detach_console(self,event_data):
-        self.console=None
-        self.input_commandfield.setEnabled(False)
-        self.update_UI_usability()
+        if self.console is not None:
+            self.notify_console_minimized(False)
+            self.console=None
+            self.input_commandfield.setEnabled(False)
+            self.update_UI_usability()
         return
 
     def signal_close(self,event_data):
@@ -3177,16 +3200,21 @@ class Main_Window(QMainWindow):
             event.setAccepted(False)
         return
 
+    def update_minimized_state(self,new_state):
+        self.is_minimized=new_state
+        self.notify_console_minimized(new_state)
+        return
+
     def changeEvent(self,event):
         if event.type()==QEvent.WindowStateChange:
             getwinstate=self.windowState()
             if getwinstate==Qt.WindowMinimized:
                 self.options_macros["restore"].setVisible(True)
-                self.is_minimized=True
+                self.update_minimized_state(True)
                 self.hide()
             elif getwinstate==Qt.WindowNoState:
                 self.options_macros["restore"].setVisible(False)
-                self.is_minimized=False
+                self.update_minimized_state(False)
                 self.show()
                 self.activateWindow()
                 if self.update_log_on_restore==True:
