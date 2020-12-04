@@ -1,4 +1,4 @@
-__version__="1.93"
+__version__="1.931"
 __author__=u"Searinox Navras"
 
 
@@ -53,10 +53,10 @@ MAX_7ZIP_TASKS_PER_USER=3
 UI_COMMAND_HISTORY_MAX=50
 UI_OUTPUT_ENTRIES_MAX=5000
 
-MAINTHREAD_HEARTBEAT_SECONDS=0.085
+MAINTHREAD_HEARTBEAT_SECONDS=0.1
 PENDING_ACTIVITY_HEARTBEAT_SECONDS=0.05
 MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS=60
-COMMAND_CHECK_INTERVAL_SECONDS=0.2
+COMMAND_CHECK_INTERVAL_SECONDS=0.18
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
@@ -927,7 +927,7 @@ class Telegram_Bot(object):
             if input_method=="POST":
                 self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
         if self.is_stopped.is_set()==True:
-            return None
+            return {"ok":False,"result":None}
 
         response=None
         try:
@@ -942,10 +942,10 @@ class Telegram_Bot(object):
                     return {"ok":response["ok"],"result":response["description"]}
                 elif "result" in response:
                     return {"ok":response["ok"],"result":response["result"]}
-        else:
-            return {"ok":False,"result":None}
 
-    def file_request_get(self,input_id,input_args=None):
+        return {"ok":False,"result":None}
+
+    def file_download_get_stream(self,input_id,input_args=None):
         if self.is_stopped.is_set()==True:
             return None
 
@@ -960,7 +960,7 @@ class Telegram_Bot(object):
 
         return None
 
-    def file_request_post(self,input_chat_id,input_file_handle):
+    def file_upload_from_handle(self,input_chat_id,input_file_handle):
         if self.is_stopped.is_set()==True:
             return "Bot is stopped."
         if self.active_rate_limiter is not None:
@@ -979,6 +979,7 @@ class Telegram_Bot(object):
             file_name=os.path.basename(input_file_handle.name)
             with mmap.mmap(input_file_handle.fileno(),length=0,access=mmap.ACCESS_READ) as file_mmap_contents:
                 response=self.request_pool.request(method="POST",fields={"chat_id":input_chat_id,"document":(file_name,file_mmap_contents)},url=self.base_web_url+"sendDocument",preload_content=True,chunked=True,timeout=self.timeout_upload)
+                file_mmap_contents.close()
             if response is None or response.status not in [200,201]:
                 return "Upload error."
         except:
@@ -1027,7 +1028,7 @@ class Telegram_Bot(object):
 
         try:
             file_handle=open(input_file_path,"rb",buffering=0)
-            result=self.file_request_post(input_chat_id,file_handle)
+            result=self.file_upload_from_handle(input_chat_id,file_handle)
             file_handle.close()
             return result
         except:
@@ -1055,17 +1056,15 @@ class Telegram_Bot(object):
             except:
                 return "Request error."
 
-        response=self.file_request_get(input_id)
+        file_contents=self.file_download_get_stream(input_id)
 
-        if response is not None:
+        if file_contents is not None:
             file_handle=None
             try:
                 file_handle=open(input_path,"wb")
-                for chunk in response.stream(TELEGRAM_API_DOWNLOAD_CHUNK_BYTES):
+                for chunk in file_contents.stream(TELEGRAM_API_DOWNLOAD_CHUNK_BYTES):
                     if self.is_stopped.is_set()==True:
-                        file_handle.close()
-                        os.remove(input_path)
-                        raise Exception("Download error.")
+                        raise Exception("Bot is stopped.")
                     file_handle.write(chunk)
                 file_handle.close()
                 return ""
@@ -1533,47 +1532,58 @@ class User_Message_Handler(object):
             if self.request_exit.is_set()==True:
                 break
             if self.active_time_provider.CURRENT_SERVER_TIME()-m[u"date"]<=BOT_MESSAGE_RELEVANCE_TIMEOUT_SECONDS:
-                if u"text" in m:
-                    self.process_bot_command(m[u"from"][u"id"],m[u"chat"][u"id"],m[u"text"])
-                else:
-                    if u"document" in m:
-                        self.process_bot_file(m[u"from"][u"id"],m[u"document"][u"file_id"],m[u"document"][u"file_name"],m[u"document"][u"file_size"])
-                    elif u"audio" in m:
-                        proceed=True
-                        try:
-                            filename=self.bot_handle.Get_File_Info(m[u"audio"][u"file_id"])[u"file_path"]
-                            filename=filename[filename.rfind(u"/")+1:]
-                            fileext=filename[filename.rfind(u".")+1:]
-                            filetitle=u""
-                            fileperformer=u""
-                            if u"title" in m[u"audio"]:
-                                filetitle=m[u"audio"][u"title"]
-                            if u"performer" in m[u"audio"]:
-                                fileperformer=m[u"audio"][u"performer"]
-                            if filetitle!=u"" or fileperformer!=u"":
-                                newname=u""
-                                if fileperformer!=u"" and filetitle==u"":
-                                    newname=fileperformer
-                                if fileperformer!=u"" and filetitle!=u"":
-                                    newname=fileperformer+u" - "+filetitle
-                                if fileperformer==u"" and filetitle!=u"":
-                                    newname=filetitle
-                                newname+=u"."+fileext
-                                newname=newname.replace(u"/",u"").replace(u"\\",u"").replace(u"?",u"").replace(u"*",u"").replace(u":",u"").replace(u"|",u"").replace(u"<",u"").replace(u">",u"")
-                                filename=newname
-                        except:
-                            self.sendmsg(m[u"from"][u"id"],u"Could not obtain the file name.")
-                            proceed=False
-                        if proceed==True:
-                            self.process_bot_file(m[u"from"][u"id"],m[u"audio"][u"file_id"],filename,m[u"audio"][u"file_size"])
+                if u"from" in m and u"id" in m["from"]:
+                    sender_id=m[u"from"][u"id"]
+                    if u"text" in m:
+                        self.process_bot_command(sender_id,m[u"chat"][u"id"],m[u"text"])
                     else:
-                        self.sendmsg(m[u"from"][u"id"],u"Media type unsupported. Send as regular file or the file name will not carry over.")
+                        if u"document" in m:
+                            self.process_bot_file(sender_id,m[u"document"][u"file_id"],m[u"document"][u"file_name"],m[u"document"][u"file_size"])
+                        elif u"audio" in m:
+                            newname=u""
+                            fileext=u""
+
+                            try:
+                                file_name=self.bot_handle.Get_File_Info(m[u"audio"][u"file_id"])[u"file_path"]
+                                file_name=file_name[file_name.rfind(u"/")+1:]
+                                fileext=file_name[file_name.rfind(u".")+1:]
+                                filetitle=u""
+                                fileperformer=u""
+                                if u"title" in m[u"audio"]:
+                                    filetitle=m[u"audio"][u"title"]
+                                if u"performer" in m[u"audio"]:
+                                    fileperformer=m[u"audio"][u"performer"]
+                                if len(filetitle)>32:
+                                    filetitle=filetitle[:32]
+                                if len(fileperformer)>32:
+                                    fileperformer=fileperformer[:32]
+                                filetitle=filetitle.replace(u"/",u"").replace(u"\\",u"").replace(u"?",u"").replace(u"*",u"").replace(u":",u"").replace(u"|",u"").replace(u"<",u"").replace(u">",u"")
+                                fileperformer=fileperformer.replace(u"/",u"").replace(u"\\",u"").replace(u"?",u"").replace(u"*",u"").replace(u":",u"").replace(u"|",u"").replace(u"<",u"").replace(u">",u"")
+                                if filetitle!=u"" or fileperformer!=u"":
+                                    if fileperformer!=u"" and filetitle==u"":
+                                        newname=fileperformer
+                                    if fileperformer!=u"" and filetitle!=u"":
+                                        newname=fileperformer+u" - "+filetitle
+                                    if fileperformer==u"" and filetitle!=u"":
+                                        newname=filetitle
+                            except:
+                                pass
+
+                            if fileext==u"":
+                                fileext=u"unknown"
+                            if newname!=u"":
+                                newname+=u"-"
+                            newname+=str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))+u"."+fileext
+                            file_name=newname
+                            self.process_bot_file(sender_id,m[u"audio"][u"file_id"],file_name,m[u"audio"][u"file_size"])
+                        else:
+                            self.sendmsg(sender_id,u"Media type unsupported. Send as regular file or the file name will not carry over.")
         return
 
     def process_bot_file(self,sender_id,file_id,filename,filesize):
         global TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES
 
-        if self.bot_lock_pass!=u"" or self.allow_writing==False:
+        if self.bot_lock_pass!=u"" or self.allow_writing==False or self.request_exit.is_set()==True:
             return
 
         if filesize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES:
@@ -1581,19 +1591,23 @@ class User_Message_Handler(object):
             complete_put_path=foldername+filename
             self.sendmsg(sender_id,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
             self.log(u"Receiving file \""+complete_put_path+u"\"...")
-            if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
-                    result=self.bot_handle.Get_File(file_id,complete_put_path)
-                    if result=="":
-                        self.sendmsg(sender_id,u"Finished putting file \""+complete_put_path+u"\".")
-                        self.log(u"File download complete.")
-                    elif result=="Bot is stopped.":
-                        return
-                    else:
-                        self.sendmsg(sender_id,u"File \""+filename+u"\" could not be placed.")
-                        self.log(u"File download aborted due to unknown issue.")
+            if os.path.exists(complete_put_path)==False:
+                result=self.bot_handle.Get_File(file_id,complete_put_path)
+                if result=="":
+                    self.sendmsg(sender_id,u"Finished putting file \""+complete_put_path+u"\".")
+                    self.log(u"File download complete.")
+                elif result=="Bot is stopped.":
+                    return
+                else:
+                    self.sendmsg(sender_id,u"File \""+filename+u"\" could not be placed.")
+                    self.log(u"File download aborted due to unknown issue.")
             else:
-                self.sendmsg(sender_id,u"File \""+filename+u"\" already exists at the location.")
-                self.log(u"File download aborted due to existing instance.")
+                if os.path.isfile(complete_put_path)==True:
+                    self.sendmsg(sender_id,u"File \""+filename+u"\" already exists at the location.")
+                    self.log(u"File download aborted due to existing instance.")
+                else:
+                    self.sendmsg(sender_id,u"A folder with the name \""+filename+u"\" already exists at the location.")
+                    self.log(u"File download aborted due to conflict with existing folder.")
         else:
             self.sendmsg(sender_id,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".")
             self.log(u"File download aborted due to size exceeding limit.")
@@ -1926,8 +1940,12 @@ class User_Message_Handler(object):
                         response=u"File deleted."
                         self.log(u"File \""+newpath+u"\" deleted.")
                     except:
-                        response=u"Problem deleting file."
-                        self.log(u"File \""+newpath+u"\" delete error.")
+                        if os.path.isdir(newpath)==True:
+                            response=u"Item at location is a folder, not a file."
+                            self.log(u"File delete requested at \""+newpath+u"\" but item is a directory.")
+                        else:
+                            response=u"Problem deleting file."
+                            self.log(u"File \""+newpath+u"\" delete error.")
                 else:
                     response=u"File not found or inaccessible."
                     self.log(u"File to delete \""+newpath+u"\" not found.")
@@ -2178,6 +2196,8 @@ class User_Message_Handler(object):
 
         if command_type in self.supported_commands:
             command_info=self.supported_commands[command_type]
+            if self.request_exit.is_set()==True:
+                return
             if command_info["write_only"]==False or self.allow_writing==True:
                 response=command_info["call"]({"args":command_args,"sender_id":sender_id,"chat_id":chat_id})
             else:
@@ -2425,6 +2445,8 @@ class User_Console(object):
                     input_arguments+=[new_arg]
 
         if input_command in self.supported_commands:
+            if self.request_exit.is_set()==True:
+                return False
             return self.supported_commands[input_command](input_arguments)
         else:
             self.log(u"Unrecognized command. Type \"help\" for a list of commands.")
