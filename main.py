@@ -1,4 +1,4 @@
-__version__="1.932"
+__version__="1.933"
 __author__=u"Searinox Navras"
 
 
@@ -22,13 +22,15 @@ import win32process
 import urllib3
 import ssl
 import json
-from PyQt5.QtCore import (QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QCoreApplication,qInstallMessageHandler)
+from PyQt5.QtCore import (PYQT_VERSION_STR,QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QCoreApplication,qInstallMessageHandler)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QColor,QStandardItemModel,QStandardItem)
 
 def Get_B64_Resource(input_path):
     import resources_base64
     return resources_base64.Get_Resource(input_path)
+
+PYQT5_MAX_SUPPORTED_COMPILE_VERSION="5.12.2"
 
 MAX_BOT_USERS_BY_ARCHITECTURE={"32":36,"64":100}
 USER_TOKEN_MAX_LENGTH_BYTES=256
@@ -115,6 +117,21 @@ def Flush_Std_Buffers():
     sys.stdout.flush()
     sys.stderr.flush()
     return
+
+def Versions_Str_Equal_Or_Less(version_expected,version_actual):
+    version_compliant=False
+    compared_versions=[]
+    for compared_version in [version_expected,version_actual]:
+        compared_versions+=[[int(number.strip()) for number in compared_version.split(".")]]
+    if compared_versions[1][0]<=compared_versions[0][0]:
+        if compared_versions[1][0]<compared_versions[0][0]:
+            version_compliant=True
+        elif compared_versions[1][1]<=compared_versions[0][1]:
+            if compared_versions[1][1]<compared_versions[0][1]:
+                version_compliant=True
+            elif compared_versions[1][2]<=compared_versions[0][2]:
+                version_compliant=True
+    return version_compliant
 
 def Get_Runtime_Environment():
     retval={"working_dir":u"","process_binary":u"","running_from_source":False,"architecture":"","process_id":-1,"arguments":[]}
@@ -3268,6 +3285,9 @@ class Main_Window(QMainWindow):
 MAIN
 """
 
+if Versions_Str_Equal_Or_Less(PYQT5_MAX_SUPPORTED_COMPILE_VERSION,PYQT_VERSION_STR)==False:
+    sys.stderr.write(u"WARNING: PyQt5 version("+PYQT_VERSION_STR+u") is higher than the maximum supported version for compiling("+PYQT5_MAX_SUPPORTED_COMPILE_VERSION+u"). The application may run off source code but will fail to compile.\n")
+    sys.stderr.flush()
 
 environment_info=Get_Runtime_Environment()
 PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
