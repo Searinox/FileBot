@@ -1,4 +1,4 @@
-__version__="1.923"
+__version__="1.93"
 __author__=u"Searinox Navras"
 
 
@@ -8,6 +8,7 @@ INIT
 
 
 import base64
+import mmap
 import time
 import datetime
 import sys
@@ -29,7 +30,7 @@ def Get_B64_Resource(input_path):
     import resources_base64
     return resources_base64.Get_Resource(input_path)
 
-MAX_BOT_USERS=100
+MAX_BOT_USERS_BY_ARCHITECTURE={"32":36,"64":100}
 USER_TOKEN_MAX_LENGTH_BYTES=256
 USER_ENTRY_LINE_MAX_LENGTH_BYTES=768
 
@@ -115,7 +116,7 @@ def Flush_Std_Buffers():
     return
 
 def Get_Runtime_Environment():
-    retval={"working_dir":u"","process_binary":u"","running_from_source":False,"architecture":0,"process_id":-1,"arguments":[]}
+    retval={"working_dir":u"","process_binary":u"","running_from_source":False,"architecture":"","process_id":-1,"arguments":[]}
 
     sys_exe=sys.executable
     retval["arguments"]=sys.argv
@@ -125,9 +126,9 @@ def Get_Runtime_Environment():
     retval["system32"]=os.path.join(os.environ["WINDIR"],u"System32")
 
     if ctypes.sizeof(ctypes.c_voidp)==4:
-        retval["architecture"]=32
+        retval["architecture"]="32"
     else:
-        retval["architecture"]=64
+        retval["architecture"]="64"
 
     if retval["process_binary"]==u"python.exe":
         if len(retval["arguments"])>0:
@@ -944,26 +945,13 @@ class Telegram_Bot(object):
         else:
             return {"ok":False,"result":None}
 
-    def perform_file_request(self,input_method,input_url,input_args=None):
+    def file_request_get(self,input_id,input_args=None):
         if self.is_stopped.is_set()==True:
             return None
 
         response=None
         try:
-            if input_method=="POST":
-                if self.active_rate_limiter is not None:
-                    self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
-                if self.is_stopped.is_set()==True:
-                    return None
-                for keyname in input_args:
-                    if type(input_args[keyname])==tuple:
-                        if len(input_args[keyname])==2:
-                            if str(type(input_args[keyname][1]))=="<class '_io.FileIO'>":
-                                input_args[keyname]=(input_args[keyname][0],input_args[keyname][1].read())
-                                break
-                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=True,chunked=True,timeout=self.timeout_upload)
-            else:
-                response=self.request_pool.request(method=input_method,fields=input_args,url=input_url,preload_content=False,chunked=False,timeout=self.timeout_download)
+            response=self.request_pool.request(method="GET",fields=input_args,url=self.base_file_url+input_id,preload_content=False,chunked=False,timeout=self.timeout_download)
         except:
             pass
         if response is not None:
@@ -971,6 +959,32 @@ class Telegram_Bot(object):
                 return response
 
         return None
+
+    def file_request_post(self,input_chat_id,input_file_handle):
+        if self.is_stopped.is_set()==True:
+            return "Bot is stopped."
+        if self.active_rate_limiter is not None:
+            self.active_rate_limiter.WAIT_FOR_CLEAR_AND_SEND()
+        if self.is_stopped.is_set()==True:
+            return "Bot is stopped."
+
+        try:
+            input_file_handle.seek(0,2)
+            file_size=input_file_handle.tell()
+            if file_size==0:
+                return "Empty file."
+            if file_size>TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES:
+                return "File too big."
+            input_file_handle.seek(0,0)
+            file_name=os.path.basename(input_file_handle.name)
+            with mmap.mmap(input_file_handle.fileno(),length=0,access=mmap.ACCESS_READ) as file_mmap_contents:
+                response=self.request_pool.request(method="POST",fields={"chat_id":input_chat_id,"document":(file_name,file_mmap_contents)},url=self.base_web_url+"sendDocument",preload_content=True,chunked=True,timeout=self.timeout_upload)
+            if response is None or response.status not in [200,201]:
+                return "Upload error."
+        except:
+            return "Upload error."
+
+        return ""
 
     def Get_Bot_Info(self):
         if self.is_stopped.is_set()==True:
@@ -1009,18 +1023,15 @@ class Telegram_Bot(object):
 
     def Send_File(self,input_chat_id,input_file_path):
         if self.is_stopped.is_set()==True:
-            raise Exception("Bot is stopped.")
+            return "Bot is stopped."
 
-        filename=input_file_path.replace(u"/",u"\\")
-        filename=filename[filename.rfind(u"\\")+1:]
-        file_handle=open(input_file_path,"rb",buffering=0)
-        response=self.perform_file_request("POST",self.base_web_url+"sendDocument",{"chat_id":input_chat_id,"document":(filename,file_handle)})
-        file_handle.close()
-
-        if response is not None:
-            return response
-
-        raise Exception("Response error.")
+        try:
+            file_handle=open(input_file_path,"rb",buffering=0)
+            result=self.file_request_post(input_chat_id,file_handle)
+            file_handle.close()
+            return result
+        except:
+            return "Access error."
 
     def Get_File_Info(self,input_id):
         if self.is_stopped.is_set()==True:
@@ -1036,15 +1047,15 @@ class Telegram_Bot(object):
         global TELEGRAM_API_DOWNLOAD_CHUNK_BYTES
 
         if self.is_stopped.is_set()==True:
-            raise Exception("Bot is stopped.")
+            return "Bot is stopped."
 
         if "/" not in input_id and "\\" not in input_id:
             try:
                 input_id=self.Get_File_Info(input_id)[u"file_path"]
             except:
-                raise Exception("Request error.")
+                return "Request error."
 
-        response=self.perform_file_request("GET",self.base_file_url+input_id)
+        response=self.file_request_get(input_id)
 
         if response is not None:
             file_handle=None
@@ -1057,7 +1068,7 @@ class Telegram_Bot(object):
                         raise Exception("Download error.")
                     file_handle.write(chunk)
                 file_handle.close()
-                return
+                return ""
             except:
                 if file_handle is not None:
                     try:
@@ -1068,9 +1079,9 @@ class Telegram_Bot(object):
                     os.remove(input_path)
                 except:
                     pass
-                raise Exception("Download error.")
-
-        raise Exception("Response error.")
+                return "Download error."
+        else:
+            return "Response error."
 
     def ATTACH_MESSAGE_RATE_LIMITER(self,input_ratelimiter):
         self.active_rate_limiter=input_ratelimiter
@@ -1571,11 +1582,13 @@ class User_Message_Handler(object):
             self.sendmsg(sender_id,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
             self.log(u"Receiving file \""+complete_put_path+u"\"...")
             if os.path.exists(complete_put_path)==False or (os.path.exists(complete_put_path)==True and os.path.isfile(complete_put_path)==False):
-                    try:
-                        self.bot_handle.Get_File(file_id,complete_put_path)
+                    result=self.bot_handle.Get_File(file_id,complete_put_path)
+                    if result=="":
                         self.sendmsg(sender_id,u"Finished putting file \""+complete_put_path+u"\".")
                         self.log(u"File download complete.")
-                    except:
+                    elif result=="Bot is stopped.":
+                        return
+                    else:
                         self.sendmsg(sender_id,u"File \""+filename+u"\" could not be placed.")
                         self.log(u"File download aborted due to unknown issue.")
             else:
@@ -1762,6 +1775,8 @@ class User_Message_Handler(object):
         return response
 
     def performcommand_get(self,command_context):
+        global TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
+
         response=u""
 
         if command_context["args"]!=u"":
@@ -1770,21 +1785,23 @@ class User_Message_Handler(object):
                 newpath=self.proper_caps_path(newpath)
                 self.log(u"Requested get file \""+newpath+u"\". Sending...")
                 self.sendmsg(command_context["sender_id"],u"Getting file, please wait...")
-                try:
-                    fsize=os.path.getsize(newpath)
-                    if fsize<=TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                        self.bot_handle.Send_File(command_context["chat_id"],newpath)
-                        self.log(u"File \""+newpath+u"\" sent.")
-                    else:
-                        if fsize!=0:
-                            response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                            self.log(u"Requested file \""+newpath+u"\" too large to get.")
-                        else:
-                            response=u"File is empty."
-                            self.log(u"Get file \""+newpath+u"\" failed because the file is empty.")
-                except:
+                result=self.bot_handle.Send_File(command_context["chat_id"],newpath)
+                if result=="":
+                    self.log(u"File \""+newpath+u"\" sent.")
+                elif result=="Bot is stopped.":
+                    return u""
+                elif result=="File too big.":
+                    response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                    self.log(u"Requested file \""+newpath+u"\" too large to get.")
+                elif result=="Empty file.":
+                    response=u"File is empty."
+                    self.log(u"Get file \""+newpath+u"\" failed because the file is empty.")
+                elif result=="Upload error.":
                     response=u"Problem getting file."
-                    self.log(u"Get File error for \""+newpath+u"\".")
+                    self.log(u"Get File upload error for \""+newpath+u"\".")
+                elif result=="Access error.":
+                    response=u"Problem reading the file."
+                    self.log(u"Get File access error for \""+newpath+u"\".")
             else:
                 response=u"File not found or inaccessible."
                 self.log(u"Get file \""+newpath+u"\" was not found.")
@@ -1845,6 +1862,8 @@ class User_Message_Handler(object):
         return response
 
     def performcommand_eat(self,command_context):
+        global TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES
+
         response=u""
 
         if command_context["args"].endswith(u" ?confirm")==True:
@@ -1855,23 +1874,8 @@ class User_Message_Handler(object):
                     newpath=self.proper_caps_path(newpath)
                     self.log(u"Requested eat file \""+newpath+u"\". Sending...")
                     self.sendmsg(command_context["sender_id"],u"Eating file, please wait...")
-                    success=False
-                    try:
-                        fsize=os.path.getsize(newpath)
-                        if fsize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES and fsize!=0:
-                            self.bot_handle.Send_File(command_context["chat_id"],newpath)
-                            success=True
-                        else:
-                            if fsize!=0:
-                                response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                                self.log(u"Requested file \""+newpath+u"\" too large to eat.")
-                            else:
-                                response=u"File is empty."
-                                self.log(u"Eat file \""+newpath+u"\" failed because the file is empty.")
-                    except:
-                        response=u"Problem getting file."
-                        self.log(u"File \""+newpath+u"\" send error.")
-                    if success==True:
+                    result=self.bot_handle.Send_File(command_context["chat_id"],newpath)
+                    if result=="":
                         self.log(u"File \""+newpath+u"\" sent. Deleting...")
                         try:
                             os.remove(newpath)
@@ -1880,6 +1884,20 @@ class User_Message_Handler(object):
                         except:
                             response=u"Problem deleting file."
                             self.log(u"File delete error for \""+newpath+u"\".")
+                    elif result=="Bot is stopped.":
+                        return u""
+                    elif result=="File too big.":
+                        response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
+                        self.log(u"Requested file \""+newpath+u"\" too large to get.")
+                    elif result=="Empty file.":
+                        response=u"File is empty."
+                        self.log(u"Get file \""+newpath+u"\" failed because the file is empty.")
+                    elif result=="Upload error.":
+                        response=u"Problem getting file."
+                        self.log(u"Get File upload error for \""+newpath+u"\".")
+                    elif result=="Access error.":
+                        response=u"Problem reading the file."
+                        self.log(u"Get File access error for \""+newpath+u"\".")
                 else:
                     response=u"File not found or inaccessible."
                     self.log(u"File to eat at \""+newpath+u"\" not found.")
@@ -3220,6 +3238,8 @@ for argument in environment_info["arguments"]:
 if environment_info["running_from_source"]==True:
     argument_stdout_output=True
 
+Bot_User_Limit=MAX_BOT_USERS_BY_ARCHITECTURE[environment_info["architecture"]]
+
 LOGGER=Logger(os.path.join(environment_info["working_dir"],u"log.txt"))
 LOGGER.SET_STDOUT(argument_stdout_output)
 
@@ -3250,12 +3270,12 @@ log(u"\n\nREQUIREMENTS:\n"+\
     u"EXAMPLE ENTRIES:\n"+\
     u"JohnDoe|C:\\MySharedFiles\n"+\
     u"TrustedUser|>*\n\n"+\
-    u"A maximum of "+str(MAX_BOT_USERS)+u" users are supported.\n\n"+\
+    u"A maximum of "+str(Bot_User_Limit)+u" users are supported.\n\n"+\
     u"COMMAND LINE:\n"+\
     u"/minimized: starts the application minimized to system tray\n"+\
     u"/stdout: output log to stdout in addition to window\n")
 
-log(u"Process ID is "+str(environment_info["process_id"])+u". FileBot architecture is "+str(environment_info["architecture"])+u"-bit.")
+log(u"Process ID is "+str(environment_info["process_id"])+u". FileBot architecture is "+environment_info["architecture"]+u"-bit.")
 
 fatal_error=False
 collect_bot_token=""
@@ -3280,7 +3300,7 @@ if fatal_error==False:
     file_handle=None
     try:
         file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"rb")
-        all_lines=str(file_handle.read(USER_ENTRY_LINE_MAX_LENGTH_BYTES*MAX_BOT_USERS),"utf8").split(u"\n")
+        all_lines=str(file_handle.read(USER_ENTRY_LINE_MAX_LENGTH_BYTES*Bot_User_Limit),"utf8").split(u"\n")
         file_handle.close()
         file_handle=None
         for line in all_lines:
@@ -3301,7 +3321,7 @@ if fatal_error==False:
         new_user=User_Entry_From_String(entry)
         if new_user["error_message"]==u"":
             collect_allowed_users+=[new_user]
-            if len(collect_allowed_users)==MAX_BOT_USERS:
+            if len(collect_allowed_users)==Bot_User_Limit:
                 break
         else:
             log(u"WARNING: "+new_user["error_message"])
@@ -3315,7 +3335,7 @@ if fatal_error==False:
 
 if fatal_error==False:
     try:
-        Active_7ZIP_Handler=Task_Handler_7ZIP(environment_info["working_dir"],Get_B64_Resource("binaries/7zipx"+str(environment_info["architecture"])),MAX_7ZIP_TASKS_PER_USER,LOGGER)
+        Active_7ZIP_Handler=Task_Handler_7ZIP(environment_info["working_dir"],Get_B64_Resource("binaries/7zipx"+environment_info["architecture"]),MAX_7ZIP_TASKS_PER_USER,LOGGER)
     except:
         log(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
         fatal_error=True
