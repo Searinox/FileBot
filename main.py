@@ -1,4 +1,4 @@
-__version__="1.931"
+__version__="1.932"
 __author__=u"Searinox Navras"
 
 
@@ -1842,7 +1842,7 @@ class User_Message_Handler(object):
                     newname_ok=False
                     break
             if newname_ok==True:
-                newpath=self.relative_to_absolute_path(command_context["args"],True)
+                newpath=self.relative_to_absolute_path(command_args,True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
                     end=newpath.rfind(u"\\")
