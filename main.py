@@ -1,4 +1,4 @@
-__version__="1.934"
+__version__="1.935"
 __author__=u"Searinox Navras"
 
 
@@ -1421,9 +1421,13 @@ class User_Message_Handler(object):
 
     def proper_caps_path(self,input_path):
         try:
-            return os.path._getfinalpathname(input_path).lstrip("\\?")
+            retval=os.path._getfinalpathname(input_path).lstrip("\\?")
         except:
             return input_path
+        if len(retval)>2 and len(input_path)>1 and input_path[1]==":" and retval.lower().startswith("unc\\")==True:
+            retval=retval[-len(input_path):]
+            retval=input_path[0].upper()+":"+retval[2:]
+        return retval
 
     def usable_path(self,newpath):
         if self.allowed_path(newpath)==True:
