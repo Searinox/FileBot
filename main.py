@@ -1,4 +1,4 @@
-__version__="1.933"
+__version__="1.934"
 __author__=u"Searinox Navras"
 
 
@@ -8,20 +8,19 @@ INIT
 
 
 import base64
-import mmap
 import time
 import datetime
+import json
+import threading
 import sys
 import os
-import threading
+import mmap
 import shutil
+import ssl
+import urllib3
 import ctypes
-import win32api
 import win32con
 import win32process
-import urllib3
-import ssl
-import json
 from PyQt5.QtCore import (PYQT_VERSION_STR,QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QCoreApplication,qInstallMessageHandler)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
 from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QColor,QStandardItemModel,QStandardItem)
@@ -1389,6 +1388,7 @@ class User_Message_Handler(object):
         if self.request_exit.is_set()==True:
             return True
         self.last_send_time=OS_Uptime_Seconds()
+
         try:
             self.bot_handle.Send_Message(sender_id,message_text)
             self.lastsent_timers+=[self.last_send_time]
@@ -1421,13 +1421,9 @@ class User_Message_Handler(object):
 
     def proper_caps_path(self,input_path):
         try:
-            retval=win32api.GetLongPathNameW(win32api.GetShortPathName(input_path))
+            return os.path._getfinalpathname(input_path).lstrip("\\?")
         except:
-            retval=input_path
-        if len(retval)>1:
-            if retval[1]==u":":
-                retval=retval[0].upper()+retval[1:]
-        return retval
+            return input_path
 
     def usable_path(self,newpath):
         if self.allowed_path(newpath)==True:
@@ -2343,7 +2339,7 @@ class User_Console(object):
             if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
                 stats_out+=u"\nMessage handler for user \""+user_handler_instance.account_username+u"\":\n"+\
                          u"Home path=\""+user_handler_instance.allowed_root+u"\"\n"+\
-                         u"Write mode: "+str(user_handler_instance.allow_writing).upper()+u"\n"+\
+                         u"Write permissions: "+str(user_handler_instance.allow_writing).upper()+u"\n"+\
                          u"Current folder=\""+user_handler_instance.get_last_folder()+u"\"\n"+\
                          u"Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+u"\n"+\
                          u"Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+u"\n"
