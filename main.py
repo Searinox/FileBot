@@ -1,4 +1,4 @@
-__version__="1.935"
+__version__="1.936"
 __author__=u"Searinox Navras"
 
 
@@ -2075,7 +2075,7 @@ class User_Message_Handler(object):
         response=u""
 
         if command_context["args"]!=u"":
-            newpath=self.relative_to_absolute_path(command_context["args"])
+            newpath=self.relative_to_absolute_path(command_context["args"],os.path.isfile(command_context["args"]))
             if os.path.exists(newpath)==False and newpath.endswith(u"\\")==True:
                 newpath=newpath[:-1]
             if self.usable_path(newpath)==True:
