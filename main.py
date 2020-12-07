@@ -3090,6 +3090,9 @@ class FileBot(object):
         self.process_id=os.getpid()
         self.current_process_handle=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,self.process_id)
         self.logger=None
+        self.active_time_provider=None
+        self.active_UI=None
+        self.request_sync_time=None
         self.bot_user_limit=MAX_BOT_USERS_BY_ARCHITECTURE[self.cpu_architecture]
         self.working_dir=terminate_with_backslash(input_working_dir.strip().replace("/","\\"))
         self.allowed_TLS_algorithms=self.get_TLS_allowed_algorithms(FileBot.banned_TLS_algorithms)
@@ -3114,11 +3117,11 @@ class FileBot(object):
         self.logger.ATTACH_SIGNALLER(UI_Signal)
 
         app_icons_b64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
-        active_UI=UI(self.color_scheme,self.fonts,self.UI_scale_modifier,app_icons_b64,UI_Signal,self.start_minimized,self.logger)
+        self.active_UI=UI(self.color_scheme,self.fonts,self.UI_scale_modifier,app_icons_b64,UI_Signal,self.start_minimized,self.logger)
         del app_icons_b64
         app_icons_b64=None
 
-        while active_UI.IS_READY()==False:
+        while self.active_UI.IS_READY()==False:
             time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
 
         self.logger.ACTIVATE()
@@ -3210,8 +3213,8 @@ class FileBot(object):
                 fatal_error=True
 
         if fatal_error==False:
-            active_time_provider=Time_Provider(self.allowed_TLS_algorithms)
-            active_time_provider.ADD_SUBSCRIBER(UI_Signal)
+            self.active_time_provider=Time_Provider(self.allowed_TLS_algorithms)
+            self.active_time_provider.ADD_SUBSCRIBER(UI_Signal)
 
             self.log(u"Starting 7-ZIP Task Handler...")
             active_7ZIP_handler.START()
@@ -3219,8 +3222,8 @@ class FileBot(object):
             initial_time_sync_failed_once=False
             self.log(u"Performing initial time synchronization via Internet...")
             sync_result={"success":False}
-            while sync_result["success"]==False and active_UI.IS_RUNNING()==True:
-                sync_result=active_time_provider.SYNC()
+            while sync_result["success"]==False and self.active_UI.IS_RUNNING()==True:
+                sync_result=self.active_time_provider.SYNC()
                 if initial_time_sync_failed_once==False:
                     if sync_result["success"]==False:
                         initial_time_sync_failed_once=True
@@ -3235,31 +3238,32 @@ class FileBot(object):
                 for sender in collect_allowed_users:
                     collect_allowed_usernames+=[sender["username"]]
 
-                active_bot_listener=Bot_Listener(collect_bot_token,self.allowed_TLS_algorithms,collect_allowed_usernames,active_time_provider,UI_Signal,self.logger)
+                active_bot_listener=Bot_Listener(collect_bot_token,self.allowed_TLS_algorithms,collect_allowed_usernames,self.active_time_provider,UI_Signal,self.logger)
                 self.log(u"Starting Bot Listener...")
                 active_bot_listener.START()
 
-                while active_bot_listener.IS_READY()==False and active_UI.IS_RUNNING()==True:
+                while active_bot_listener.IS_READY()==False and self.active_UI.IS_RUNNING()==True:
                     time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
        
-                if active_UI.IS_RUNNING()==True:
+                if self.active_UI.IS_RUNNING()==True:
 
                     self.log(u"User message handler(s) starting up...")
                     for sender in collect_allowed_users:
-                        user_handle_instances+=[User_Message_Handler(self.path_system32,collect_bot_token,self.allowed_TLS_algorithms,sender["home"],sender["username"],sender["allow_write"],[environment_info["working_dir"]],active_bot_listener,active_time_provider,active_7ZIP_handler,self.logger)]
+                        user_handle_instances+=[User_Message_Handler(self.path_system32,collect_bot_token,self.allowed_TLS_algorithms,sender["home"],sender["username"],sender["allow_write"],[environment_info["working_dir"]],active_bot_listener,self.active_time_provider,active_7ZIP_handler,self.logger)]
 
-                    request_sync_time=threading.Event()
-                    request_sync_time.clear()
+                    self.request_sync_time=threading.Event()
+                    self.request_sync_time.clear()
 
-                    active_user_console=User_Console(user_handle_instances,UI_Signal,active_7ZIP_handler,request_sync_time,self.logger)
+                    active_user_console=User_Console(user_handle_instances,UI_Signal,active_7ZIP_handler,self.request_sync_time,self.logger)
                     self.log(u"Starting User Console...")
                     active_user_console.START()
 
                     self.log(u"Startup complete. Waiting for UI thread to finish...")
-                    self.main_loop(active_time_provider,active_UI,request_sync_time)
+                    self.main_loop()
                     self.log(u"Left UI thread waiting loop.")
 
-                    active_time_provider.REMOVE_SUBSCRIBER(UI_Signal)
+                    self.request_sync_time=None
+                    self.active_time_provider.REMOVE_SUBSCRIBER(UI_Signal)
 
                     self.log(u"Requesting stop to User Console...")
                     active_user_console.REQUEST_STOP()
@@ -3285,14 +3289,18 @@ class FileBot(object):
                 while len(user_handle_instances)>0:
                     del user_handle_instances[0]
 
+            del self.active_time_provider
+            self.active_time_provider=None
+
         else:
 
             self.log(u"The program can now be closed.")
             UI_Signal.SEND_EVENT("close_standby")
 
         self.logger.DETACH_SIGNALLER()
-        active_UI.CONCLUDE()
-        del active_UI
+        self.active_UI.CONCLUDE()
+        del self.active_UI
+        self.active_UI=None
         self.log(u"Confirm UI exit.")
 
         self.log(u"FileBot has finished.")
@@ -3461,7 +3469,7 @@ class FileBot(object):
     
         return cipherstring
 
-    def main_loop(self,input_timesync_object,input_UI_object,input_timesync_request_event):
+    def main_loop(self):
         global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
         global MAINTHREAD_HEARTBEAT_SECONDS
         global SERVER_TIME_RESYNC_INTERVAL_SECONDS
@@ -3470,7 +3478,7 @@ class FileBot(object):
         last_process_priority_check=GetTickCount64()-priority_check_interval_milliseconds
         last_server_time_check=datetime.datetime.utcnow()
 
-        while input_UI_object.IS_RUNNING()==True:
+        while self.active_UI.IS_RUNNING()==True:
             time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
 
             self.flush_std_buffers()
@@ -3484,14 +3492,14 @@ class FileBot(object):
                     self.log(u"Error managing process priority.")
                 last_process_priority_check=GetTickCount64()
 
-            if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
+            if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or self.request_sync_time.is_set()==True:
                 self.log(u"Performing time synchronization via Internet...")
-                sync_result=input_timesync_object.SYNC()
+                sync_result=self.active_time_provider.SYNC()
                 if sync_result["success"]==True:
                     self.log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
                 else:
                     self.log(u"Time synchronization failed.")
-                input_timesync_request_event.clear()
+                self.request_sync_time.clear()
                 last_server_time_check=datetime.datetime.utcnow()
 
         return
