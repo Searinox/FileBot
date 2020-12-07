@@ -3153,7 +3153,7 @@ class FileBot(object):
             u"EXAMPLE ENTRIES:\n"+\
             u"JohnDoe|C:\\MySharedFiles\n"+\
             u"TrustedUser|>*\n\n"+\
-            u"A maximum of "+str(self.bot_user_limit)+u" users are supported.\n\n"+self.startup_message_additional_text+"\n")
+            u"A maximum of "+str(self.bot_user_limit)+u" users are supported.\n\n"+self.startup_message_additional_text+u"\n")
 
         self.log(u"Process ID is "+str(self.process_id)+u". CPU architecture is "+self.cpu_architecture+u"-bit.")
 
