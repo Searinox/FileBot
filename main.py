@@ -3531,3 +3531,4 @@ if environment_info["running_from_source"]==True:
 
 FileBotInstance=FileBot(environment_info["working_dir"],MAX_7ZIP_TASKS_PER_USER,COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,argument_start_minimized,argument_log_to_stdout)
 FileBotInstance.RUN()
+del FileBotInstance
