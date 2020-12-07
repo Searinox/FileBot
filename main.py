@@ -96,6 +96,10 @@ COLOR_SCHEME={"window_text":"000000",
                         "7ZTSKHND":"FFC85A",
                         "UCONSOLE":"A0FFA0"}}
 
+STARTUP_MESSAGE_ADDITIONAL_TEXT=u"COMMAND LINE:\n"+\
+    u"/minimized: starts the application minimized to system tray\n"+\
+    u"/stdout: output log to stdout in addition to window"
+
 
 """
 DEFS
@@ -125,6 +129,7 @@ def Get_Runtime_Environment():
     retval={"working_dir":u"","running_from_source":False,"arguments":[]}
 
     sys_exe=sys.executable
+
     retval["arguments"]=sys.argv
     retval["working_dir"]=os.path.realpath(os.path.dirname(sys_exe))
     retval["system32"]=os.path.join(os.environ["WINDIR"],u"System32")
@@ -3067,7 +3072,7 @@ class FileBot(object):
     user_entry_line_max_length_bytes=768
     banned_TLS_algorithms=["ANY","SHA1","DHE","CHACHA20-POLY1305","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
 
-    def __init__(self,input_working_dir,input_max_7zip_tasks_per_user,input_color_scheme,input_fonts,input_UI_scale_modifier,input_start_minimized,input_log_to_stdout):
+    def __init__(self,input_working_dir,input_max_7zip_tasks_per_user,input_color_scheme,input_fonts,input_UI_scale_modifier,input_start_minimized,input_log_to_stdout,input_startup_message_additional_text=u""):
         global __author__
         global __version__
         global MAX_BOT_USERS_BY_CPU_ARCHITECTURE
@@ -3082,8 +3087,13 @@ class FileBot(object):
 
         self.path_system32=None
         for system_variable in ["WINDIR","SYSTEMROOT"]:
-            self.path_system32=terminate_with_backslash(os.path.join(os.environ[system_variable],u"System32").strip().replace("/","\\"))
-            break
+            try:
+                get_path=terminate_with_backslash(os.path.join(os.environ[system_variable],u"System32").strip().replace("/","\\"))
+                if os.path.isdir(get_path)==True:
+                    self.path_system32=get_path
+                    break
+            except:
+                pass
         if self.path_system32 is None:
             raise Exception("Could not obtain SYSTEM32 folder path.")
 
@@ -3102,6 +3112,7 @@ class FileBot(object):
         self.UI_scale_modifier=input_UI_scale_modifier
         self.start_minimized=input_start_minimized
         self.log_to_stdout=input_log_to_stdout
+        self.startup_message_additional_text=input_startup_message_additional_text
         return
 
     def RUN(self):
@@ -3142,10 +3153,7 @@ class FileBot(object):
             u"EXAMPLE ENTRIES:\n"+\
             u"JohnDoe|C:\\MySharedFiles\n"+\
             u"TrustedUser|>*\n\n"+\
-            u"A maximum of "+str(self.bot_user_limit)+u" users are supported.\n\n"+\
-            u"COMMAND LINE:\n"+\
-            u"/minimized: starts the application minimized to system tray\n"+\
-            u"/stdout: output log to stdout in addition to window\n")
+            u"A maximum of "+str(self.bot_user_limit)+u" users are supported.\n\n"+self.startup_message_additional_text+"\n")
 
         self.log(u"Process ID is "+str(self.process_id)+u". CPU architecture is "+self.cpu_architecture+u"-bit.")
 
@@ -3529,6 +3537,6 @@ for argument in environment_info["arguments"]:
 if environment_info["running_from_source"]==True:
     argument_log_to_stdout=True
 
-FileBotInstance=FileBot(environment_info["working_dir"],MAX_7ZIP_TASKS_PER_USER,COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,argument_start_minimized,argument_log_to_stdout)
+FileBotInstance=FileBot(environment_info["working_dir"],MAX_7ZIP_TASKS_PER_USER,COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,argument_start_minimized,argument_log_to_stdout,STARTUP_MESSAGE_ADDITIONAL_TEXT)
 FileBotInstance.RUN()
 del FileBotInstance
