@@ -1,4 +1,4 @@
-__version__="1.937"
+__version__="1.938"
 __author__=u"Searinox Navras"
 
 
@@ -32,8 +32,6 @@ def Get_B64_Resource(input_path):
 PYQT5_MAX_SUPPORTED_COMPILE_VERSION="5.12.2"
 
 MAX_BOT_USERS_BY_ARCHITECTURE={"32":36,"64":100}
-USER_TOKEN_MAX_LENGTH_BYTES=256
-USER_ENTRY_LINE_MAX_LENGTH_BYTES=768
 
 TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
 TELEGRAM_API_MAX_GLOBAL_IMS=30
@@ -70,11 +68,7 @@ TASKS_7ZIP_UPDATE_INTERVAL_SECONDS=1.25
 TASKS_7ZIP_DELETE_TIMEOUT_SECONDS=1.5
 UI_LOG_UPDATE_INTERVAL_MINIMUM_SECONDS=0.055
 
-TLS_BANNED_ALGORITHMS=["ANY","SHA1","DHE","CHACHA20-POLY1305","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
-
 UI_SCALE_MODIFIER=1.125
-QTMSG_BLACKLIST_STARTSWITH=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
-APP_ICONS_B64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
 
 FONTS={"<reference_point_size>":8,
        "general":{"type":"Monospace","scale":1,"properties":[]},
@@ -112,11 +106,6 @@ GetTickCount64=ctypes.windll.kernel32.GetTickCount64
 GetTickCount64.restype=ctypes.c_uint64
 GetTickCount64.argtypes=()
 
-def Flush_Std_Buffers():
-    sys.stdout.flush()
-    sys.stderr.flush()
-    return
-
 def Versions_Str_Equal_Or_Less(version_expected,version_actual):
     version_compliant=False
     compared_versions=[]
@@ -133,21 +122,14 @@ def Versions_Str_Equal_Or_Less(version_expected,version_actual):
     return version_compliant
 
 def Get_Runtime_Environment():
-    retval={"working_dir":u"","process_binary":u"","running_from_source":False,"architecture":"","process_id":-1,"arguments":[]}
+    retval={"working_dir":u"","running_from_source":False,"arguments":[]}
 
     sys_exe=sys.executable
     retval["arguments"]=sys.argv
-    retval["process_binary"]=os.path.basename(sys_exe).lower()
     retval["working_dir"]=os.path.realpath(os.path.dirname(sys_exe))
-    retval["process_id"]=os.getpid()
     retval["system32"]=os.path.join(os.environ["WINDIR"],u"System32")
 
-    if ctypes.sizeof(ctypes.c_voidp)==4:
-        retval["architecture"]="32"
-    else:
-        retval["architecture"]="64"
-
-    if retval["process_binary"]==u"python.exe":
+    if os.path.basename(sys_exe).lower()==u"python.exe":
         if len(retval["arguments"])>0:
             if retval["arguments"][0].replace(u"\"",u"").lower().strip().endswith(u".py"):
                 retval["working_dir"]=os.path.realpath(os.path.dirname(retval["arguments"][0]))
@@ -156,94 +138,10 @@ def Get_Runtime_Environment():
 
     return retval
 
-def log(input_text):
-    global LOGGER
-
-    if LOGGER is not None:
-        LOGGER.LOG("MAINTHRD",input_text)
-    return
-
-def Get_TLS_Allowed_Algorithms():
-    global TLS_BANNED_ALGORITHMS
-
-    cipherlist=ssl.create_default_context().get_ciphers()
-    banned_algorithms=[i.upper() for i in TLS_BANNED_ALGORITHMS]
-
-    cipherstring=""
-    for cipher in cipherlist:
-        if "digest" in cipher and "auth" in cipher and "symmetric" in cipher and "kea" in cipher:
-            ciphername=cipher["name"]
-
-            if cipher["digest"] is not None:
-                cipher_digest=cipher["digest"].upper()
-            else:
-                cipher_digest=""
-
-            if cipher["auth"] is not None:
-                cipher_auth=cipher["auth"].upper()
-                if cipher_auth.startswith("AUTH-"):
-                    cipher_auth=cipher_auth[len("AUTH-"):]
-            else:
-                cipher_auth=""
-
-            if cipher["symmetric"] is not None:
-                cipher_symmetric=cipher["symmetric"].upper()
-            else:
-                cipher_symmetric=""
-
-            if cipher["kea"] is not None:
-                cipher_kea=cipher["kea"].upper()
-                if cipher_kea.startswith("KX-"):
-                    cipher_kea=cipher_kea[len("KX-"):]
-            else:
-                cipher_kea=""
-
-            digest_ok=False
-            auth_ok=False
-            symmetric_ok=False
-            kea_ok=False
-
-            if cipher_digest!="":
-                if cipher_digest not in banned_algorithms:
-                    digest_ok=True
-            else:
-                digest_ok=True
-
-            if digest_ok==True:            
-                if cipher_auth!="":
-                    if cipher_auth not in banned_algorithms:
-                        auth_ok=True
-                else:
-                    auth_ok=True
-
-            if digest_ok==True and auth_ok==True:
-                if cipher_symmetric!="":
-                    if cipher_symmetric not in banned_algorithms:
-                        symmetric_ok=True
-                else:
-                    symmetric_ok=True
-
-            if digest_ok==True and auth_ok==True and symmetric_ok==True:
-                if cipher_kea!="":
-                    if cipher_kea not in banned_algorithms:
-                        kea_ok=True
-                else:
-                    kea_ok=True
-
-            if digest_ok==True and auth_ok==True and symmetric_ok==True and kea_ok==True:
-                cipherstring+=":"+ciphername
-
-    if cipherstring.startswith(":")==True:
-        cipherstring=cipherstring[1:]
-
-    return cipherstring
-
-def Make_TLS_Connection_Pool():
-    global TLS_ALLOWED_ALGORITHMS
-
+def Make_TLS_Connection_Pool(input_allowed_TLS_algorithms):
     ssl_cert_context=ssl.create_default_context()
     ssl_cert_context.check_hostname=True
-    ssl_cert_context.set_ciphers(TLS_ALLOWED_ALGORITHMS)
+    ssl_cert_context.set_ciphers(input_allowed_TLS_algorithms)
     ssl_cert_context.verify_mode=ssl.CERT_REQUIRED
     ssl_cert_context.options|=ssl.OP_NO_SSLv2
     ssl_cert_context.options|=ssl.OP_NO_SSLv3
@@ -276,116 +174,6 @@ def readable_size(input_size):
         return str(round(input_size/1024.0**2,2))+" MB"
     return str(round(input_size/1024.0**3,2))+" GB"
 
-def Bot_Token_From_Bytes(input_bytes):
-    retval=input_bytes
-    try:
-        retval=str(retval,"utf8").strip()
-    except:
-        return ""
-    if len(retval)==0 or len(retval)>64:
-        return ""
-    for c in retval:
-        if c not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_:":
-            return ""
-    if retval.count(":")>1:
-        return ""
-    if len(retval)==0 or len(retval)>64:
-        return ""
-    return retval
-
-def User_Entry_From_String(input_string):
-    retval={"username":u"","home":u"","allow_write":False,"error_message":""}
-
-    segments=[]
-
-    try:
-        segments=input_string.split("|")
-        for i in range(len(segments)):
-            segments[i]=segments[i].strip()
-
-        if len(segments)==1:
-            raise ValueError(u"Home path was not present.")
-        elif len(segments)>2:
-            raise ValueError(u"Wrong number of \"|\"-separated characters.")
-
-        retval["username"]=segments[0]
-        retval["home"]=segments[1].strip()
-        retval["allow_write"]=False
-
-        if retval["username"].count(u"#")!=2 and retval["username"].count(u"#")!=0:
-            raise ValueError(u"Username contained an incorrect number of \"#\" characters.")
-
-        username_nohashes=retval["username"].replace(u"#",u"")
-
-        if username_nohashes==u"":
-            raise ValueError("Username was empty.")
-
-        if username_nohashes[0] in u"_0123456789":
-            raise ValueError(u"Username cannot begin with a number or underscore.")
-
-        for c in username_nohashes:
-            if c.lower() not in u"_0123456789abcdefghijklmnopqrstuvwxyz":
-                raise ValueError(u"Username contains invalid characters.")
-
-        if retval["home"].startswith(u">")==True:
-            retval["allow_write"]=True
-            retval["home"]=retval["home"][1:]
-        if retval["home"]==u"":
-            raise ValueError("Home path was empty.")
-        retval["home"]=retval["home"].replace(u"/",u"\\")
-        if retval["home"]!=u"*":
-            retval["home"]=terminate_with_backslash(retval["home"])
-
-        for c in retval["home"]:
-            if c in u"|<>?":
-                raise ValueError(u"Home path contains invalid characters.")
-
-        if (retval["home"].count(u"*")>1 and len(retval["home"])>1) or retval["home"].count(u":")>1 or retval["home"].startswith(u"\\")==True:
-            raise ValueError(u"Home path contains invalid characters.")
-
-        if u"\\.\\" in retval["home"] or u"\\..\\" in retval["home"] or u"\\...\\" in retval["home"] or retval["home"].startswith(u"\\\\")==True or len(retval["home"])>255:
-            raise ValueError(u"Home path format is invalid.")
-
-    except:
-        return {"error_message":u"User entry \""+input_string+u"\" was not validly formatted: "+str(sys.exc_info()[0])+u" "+str(sys.exc_info()[1]),"username":u"","home":u"","allow_write":False}
-
-    return retval
-
-def Main_Wait_Loop(input_timesync_object,input_UI_object,input_timesync_request_event):
-    global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
-    global MAINTHREAD_HEARTBEAT_SECONDS
-    global SERVER_TIME_RESYNC_INTERVAL_SECONDS
-
-    priority_check_interval_milliseconds=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000
-    last_process_priority_check=GetTickCount64()-priority_check_interval_milliseconds
-    last_server_time_check=datetime.datetime.utcnow()
-
-    while input_UI_object.IS_RUNNING()==True:
-        time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
-
-        Flush_Std_Buffers()
-
-        if GetTickCount64()-last_process_priority_check>=priority_check_interval_milliseconds:
-            try:
-                if win32process.GetPriorityClass(CURRENT_PROCESS_HANDLE)!=win32process.IDLE_PRIORITY_CLASS:
-                    win32process.SetPriorityClass(CURRENT_PROCESS_HANDLE,win32process.IDLE_PRIORITY_CLASS)
-                    log(u"Idle process priority set.")
-            except:
-                log(u"Error managing process priority.")
-            last_process_priority_check=GetTickCount64()
-
-        if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
-            log(u"Performing time synchronization via Internet...")
-            sync_result=input_timesync_object.SYNC()
-            if sync_result["success"]==True:
-                log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
-            else:
-                log(u"Time synchronization failed.")
-            input_timesync_request_event.clear()
-            last_server_time_check=datetime.datetime.utcnow()
-
-    return
-
 
 """
 OBJS
@@ -393,10 +181,10 @@ OBJS
 
 
 class ShellProcess(object):
-    def __init__(self,input_command):
-        global PATH_WINDOWS_SYSTEM32
+    def __init__(self,input_path_system32,input_command):
+        input_path_system32=input_path_system32
 
-        result=win32process.CreateProcess(None,u"\""+PATH_WINDOWS_SYSTEM32+u"cmd.exe\" /c \""+input_command+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
+        result=win32process.CreateProcess(None,u"\""+input_path_system32+u"cmd.exe\" /c \""+input_command+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
         if result:
             self.process_handle=result[0]
             self.process_ID=result[2]
@@ -417,9 +205,7 @@ class ShellProcess(object):
 
 
 class Logger(object):
-    def __init__(self,input_log_path=u""):
-        global PATH_WINDOWS_SYSTEM32
-
+    def __init__(self,input_path_system32,input_log_path=u""):
         self.logging_path=input_log_path
         self.log_file_handle=None
         self.log_lock=threading.Lock()
@@ -427,7 +213,7 @@ class Logger(object):
         self.output_stdout.clear()
         self.active_signaller=None
         if self.logging_path!=u"":
-            ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"compact.exe\" /a /c \""+input_log_path+u"\"").WAIT()
+            ShellProcess(input_path_system32,u"\""+input_path_system32+u"compact.exe\" /a /c \""+input_log_path+u"\"").WAIT()
         self.is_active=threading.Event()
         self.is_active.clear()
         return
@@ -448,7 +234,7 @@ class Logger(object):
             self.LOG(u"WARNING: Default target log file could not be written to. Logging will not save to file.")
         return
 
-    def SET_STDOUT(self,input_state):
+    def LOG_TO_STDOUT(self,input_state):
         if input_state==True:
             self.output_stdout.set()
         else:
@@ -530,10 +316,10 @@ class Logger(object):
 
 
 class Time_Provider(object):
-    def __init__(self):
+    def __init__(self,input_allowed_TLS_algorithms):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
 
-        self.request_pool=Make_TLS_Connection_Pool()
+        self.request_pool=Make_TLS_Connection_Pool(input_allowed_TLS_algorithms)
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
@@ -621,9 +407,10 @@ class Time_Provider(object):
 
 
 class Task_Handler_7ZIP(object):
-    def __init__(self,input_path_7zip,input_7zip_binary_base64,input_max_per_user,input_logger=None):
+    def __init__(self,input_path_system32,input_path_7zip,input_7zip_binary_base64,input_max_per_user,input_logger=None):
         global TASKS_7ZIP_DELETE_TIMEOUT_SECONDS
 
+        self.path_system32=input_path_system32
         self.instances_7zip=[]
         self.lock_instances_7zip=threading.Lock()
         self.lock_list_end_tasks=threading.Lock()
@@ -640,9 +427,6 @@ class Task_Handler_7ZIP(object):
         self.list_end_tasks_users=[]
         self.task_delete_timeout_milliseconds=TASKS_7ZIP_DELETE_TIMEOUT_SECONDS*1000
         
-        input_path_7zip=input_path_7zip
-        input_path_7zip=input_path_7zip.replace(u"/",u"\\")
-        input_path_7zip=terminate_with_backslash(input_path_7zip)
         self.path_7zip_bin=os.path.join(input_path_7zip,u"7z.exe")
         write_7z_binary=None
 
@@ -735,7 +519,7 @@ class Task_Handler_7ZIP(object):
                 self.lock_instances_7zip.release()
                 return {"result":"ERROR","full_target":u""}
             try:
-                new_process=ShellProcess(prompt_commands)
+                new_process=ShellProcess(self.path_system32,prompt_commands)
                 self.instances_7zip+=[{"process":new_process,"temp_file":full_target+u".7z.TMP","user":originating_user,"new":True}]
                 self.lock_instances_7zip.release()
 
@@ -823,7 +607,6 @@ class Task_Handler_7ZIP(object):
         return
 
     def end_7zip_tasks(self,list_users,list_PIDs=[]):
-        global PATH_WINDOWS_SYSTEM32
         global PENDING_ACTIVITY_HEARTBEAT_SECONDS
 
         taskkill_list=[]
@@ -854,7 +637,7 @@ class Task_Handler_7ZIP(object):
 
             if terminate==True:
                 self.log(u"Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+u" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+u"\".")
-                taskkill_list+=[{"process":ShellProcess(u"\""+PATH_WINDOWS_SYSTEM32+u"taskkill.exe\" /f /t /pid "+str(get_PID)),"file":self.instances_7zip[i]["temp_file"]}]
+                taskkill_list+=[{"process":ShellProcess(self.path_system32,u"\""+self.path_system32+u"taskkill.exe\" /f /t /pid "+str(get_PID)),"file":self.instances_7zip[i]["temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
@@ -922,12 +705,12 @@ class Telegram_Message_Rate_Limiter(object):
 
 
 class Telegram_Bot(object):
-    def __init__(self,input_token):
+    def __init__(self,input_token,input_allowed_TLS_algorithms):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
         global TELEGRAM_API_REQUEST_TIMEOUT_SECONDS
         global TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS
 
-        self.request_pool=Make_TLS_Connection_Pool()
+        self.request_pool=Make_TLS_Connection_Pool(input_allowed_TLS_algorithms)
         self.timeout_web=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_download=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_REQUEST_TIMEOUT_SECONDS)
         self.timeout_upload=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=TELEGRAM_API_UPLOAD_TIMEOUT_SECONDS)
@@ -1115,7 +898,7 @@ class Telegram_Bot(object):
 
 
 class Bot_Listener(object):
-    def __init__(self,input_token,username_list,input_timeprovider,input_signaller,input_logger=None):
+    def __init__(self,input_token,input_allowed_TLS_algorithms,username_list,input_timeprovider,input_signaller,input_logger=None):
         self.active_logger=input_logger
         self.request_exit=threading.Event()
         self.request_exit.clear()
@@ -1137,7 +920,7 @@ class Bot_Listener(object):
         self.user_messages={}
         for username in self.listen_users:
             self.user_messages[username]=[]
-        self.bot_handle=Telegram_Bot(input_token)
+        self.bot_handle=Telegram_Bot(input_token,input_allowed_TLS_algorithms)
         return
 
     def log(self,input_text):
@@ -1297,9 +1080,8 @@ class Bot_Listener(object):
 
 
 class User_Message_Handler(object):
-    def __init__(self,input_token,input_root,input_user,input_write,input_blacklisted_paths,input_listener_service,input_timeprovider,input_7zip_task_handler,input_logger=None):
-        global PATH_WINDOWS_SYSTEM32
-
+    def __init__(self,input_path_system32,input_token,input_allowed_TLS_algorithms,input_root,input_user,input_write,input_blacklisted_paths,input_listener_service,input_timeprovider,input_7zip_task_handler,input_logger=None):
+        input_path_system32=input_path_system32
         self.active_logger=input_logger
         self.active_7zip_task_handler=input_7zip_task_handler
         self.working_thread=threading.Thread(target=self.work_loop)
@@ -1327,10 +1109,10 @@ class User_Message_Handler(object):
         self.active_time_provider=input_timeprovider
         self.processing_messages=threading.Event()
         self.processing_messages.clear()
-        self.bot_handle=Telegram_Bot(input_token)
+        self.bot_handle=Telegram_Bot(input_token,input_allowed_TLS_algorithms)
 
         if self.allowed_root==u"*":
-            self.set_last_folder(PATH_WINDOWS_SYSTEM32[0].upper()+u":\\")
+            self.set_last_folder(input_path_system32[0].upper()+u":\\")
         else:
             self.set_last_folder(self.allowed_root)
             self.blacklisted_paths=input_blacklisted_paths
@@ -2557,6 +2339,8 @@ class User_Console(object):
 
 
 class UI(object):
+    qtmsg_blacklist_startswith=["WARNING: QApplication was not created in the main()","QSystemTrayIcon::setVisible: No Icon set","OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error"]
+
     def __init__(self,input_colorscheme,input_fonts,input_UI_scaling_modifier,input_icons_b64,input_signaller,input_minimized,input_logger=None):
         self.colorscheme=json.loads(json.dumps(input_colorscheme))
         self.fonts=json.loads(json.dumps(input_fonts))
@@ -2583,9 +2367,7 @@ class UI(object):
 
     @staticmethod
     def qtmsg_handler(msg_type,msg_log_context,msg_string):
-        global QTMSG_BLACKLIST_STARTSWITH
-
-        for entry in QTMSG_BLACKLIST_STARTSWITH:
+        for entry in UI.qtmsg_blacklist_startswith:
             if msg_string.startswith(entry):
                 return
 
@@ -3280,6 +3062,440 @@ class Main_Window(QMainWindow):
         self.has_quit.set()
         return
 
+class FileBot(object):
+    user_token_max_length_bytes=256
+    user_entry_line_max_length_bytes=768
+    banned_TLS_algorithms=["ANY","SHA1","DHE","CHACHA20-POLY1305","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
+
+    def __init__(self,input_working_dir,input_max_7zip_tasks_per_user,input_color_scheme,input_fonts,input_UI_scale_modifier,input_start_minimized,input_log_to_stdout):
+        global __author__
+        global __version__
+        global MAX_BOT_USERS_BY_ARCHITECTURE
+
+        address_size=ctypes.sizeof(ctypes.c_voidp)
+        if address_size==4:
+            self.cpu_architecture="32"
+        elif address_size==8:
+            self.cpu_architecture="64"
+        else:
+            raise Exception("FileBot cannot instantiate on this CPU architecture.")
+
+        self.path_system32=None
+        for system_variable in ["WINDIR","SYSTEMROOT"]:
+            self.path_system32=terminate_with_backslash(os.path.join(os.environ[system_variable],u"System32").strip().replace("/","\\"))
+            break
+        if self.path_system32 is None:
+            raise Exception("Could not obtain SYSTEM32 folder path.")
+
+        self.process_id=os.getpid()
+        self.current_process_handle=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,self.process_id)
+        self.logger=None
+        self.bot_user_limit=MAX_BOT_USERS_BY_ARCHITECTURE[self.cpu_architecture]
+        self.working_dir=terminate_with_backslash(input_working_dir.strip().replace("/","\\"))
+        self.allowed_TLS_algorithms=self.get_TLS_allowed_algorithms(FileBot.banned_TLS_algorithms)
+        self.max_7zip_tasks_per_user=input_max_7zip_tasks_per_user
+        self.color_scheme=input_color_scheme
+        self.fonts=input_fonts
+        self.UI_scale_modifier=input_UI_scale_modifier
+        self.start_minimized=input_start_minimized
+        self.log_to_stdout=input_log_to_stdout
+        return
+
+    def RUN(self):
+        global PENDING_ACTIVITY_HEARTBEAT_SECONDS
+
+        if threading.current_thread().__class__.__name__!="_MainThread":
+            raise Exception("FileBot needs to be run from the main thread.")
+
+        self.logger=Logger(os.path.join(self.working_dir,u"log.txt"))
+        self.logger.LOG_TO_STDOUT(self.log_to_stdout)
+
+        UI_Signal=UI_Signaller()
+        self.logger.ATTACH_SIGNALLER(UI_Signal)
+
+        app_icons_b64={"default":Get_B64_Resource("icons/default"),"deactivated":Get_B64_Resource("icons/deactivated"),"busy":Get_B64_Resource("icons/busy")}
+        active_UI=UI(self.color_scheme,self.fonts,self.UI_scale_modifier,app_icons_b64,UI_Signal,self.start_minimized,self.logger)
+        del app_icons_b64
+        app_icons_b64=None
+
+        while active_UI.IS_READY()==False:
+            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+
+        self.logger.ACTIVATE()
+
+        self.log(u"==================================== FileBot ====================================")
+        self.log(u"Author: "+str(__author__))
+        self.log(u"Version: "+str(__version__))
+        self.log(u"=================================================================================")
+        self.log(u"7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/\n")
+        self.log(u"\n\nREQUIREMENTS:\n"+\
+            u"-bot token in \"token.txt\"\n"+\
+            u"-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n"+\
+            u"Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+\
+            u"If a user has no username, you can add them via first name and last name with a \"#\" before each. EXAMPLE:\n"+\
+            u"FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+\
+            u"Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n"+\
+            u"Note that users without \"*\" home path will be disallowed from accessing FileBot's running folder even if it's a valid subfolder.\n\n"+\
+            u"EXAMPLE ENTRIES:\n"+\
+            u"JohnDoe|C:\\MySharedFiles\n"+\
+            u"TrustedUser|>*\n\n"+\
+            u"A maximum of "+str(self.bot_user_limit)+u" users are supported.\n\n"+\
+            u"COMMAND LINE:\n"+\
+            u"/minimized: starts the application minimized to system tray\n"+\
+            u"/stdout: output log to stdout in addition to window\n")
+
+        self.log(u"Process ID is "+str(self.process_id)+u". CPU architecture is "+self.cpu_architecture+u"-bit.")
+
+        fatal_error=False
+        collect_bot_token=""
+        collect_user_file_entries=[]
+        collect_allowed_users=[]
+
+        try:
+            file_handle=open(os.path.join(self.working_dir,u"token.txt"),"rb")
+            collect_bot_token=file_handle.read(FileBot.user_token_max_length_bytes)
+            file_handle.close()
+        except:
+            self.log(u"ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
+            fatal_error=True
+
+        if fatal_error==False:
+            collect_bot_token=self.bot_token_from_bytes(collect_bot_token)
+            if collect_bot_token=="":
+                self.log(u"ERROR: Make sure the token is correctly written in \"token.txt\".")
+                fatal_error=True
+
+        if fatal_error==False:
+            file_handle=None
+            try:
+                file_handle=open(os.path.join(self.working_dir,u"userlist.txt"),"rb")
+                all_lines=str(file_handle.read(FileBot.user_entry_line_max_length_bytes*self.bot_user_limit),"utf8").split(u"\n")
+                file_handle.close()
+                file_handle=None
+                for line in all_lines:
+                    line=line.strip()
+                    if line!=u"":
+                        collect_user_file_entries+=[line]
+            except:
+                if file_handle is not None:
+                    try:
+                        file_handle.close()
+                    except:
+                        file_handle=None
+                self.log(u"ERROR: Could not obtain any valid user entries from \"userlist.txt\".")
+                fatal_error=True
+
+        if fatal_error==False:
+            for entry in collect_user_file_entries:
+                new_user=self.user_entry_from_string(entry)
+                if new_user["error_message"]==u"":
+                    collect_allowed_users+=[new_user]
+                    if len(collect_allowed_users)==self.bot_user_limit:
+                        break
+                else:
+                    self.log(u"WARNING: "+new_user["error_message"])
+
+            collect_user_file_entries=[]
+            if len(collect_allowed_users)>0:
+                self.log(u"Number of users to listen for: "+str(len(collect_allowed_users))+u".")
+            else:
+                self.log(u"ERROR: There were no valid user entries to add.")
+                fatal_error=True
+
+        if fatal_error==False:
+            try:
+                active_7ZIP_handler=Task_Handler_7ZIP(self.path_system32,self.working_dir,Get_B64_Resource("binaries/7zipx"+self.cpu_architecture),self.max_7zip_tasks_per_user,self.logger)
+            except:
+                self.log(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
+                fatal_error=True
+
+        if fatal_error==False:
+            active_time_provider=Time_Provider(self.allowed_TLS_algorithms)
+            active_time_provider.ADD_SUBSCRIBER(UI_Signal)
+
+            self.log(u"Starting 7-ZIP Task Handler...")
+            active_7ZIP_handler.START()
+
+            initial_time_sync_failed_once=False
+            self.log(u"Performing initial time synchronization via Internet...")
+            sync_result={"success":False}
+            while sync_result["success"]==False and active_UI.IS_RUNNING()==True:
+                sync_result=active_time_provider.SYNC()
+                if initial_time_sync_failed_once==False:
+                    if sync_result["success"]==False:
+                        initial_time_sync_failed_once=True
+                        self.log(u"Initial time synchronization failed. Will keep trying...")
+
+            if sync_result["success"]==True:
+                self.log(u"Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
+
+                user_handle_instances=[]
+
+                collect_allowed_usernames=[]
+                for sender in collect_allowed_users:
+                    collect_allowed_usernames+=[sender["username"]]
+
+                active_bot_listener=Bot_Listener(collect_bot_token,self.allowed_TLS_algorithms,collect_allowed_usernames,active_time_provider,UI_Signal,self.logger)
+                self.log(u"Starting Bot Listener...")
+                active_bot_listener.START()
+
+                while active_bot_listener.IS_READY()==False and active_UI.IS_RUNNING()==True:
+                    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
+       
+                if active_UI.IS_RUNNING()==True:
+
+                    self.log(u"User message handler(s) starting up...")
+                    for sender in collect_allowed_users:
+                        user_handle_instances+=[User_Message_Handler(self.path_system32,collect_bot_token,self.allowed_TLS_algorithms,sender["home"],sender["username"],sender["allow_write"],[environment_info["working_dir"]],active_bot_listener,active_time_provider,active_7ZIP_handler,self.logger)]
+
+                    request_sync_time=threading.Event()
+                    request_sync_time.clear()
+
+                    active_user_console=User_Console(user_handle_instances,UI_Signal,active_7ZIP_handler,request_sync_time,self.logger)
+                    self.log(u"Starting User Console...")
+                    active_user_console.START()
+
+                    self.log(u"Startup complete. Waiting for UI thread to finish...")
+                    self.main_loop(active_time_provider,active_UI,request_sync_time)
+                    self.log(u"Left UI thread waiting loop.")
+
+                    active_time_provider.REMOVE_SUBSCRIBER(UI_Signal)
+
+                    self.log(u"Requesting stop to User Console...")
+                    active_user_console.REQUEST_STOP()
+
+                    active_user_console.CONCLUDE()
+                    del active_user_console
+                    self.log(u"Confirm User Console exit.")
+
+                self.log(u"Requesting stop to 7-ZIP Task Handler...")
+                active_7ZIP_handler.REQUEST_STOP()
+
+                self.log(u"Requesting stop to Bot Listener...")
+                active_bot_listener.REQUEST_STOP()
+
+                active_bot_listener.CONCLUDE()
+                del active_bot_listener
+                self.log(u"Confirm Bot Listener exit.")
+
+                active_7ZIP_handler.CONCLUDE()
+                del active_7ZIP_handler
+                self.log(u"Confirm 7-ZIP Task Handler exit.")
+
+                while len(user_handle_instances)>0:
+                    del user_handle_instances[0]
+
+        else:
+
+            self.log(u"The program can now be closed.")
+            UI_Signal.SEND_EVENT("close_standby")
+
+        self.logger.DETACH_SIGNALLER()
+        active_UI.CONCLUDE()
+        del active_UI
+        self.log(u"Confirm UI exit.")
+
+        self.log(u"FileBot has finished.")
+        self.logger.DEACTIVATE()
+        del self.logger
+        self.logger=None
+
+        self.flush_std_buffers()
+        return
+
+    def log(self,input_text):
+        if self.logger is not None:
+            self.logger.LOG("MAINTHRD",input_text)
+        return
+
+    def flush_std_buffers(self):
+        sys.stdout.flush()
+        sys.stderr.flush()
+        return
+
+    def bot_token_from_bytes(self,input_bytes):
+        retval=input_bytes
+        try:
+            retval=str(retval,"utf8").strip()
+        except:
+            return ""
+        if len(retval)==0 or len(retval)>64:
+            return ""
+        for c in retval:
+            if c not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_:":
+                return ""
+        if retval.count(":")>1:
+            return ""
+        if len(retval)==0 or len(retval)>64:
+            return ""
+        return retval
+    
+    def user_entry_from_string(self,input_string):
+        retval={"username":u"","home":u"","allow_write":False,"error_message":""}
+
+        segments=[]
+
+        try:
+            segments=input_string.split("|")
+            for i in range(len(segments)):
+                segments[i]=segments[i].strip()
+
+            if len(segments)==1:
+                raise ValueError(u"Home path was not present.")
+            elif len(segments)>2:
+                raise ValueError(u"Wrong number of \"|\"-separated characters.")
+
+            retval["username"]=segments[0]
+            retval["home"]=segments[1].strip()
+            retval["allow_write"]=False
+
+            if retval["username"].count(u"#")!=2 and retval["username"].count(u"#")!=0:
+                raise ValueError(u"Username contained an incorrect number of \"#\" characters.")
+
+            username_nohashes=retval["username"].replace(u"#",u"")
+
+            if username_nohashes==u"":
+                raise ValueError("Username was empty.")
+
+            if username_nohashes[0] in u"_0123456789":
+                raise ValueError(u"Username cannot begin with a number or underscore.")
+
+            for c in username_nohashes:
+                if c.lower() not in u"_0123456789abcdefghijklmnopqrstuvwxyz":
+                    raise ValueError(u"Username contains invalid characters.")
+
+            if retval["home"].startswith(u">")==True:
+                retval["allow_write"]=True
+                retval["home"]=retval["home"][1:]
+            if retval["home"]==u"":
+                raise ValueError("Home path was empty.")
+            retval["home"]=retval["home"].replace(u"/",u"\\")
+            if retval["home"]!=u"*":
+                retval["home"]=terminate_with_backslash(retval["home"])
+
+            for c in retval["home"]:
+                if c in u"|<>?":
+                    raise ValueError(u"Home path contains invalid characters.")
+
+            if (retval["home"].count(u"*")>1 and len(retval["home"])>1) or retval["home"].count(u":")>1 or retval["home"].startswith(u"\\")==True:
+                raise ValueError(u"Home path contains invalid characters.")
+
+            if u"\\.\\" in retval["home"] or u"\\..\\" in retval["home"] or u"\\...\\" in retval["home"] or retval["home"].startswith(u"\\\\")==True or len(retval["home"])>255:
+                raise ValueError(u"Home path format is invalid.")
+
+        except:
+            return {"error_message":u"User entry \""+input_string+u"\" was not validly formatted: "+str(sys.exc_info()[0])+u" "+str(sys.exc_info()[1]),"username":u"","home":u"","allow_write":False}
+
+        return retval
+
+    def get_TLS_allowed_algorithms(self,input_banned_TLS_algorithms):
+        cipherlist=ssl.create_default_context().get_ciphers()
+        banned_algorithms=[i.upper() for i in input_banned_TLS_algorithms]
+    
+        cipherstring=""
+        for cipher in cipherlist:
+            if "digest" in cipher and "auth" in cipher and "symmetric" in cipher and "kea" in cipher:
+                ciphername=cipher["name"]
+    
+                if cipher["digest"] is not None:
+                    cipher_digest=cipher["digest"].upper()
+                else:
+                    cipher_digest=""
+    
+                if cipher["auth"] is not None:
+                    cipher_auth=cipher["auth"].upper()
+                    if cipher_auth.startswith("AUTH-"):
+                        cipher_auth=cipher_auth[len("AUTH-"):]
+                else:
+                    cipher_auth=""
+    
+                if cipher["symmetric"] is not None:
+                    cipher_symmetric=cipher["symmetric"].upper()
+                else:
+                    cipher_symmetric=""
+    
+                if cipher["kea"] is not None:
+                    cipher_kea=cipher["kea"].upper()
+                    if cipher_kea.startswith("KX-"):
+                        cipher_kea=cipher_kea[len("KX-"):]
+                else:
+                    cipher_kea=""
+    
+                digest_ok=False
+                auth_ok=False
+                symmetric_ok=False
+                kea_ok=False
+    
+                if cipher_digest!="":
+                    if cipher_digest not in banned_algorithms:
+                        digest_ok=True
+                else:
+                    digest_ok=True
+    
+                if digest_ok==True:            
+                    if cipher_auth!="":
+                        if cipher_auth not in banned_algorithms:
+                            auth_ok=True
+                    else:
+                        auth_ok=True
+    
+                if digest_ok==True and auth_ok==True:
+                    if cipher_symmetric!="":
+                        if cipher_symmetric not in banned_algorithms:
+                            symmetric_ok=True
+                    else:
+                        symmetric_ok=True
+    
+                if digest_ok==True and auth_ok==True and symmetric_ok==True:
+                    if cipher_kea!="":
+                        if cipher_kea not in banned_algorithms:
+                            kea_ok=True
+                    else:
+                        kea_ok=True
+    
+                if digest_ok==True and auth_ok==True and symmetric_ok==True and kea_ok==True:
+                    cipherstring+=":"+ciphername
+    
+        if cipherstring.startswith(":")==True:
+            cipherstring=cipherstring[1:]
+    
+        return cipherstring
+
+    def main_loop(self,input_timesync_object,input_UI_object,input_timesync_request_event):
+        global MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS
+        global MAINTHREAD_HEARTBEAT_SECONDS
+        global SERVER_TIME_RESYNC_INTERVAL_SECONDS
+
+        priority_check_interval_milliseconds=MAINTHREAD_IDLE_PRIORITY_CHECK_SECONDS*1000
+        last_process_priority_check=GetTickCount64()-priority_check_interval_milliseconds
+        last_server_time_check=datetime.datetime.utcnow()
+
+        while input_UI_object.IS_RUNNING()==True:
+            time.sleep(MAINTHREAD_HEARTBEAT_SECONDS)
+
+            self.flush_std_buffers()
+
+            if GetTickCount64()-last_process_priority_check>=priority_check_interval_milliseconds:
+                try:
+                    if win32process.GetPriorityClass(self.current_process_handle)!=win32process.IDLE_PRIORITY_CLASS:
+                        win32process.SetPriorityClass(self.current_process_handle,win32process.IDLE_PRIORITY_CLASS)
+                        self.log(u"Idle process priority set.")
+                except:
+                    self.log(u"Error managing process priority.")
+                last_process_priority_check=GetTickCount64()
+
+            if abs((datetime.datetime.utcnow()-last_server_time_check).total_seconds())>=SERVER_TIME_RESYNC_INTERVAL_SECONDS or input_timesync_request_event.is_set()==True:
+                self.log(u"Performing time synchronization via Internet...")
+                sync_result=input_timesync_object.SYNC()
+                if sync_result["success"]==True:
+                    self.log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
+                else:
+                    self.log(u"Time synchronization failed.")
+                input_timesync_request_event.clear()
+                last_server_time_check=datetime.datetime.utcnow()
+
+        return
+
 
 """
 MAIN
@@ -3290,12 +3506,9 @@ if Versions_Str_Equal_Or_Less(PYQT5_MAX_SUPPORTED_COMPILE_VERSION,PYQT_VERSION_S
     sys.stderr.flush()
 
 environment_info=Get_Runtime_Environment()
-PATH_WINDOWS_SYSTEM32=terminate_with_backslash(environment_info["system32"])
-TLS_ALLOWED_ALGORITHMS=Get_TLS_Allowed_Algorithms()
-CURRENT_PROCESS_HANDLE=ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS,True,environment_info["process_id"])
 
 argument_start_minimized=False
-argument_stdout_output=False
+argument_log_to_stdout=False
 
 for argument in environment_info["arguments"]:
     argument=argument.lower().strip()
@@ -3303,201 +3516,10 @@ for argument in environment_info["arguments"]:
     if argument==u"/minimized":
         argument_start_minimized=True
     elif argument==u"/stdout":
-        argument_stdout_output=True
+        argument_log_to_stdout=True
 
 if environment_info["running_from_source"]==True:
-    argument_stdout_output=True
+    argument_log_to_stdout=True
 
-Bot_User_Limit=MAX_BOT_USERS_BY_ARCHITECTURE[environment_info["architecture"]]
-
-LOGGER=Logger(os.path.join(environment_info["working_dir"],u"log.txt"))
-LOGGER.SET_STDOUT(argument_stdout_output)
-
-UI_Signal=UI_Signaller()
-LOGGER.ATTACH_SIGNALLER(UI_Signal)
-Active_UI=UI(COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,APP_ICONS_B64,UI_Signal,argument_start_minimized,LOGGER)
-del APP_ICONS_B64
-APP_ICONS_B64=None
-
-while Active_UI.IS_READY()==False:
-    time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
-
-LOGGER.ACTIVATE()
-
-log(u"==================================== FileBot ====================================")
-log(u"Author: "+str(__author__))
-log(u"Version: "+str(__version__))
-log(u"=================================================================================")
-log(u"7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/\n")
-log(u"\n\nREQUIREMENTS:\n"+\
-    u"-bot token in \"token.txt\"\n"+\
-    u"-users list in \"userlist.txt\" with one entry per line, formatted as such: <USERNAME>|<HOME PATH>\n"+\
-    u"Begin home path with \">\" to allow writing. To allow access to all drives, set the path to \"*\".\n"+\
-    u"If a user has no username, you can add them via first name and last name with a \"#\" before each. EXAMPLE:\n"+\
-    u"FIRST NAME: John LAST NAME: Doe -> #John#Doe\n"+\
-    u"Note that this method only works if the user has no username, and that a \"#\" is required even if the last name is empty.\n"+\
-    u"Note that users without \"*\" home path will be disallowed from accessing FileBot's running folder even if it's a valid subfolder.\n\n"+\
-    u"EXAMPLE ENTRIES:\n"+\
-    u"JohnDoe|C:\\MySharedFiles\n"+\
-    u"TrustedUser|>*\n\n"+\
-    u"A maximum of "+str(Bot_User_Limit)+u" users are supported.\n\n"+\
-    u"COMMAND LINE:\n"+\
-    u"/minimized: starts the application minimized to system tray\n"+\
-    u"/stdout: output log to stdout in addition to window\n")
-
-log(u"Process ID is "+str(environment_info["process_id"])+u". FileBot architecture is "+environment_info["architecture"]+u"-bit.")
-
-fatal_error=False
-collect_bot_token=""
-collect_user_file_entries=[]
-collect_allowed_users=[]
-
-try:
-    file_handle=open(os.path.join(environment_info["working_dir"],u"token.txt"),"rb")
-    collect_bot_token=file_handle.read(USER_TOKEN_MAX_LENGTH_BYTES)
-    file_handle.close()
-except:
-    log(u"ERROR: Make sure the file \"token.txt\" exists and contains the bot token.")
-    fatal_error=True
-
-if fatal_error==False:
-    collect_bot_token=Bot_Token_From_Bytes(collect_bot_token)
-    if collect_bot_token=="":
-        log(u"ERROR: Make sure the token is correctly written in \"token.txt\".")
-        fatal_error=True
-
-if fatal_error==False:
-    file_handle=None
-    try:
-        file_handle=open(os.path.join(environment_info["working_dir"],u"userlist.txt"),"rb")
-        all_lines=str(file_handle.read(USER_ENTRY_LINE_MAX_LENGTH_BYTES*Bot_User_Limit),"utf8").split(u"\n")
-        file_handle.close()
-        file_handle=None
-        for line in all_lines:
-            line=line.strip()
-            if line!=u"":
-                collect_user_file_entries+=[line]
-    except:
-        if file_handle is not None:
-            try:
-                file_handle.close()
-            except:
-                file_handle=None
-        log(u"ERROR: Could not obtain any valid user entries from \"userlist.txt\".")
-        fatal_error=True
-
-if fatal_error==False:
-    for entry in collect_user_file_entries:
-        new_user=User_Entry_From_String(entry)
-        if new_user["error_message"]==u"":
-            collect_allowed_users+=[new_user]
-            if len(collect_allowed_users)==Bot_User_Limit:
-                break
-        else:
-            log(u"WARNING: "+new_user["error_message"])
-
-    collect_user_file_entries=[]
-    if len(collect_allowed_users)>0:
-        log(u"Number of users to listen for: "+str(len(collect_allowed_users))+u".")
-    else:
-        log(u"ERROR: There were no valid user entries to add.")
-        fatal_error=True
-
-if fatal_error==False:
-    try:
-        Active_7ZIP_Handler=Task_Handler_7ZIP(environment_info["working_dir"],Get_B64_Resource("binaries/7zipx"+environment_info["architecture"]),MAX_7ZIP_TASKS_PER_USER,LOGGER)
-    except:
-        log(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
-        fatal_error=True
-
-if fatal_error==False:
-    Active_Time_Provider=Time_Provider()
-    Active_Time_Provider.ADD_SUBSCRIBER(UI_Signal)
-
-    log(u"Starting 7-ZIP Task Handler...")
-    Active_7ZIP_Handler.START()
-
-    initial_time_sync_failed_once=False
-    log(u"Performing initial time synchronization via Internet...")
-    sync_result={"success":False}
-    while sync_result["success"]==False and Active_UI.IS_RUNNING()==True:
-        sync_result=Active_Time_Provider.SYNC()
-        if initial_time_sync_failed_once==False:
-            if sync_result["success"]==False:
-                initial_time_sync_failed_once=True
-                log(u"Initial time synchronization failed. Will keep trying...")
-
-    if sync_result["success"]==True:
-        log(u"Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
-
-        UserHandleInstances=[]
-
-        collect_allowed_usernames=[]
-        for sender in collect_allowed_users:
-            collect_allowed_usernames+=[sender["username"]]
-
-        Active_BotListener=Bot_Listener(collect_bot_token,collect_allowed_usernames,Active_Time_Provider,UI_Signal,LOGGER)
-        log(u"Starting Bot Listener...")
-        Active_BotListener.START()
-
-        while Active_BotListener.IS_READY()==False and Active_UI.IS_RUNNING()==True:
-            time.sleep(PENDING_ACTIVITY_HEARTBEAT_SECONDS)
-
-        if Active_UI.IS_RUNNING()==True:
-
-            log(u"User message handler(s) starting up...")
-            for sender in collect_allowed_users:
-                UserHandleInstances+=[User_Message_Handler(collect_bot_token,sender["home"],sender["username"],sender["allow_write"],[environment_info["working_dir"]],Active_BotListener,Active_Time_Provider,Active_7ZIP_Handler,LOGGER)]
-
-            request_sync_time=threading.Event()
-            request_sync_time.clear()
-
-            Active_User_Console=User_Console(UserHandleInstances,UI_Signal,Active_7ZIP_Handler,request_sync_time,LOGGER)
-            log(u"Starting User Console...")
-            Active_User_Console.START()
-
-            log(u"Startup complete. Waiting for UI thread to finish...")
-            Main_Wait_Loop(Active_Time_Provider,Active_UI,request_sync_time)
-            log(u"Left UI thread waiting loop.")
-
-            Active_Time_Provider.REMOVE_SUBSCRIBER(UI_Signal)
-
-            log(u"Requesting stop to User Console...")
-            Active_User_Console.REQUEST_STOP()
-
-            Active_User_Console.CONCLUDE()
-            del Active_User_Console
-            log(u"Confirm User Console exit.")
-
-        log(u"Requesting stop to 7-ZIP Task Handler...")
-        Active_7ZIP_Handler.REQUEST_STOP()
-
-        log(u"Requesting stop to Bot Listener...")
-        Active_BotListener.REQUEST_STOP()
-
-        Active_BotListener.CONCLUDE()
-        del Active_BotListener
-        log(u"Confirm Bot Listener exit.")
-
-        Active_7ZIP_Handler.CONCLUDE()
-        del Active_7ZIP_Handler
-        log(u"Confirm 7-ZIP Task Handler exit.")
-
-        while len(UserHandleInstances)>0:
-            del UserHandleInstances[0]
-
-else:
-
-    log(u"The program can now be closed.")
-    UI_Signal.SEND_EVENT("close_standby")
-
-LOGGER.DETACH_SIGNALLER()
-Active_UI.CONCLUDE()
-del Active_UI
-log(u"Confirm UI exit.")
-
-log(u"Main thread exit; program has finished.")
-LOGGER.DEACTIVATE()
-del LOGGER
-
-Flush_Std_Buffers()
+FileBotInstance=FileBot(environment_info["working_dir"],MAX_7ZIP_TASKS_PER_USER,COLOR_SCHEME,FONTS,UI_SCALE_MODIFIER,argument_start_minimized,argument_log_to_stdout)
+FileBotInstance.RUN()
