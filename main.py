@@ -31,7 +31,7 @@ def Get_B64_Resource(input_path):
 
 PYQT5_MAX_SUPPORTED_COMPILE_VERSION="5.12.2"
 
-MAX_BOT_USERS_BY_ARCHITECTURE={"32":36,"64":100}
+MAX_BOT_USERS_BY_CPU_ARCHITECTURE={"32":36,"64":100}
 
 TELEGRAM_API_REQUEST_TIMEOUT_SECONDS=4
 TELEGRAM_API_MAX_GLOBAL_IMS=30
@@ -3070,7 +3070,7 @@ class FileBot(object):
     def __init__(self,input_working_dir,input_max_7zip_tasks_per_user,input_color_scheme,input_fonts,input_UI_scale_modifier,input_start_minimized,input_log_to_stdout):
         global __author__
         global __version__
-        global MAX_BOT_USERS_BY_ARCHITECTURE
+        global MAX_BOT_USERS_BY_CPU_ARCHITECTURE
 
         address_size=ctypes.sizeof(ctypes.c_voidp)
         if address_size==4:
@@ -3093,7 +3093,7 @@ class FileBot(object):
         self.active_time_provider=None
         self.active_UI=None
         self.request_sync_time=None
-        self.bot_user_limit=MAX_BOT_USERS_BY_ARCHITECTURE[self.cpu_architecture]
+        self.bot_user_limit=MAX_BOT_USERS_BY_CPU_ARCHITECTURE[self.cpu_architecture]
         self.working_dir=terminate_with_backslash(input_working_dir.strip().replace("/","\\"))
         self.allowed_TLS_algorithms=self.get_TLS_allowed_algorithms(FileBot.banned_TLS_algorithms)
         self.max_7zip_tasks_per_user=input_max_7zip_tasks_per_user
