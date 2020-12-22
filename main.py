@@ -1,4 +1,4 @@
-__version__="1.938"
+__version__="1.94"
 __author__=u"Searinox Navras"
 
 
@@ -2984,10 +2984,17 @@ class Main_Window(QMainWindow):
     def signal_commandfield_accepted(self,event_data):
         global UI_COMMAND_HISTORY_MAX
 
-        self.command_history+=[self.input_commandfield.text()]
-        if len(self.command_history)>UI_COMMAND_HISTORY_MAX:
-            del self.command_history[0]
-        self.command_history_index=len(self.command_history)
+        add_command=len(self.command_history)==0
+        if add_command==False:
+            if self.command_history[-1].lower().strip()!=self.input_commandfield.text().lower().strip():
+                add_command=True
+
+        if add_command==True:
+            self.command_history+=[self.input_commandfield.text()]
+            if len(self.command_history)>UI_COMMAND_HISTORY_MAX:
+                del self.command_history[0]
+            self.command_history_index=len(self.command_history)
+
         self.input_commandfield.setText(u"")
         self.input_commandfield.setFocus()
         return
@@ -3121,7 +3128,7 @@ class FileBot(object):
         if threading.current_thread().__class__.__name__!="_MainThread":
             raise Exception("FileBot needs to be run from the main thread.")
 
-        self.logger=Logger(os.path.join(self.working_dir,u"log.txt"))
+        self.logger=Logger(self.path_system32,os.path.join(self.working_dir,u"log.txt"))
         self.logger.LOG_TO_STDOUT(self.log_to_stdout)
 
         UI_Signal=UI_Signaller()
