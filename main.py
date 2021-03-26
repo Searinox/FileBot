@@ -1,4 +1,4 @@
-__version__="1.94"
+__version__="1.95"
 __author__=u"Searinox Navras"
 
 
@@ -59,6 +59,8 @@ COMMAND_CHECK_INTERVAL_ACTIVE_SECONDS=0.18
 COMMAND_CHECK_INTERVAL_MINIMIZED_SECONDS=0.4
 SERVER_TIME_RESYNC_INTERVAL_SECONDS=60*60*8
 BOT_LISTENER_THREAD_HEARTBEAT_SECONDS=0.8
+FILE_READ_ATTEMPTS_MAX=5
+FILE_READ_ATTEMPT_FAIL_RETRY_DELAY_SECONDS=0.25
 USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS=0.1
 USER_MESSAGE_HANDLER_SENDMSG_WAIT_POLLING_SECONDS=0.1
 UI_CLIPBOARD_COPY_TIMEOUT_SECONDS=1
@@ -828,11 +830,28 @@ class Telegram_Bot(object):
         raise Exception("Response error.")
 
     def Send_File(self,input_chat_id,input_file_path):
+        global FILE_READ_ATTEMPT_FAIL_RETRY_DELAY_SECONDS
+        global FILE_READ_ATTEMPTS_MAX
+
         if self.is_stopped.is_set()==True:
             return "Bot is stopped."
 
+        file_open_attempts=0
+        open_success=False
+
+        while open_success==False and file_open_attempts<FILE_READ_ATTEMPTS_MAX and self.is_stopped.is_set()==False:
+            try:
+                file_handle=open(input_file_path,"rb",buffering=0)
+                open_success=True
+            except:
+                file_open_attempts+=1
+                if file_open_attempts<FILE_READ_ATTEMPTS_MAX and self.is_stopped.is_set()==False:
+                    time.sleep(FILE_READ_ATTEMPT_FAIL_RETRY_DELAY_SECONDS)
+
+        if self.is_stopped()==True or open_success==False:
+            return "Access error."
+
         try:
-            file_handle=open(input_file_path,"rb",buffering=0)
             result=self.file_upload_from_handle(input_chat_id,file_handle)
             file_handle.close()
             return result
@@ -3523,6 +3542,7 @@ class FileBot(object):
 """
 MAIN
 """
+
 
 if Versions_Str_Equal_Or_Less(PYQT5_MAX_SUPPORTED_COMPILE_VERSION,PYQT_VERSION_STR)==False:
     sys.stderr.write(u"WARNING: PyQt5 version("+PYQT_VERSION_STR+u") is higher than the maximum supported version for compiling("+PYQT5_MAX_SUPPORTED_COMPILE_VERSION+u"). The application may run off source code but will fail to compile.\n")
