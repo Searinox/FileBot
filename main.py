@@ -784,9 +784,7 @@ class Telegram_Bot(object):
                 return "File too big."
             input_file_handle.seek(0,0)
             file_name=os.path.basename(input_file_handle.name)
-            with mmap.mmap(input_file_handle.fileno(),length=0,access=mmap.ACCESS_READ) as file_mmap_contents:
-                response=self.request_pool.request(method="POST",fields={"chat_id":input_chat_id,"document":(file_name,file_mmap_contents)},url=self.base_web_url+"sendDocument",preload_content=True,chunked=True,timeout=self.timeout_upload)
-                file_mmap_contents.close()
+            response=self.request_pool.request(method="POST",fields={"chat_id":input_chat_id,"document":(file_name,input_file_handle.read())},url=self.base_web_url+"sendDocument",preload_content=True,chunked=True,timeout=self.timeout_upload)
             if response is None or response.status not in [200,201]:
                 return "Upload error."
         except:
@@ -837,26 +835,27 @@ class Telegram_Bot(object):
             return "Bot is stopped."
 
         file_open_attempts=0
-        open_success=False
+        file_handle=None
 
-        while open_success==False and file_open_attempts<FILE_READ_ATTEMPTS_MAX and self.is_stopped.is_set()==False:
+        while file_handle is None and file_open_attempts<FILE_READ_ATTEMPTS_MAX and self.is_stopped.is_set()==False:
             try:
                 file_handle=open(input_file_path,"rb",buffering=0)
-                open_success=True
             except:
+                file_handle=None
                 file_open_attempts+=1
                 if file_open_attempts<FILE_READ_ATTEMPTS_MAX and self.is_stopped.is_set()==False:
                     time.sleep(FILE_READ_ATTEMPT_FAIL_RETRY_DELAY_SECONDS)
 
-        if self.is_stopped()==True or open_success==False:
+        if self.is_stopped.is_set()==True or file_handle is None:
             return "Access error."
 
+        result=self.file_upload_from_handle(input_chat_id,file_handle)
         try:
-            result=self.file_upload_from_handle(input_chat_id,file_handle)
-            file_handle.close()
-            return result
+            if file_handle is not None:
+                file_handle.close()
         except:
-            return "Access error."
+            pass
+        return result
 
     def Get_File_Info(self,input_id):
         if self.is_stopped.is_set()==True:
