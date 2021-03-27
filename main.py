@@ -14,7 +14,6 @@ import json
 import threading
 import sys
 import os
-import mmap
 import shutil
 import ssl
 import urllib3
