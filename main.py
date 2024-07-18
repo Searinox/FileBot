@@ -22,7 +22,7 @@ import win32con
 import win32process
 from PyQt5.QtCore import (PYQT_VERSION_STR,QObject,pyqtSignal,QByteArray,Qt,QEvent,QTimer,QCoreApplication,qInstallMessageHandler)
 from PyQt5.QtWidgets import (QApplication,QLabel,QListView,QWidget,QSystemTrayIcon,QMenu,QLineEdit,QMainWindow,QFrame,QAbstractItemView,QGroupBox)
-from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QColor,QStandardItemModel,QStandardItem)
+from PyQt5.QtGui import (QIcon,QImage,QPixmap,QFont,QColor,QStandardItemModel,QStandardItem,QCursor,QKeySequence)
 
 def Get_B64_Resource(input_path):
     import resources_base64
@@ -157,7 +157,7 @@ def Make_TLS_Connection_Pool(input_allowed_TLS_algorithms):
 
 def terminate_with_backslash(input_string):
     if input_string.endswith(u"\\")==False:
-        return input_string+u"\\"
+        return f"{input_string}\\"
     return input_string
 
 def sanitize_path(input_path):
@@ -173,12 +173,12 @@ def OS_Uptime_Seconds():
 
 def readable_size(input_size):
     if input_size<1024:
-        return str(input_size)+" Bytes"
+        return f"{str(input_size)} Bytes"
     if input_size<1024**2:
-        return str(round(input_size/1024.0,2))+" KB"
+        return f"{str(round(input_size/1024.0,2))} KB"
     if input_size<1024**3:
-        return str(round(input_size/1024.0**2,2))+" MB"
-    return str(round(input_size/1024.0**3,2))+" GB"
+        return f"{str(round(input_size/1024.0**2,2))} MB"
+    return f"{str(round(input_size/1024.0**3,2))} GB"
 
 
 """
@@ -190,7 +190,7 @@ class ShellProcess(object):
     def __init__(self,input_path_system32,input_command):
         input_path_system32=input_path_system32
 
-        result=win32process.CreateProcess(None,u"\""+input_path_system32+u"cmd.exe\" /c \""+input_command+u" \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
+        result=win32process.CreateProcess(None,f"\"{input_path_system32}cmd.exe\" /c \"{input_command} \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
         if result:
             self.process_handle=result[0]
             self.process_ID=result[2]
@@ -219,7 +219,7 @@ class Logger(object):
         self.output_stdout.clear()
         self.active_signaller=None
         if self.logging_path!=u"":
-            ShellProcess(input_path_system32,u"\""+input_path_system32+u"compact.exe\" /a /c \""+input_log_path+u"\"").WAIT()
+            ShellProcess(input_path_system32,f"\"{input_path_system32}compact.exe\" /a /c \"{input_log_path}\"").WAIT()
         self.is_active=threading.Event()
         self.is_active.clear()
         return
@@ -286,11 +286,11 @@ class Logger(object):
             input_literal=str(source)
             source=""
         if source!="":
-            source_literal=u" ["+source_literal+u"] "
+            source_literal=f" [{source_literal}] "
         else:
             source_literal=u" "
 
-        msg=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))+source_literal+input_literal+u"\n"
+        msg=f"{str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}{source_literal}{input_literal}\n"
 
         self.log_lock.acquire()
 
@@ -406,7 +406,7 @@ class Time_Provider(object):
     def current_local_machine_time_delta_str(self):
         time_difference=round(float((datetime.datetime.utcnow()-self.origin_time).total_seconds())-self.CURRENT_SERVER_TIME(),3)
         if time_difference>0:
-            retval="+"+str(time_difference)
+            retval=f"+{str(time_difference)}"
         else:
             retval=str(time_difference)
         return retval
@@ -505,14 +505,14 @@ class Task_Handler_7ZIP(object):
         archive_filename_path=archive_filename
         archive_filename=archive_filename.replace(u":",u"")
 
-        zip_command=u"\""+self.path_7zip_bin+u"\" a -mx9 -t7z \""+archive_filename+u".7z.TMP\" \""+archive_filename_path+u"\""
-        folder_command=u"cd/ & cd /d \""+folder_path+u"\""
-        rename_command=u"ren \""+archive_filename+u".7z.TMP\" \""+archive_filename+u".7z\""
-        prompt_commands=folder_command+u" & "+zip_command+u" & "+rename_command
+        zip_command=f"\"{self.path_7zip_bin}\" a -mx9 -t7z \"{archive_filename}.7z.TMP\" \"{archive_filename_path}\""
+        folder_command=f"cd/ & cd /d \"{folder_path}\""
+        rename_command=f"ren \"{archive_filename}.7z.TMP\" \"{archive_filename}.7z\""
+        prompt_commands=f"{folder_command} & {zip_command} & {rename_command}"
         folder_path=terminate_with_backslash(folder_path)
         full_target=folder_path+archive_filename.lower()
 
-        if os.path.exists(full_target+u".7z")==False:
+        if os.path.exists(f"{full_target}.7z")==False:
             self.lock_instances_7zip.acquire()
             user_task_total=0
             for instance in self.instances_7zip:
@@ -526,7 +526,7 @@ class Task_Handler_7ZIP(object):
                 return {"result":"ERROR","full_target":u""}
             try:
                 new_process=ShellProcess(self.path_system32,prompt_commands)
-                self.instances_7zip+=[{"process":new_process,"temp_file":full_target+u".7z.TMP","user":originating_user,"new":True}]
+                self.instances_7zip+=[{"process":new_process,"temp_file":f"{full_target}.7z.TMP","user":originating_user,"new":True}]
                 self.lock_instances_7zip.release()
 
                 return {"result":"CREATED","full_target":full_target}
@@ -599,14 +599,14 @@ class Task_Handler_7ZIP(object):
         for i in reversed(range(len(self.instances_7zip))):
             if self.instances_7zip[i]["new"]==True:
                 self.instances_7zip[i]["new"]=False
-                self.log(u"Task with PID="+str(self.instances_7zip[i]["process"].PID())+u" TEMP=\""+self.instances_7zip[i]["temp_file"]+u"\" has been added.")
+                self.log(f"Task with PID={str(self.instances_7zip[i]['process'].PID())} TEMP=\"{self.instances_7zip[i]['temp_file']}\" has been added.")
             still_running=True
             try:
                 still_running=self.instances_7zip[i]["process"].IS_RUNNING()
             except:
                 pass
             if still_running==False:
-                self.log(u"Task with PID="+str(self.instances_7zip[i]["process"].PID())+u" TEMP=\""+self.instances_7zip[i]["temp_file"]+u"\" has finished.")
+                self.log(f"Task with PID={str(self.instances_7zip[i]['process'].PID())} TEMP=\"{self.instances_7zip[i]['temp_file']}\" has finished.")
                 del self.instances_7zip[i]
 
         self.lock_instances_7zip.release()
@@ -642,8 +642,8 @@ class Task_Handler_7ZIP(object):
                         break
 
             if terminate==True:
-                self.log(u"Terminating ongoing 7-ZIP batch with PID="+str(get_PID)+u" and temporary file \""+self.instances_7zip[i]["temp_file"].lower()+u"\".")
-                taskkill_list+=[{"process":ShellProcess(self.path_system32,u"\""+self.path_system32+u"taskkill.exe\" /f /t /pid "+str(get_PID)),"file":self.instances_7zip[i]["temp_file"]}]
+                self.log(f"Terminating ongoing 7-ZIP batch with PID={str(get_PID)} and temporary file \"{self.instances_7zip[i]['temp_file'].lower()}\".")
+                taskkill_list+=[{"process":ShellProcess(self.path_system32,f"\"{self.path_system32}taskkill.exe\" /f /t /pid {str(get_PID)}"),"file":self.instances_7zip[i]["temp_file"]}]
                 del self.instances_7zip[i]
                 terminated_total+=1
 
@@ -724,8 +724,8 @@ class Telegram_Bot(object):
         self.is_stopped=threading.Event()
         self.is_stopped.clear()
         self.active_rate_limiter=None
-        self.base_web_url="https://api.telegram.org/bot"+self.bot_token+"/"
-        self.base_file_url="https://api.telegram.org/file/bot"+self.bot_token+"/"
+        self.base_web_url=f"https://api.telegram.org/bot{self.bot_token}/"
+        self.base_file_url=f"https://api.telegram.org/file/bot{self.bot_token}/"
         return
 
     def perform_web_request(self,input_method,input_url,input_args):
@@ -783,7 +783,7 @@ class Telegram_Bot(object):
                 return "File too big."
             input_file_handle.seek(0,0)
             file_name=os.path.basename(input_file_handle.name)
-            response=self.request_pool.request(method="POST",fields={"chat_id":input_chat_id,"document":(file_name,input_file_handle.read())},url=self.base_web_url+"sendDocument",preload_content=True,chunked=True,timeout=self.timeout_upload)
+            response=self.request_pool.request(method="POST",fields={"chat_id":input_chat_id,"document":(file_name,input_file_handle.read())},url=f"{self.base_web_url}sendDocument",preload_content=True,chunked=True,timeout=self.timeout_upload)
             if response is None or response.status not in [200,201]:
                 return "Upload error."
         except:
@@ -795,7 +795,7 @@ class Telegram_Bot(object):
         if self.is_stopped.is_set()==True:
             raise Exception("Bot is stopped.")
 
-        response=self.perform_web_request("GET",self.base_web_url+"getMe",None)
+        response=self.perform_web_request("GET",f"{self.base_web_url}getMe",None)
         if response["ok"]==True:
             return response["result"]
         else:
@@ -810,7 +810,7 @@ class Telegram_Bot(object):
         if self.is_stopped.is_set()==True:
             raise Exception("Bot is stopped.")
 
-        response=self.perform_web_request("GET",self.base_web_url+"getUpdates",{"offset":input_id,"allowed_updates":["message"]})
+        response=self.perform_web_request("GET",f"{self.base_web_url}getUpdates",{"offset":input_id,"allowed_updates":["message"]})
         if response["ok"]==True:
             return response["result"]
 
@@ -820,7 +820,7 @@ class Telegram_Bot(object):
         if self.is_stopped.is_set()==True:
             raise Exception("Bot is stopped.")
 
-        response=self.perform_web_request("POST",self.base_web_url+"sendMessage",{"chat_id":input_chat_id,"text":input_message})
+        response=self.perform_web_request("POST",f"{self.base_web_url}sendMessage",{"chat_id":input_chat_id,"text":input_message})
         if response["ok"]==True:
             return response["result"]
 
@@ -860,7 +860,7 @@ class Telegram_Bot(object):
         if self.is_stopped.is_set()==True:
             return None
 
-        response=self.perform_web_request("GET",self.base_web_url+"getFile",{"file_id":input_id})
+        response=self.perform_web_request("GET",f"{self.base_web_url}getFile",{"file_id":input_id})
         if response["ok"]==True:
             return response["result"]
 
@@ -992,7 +992,7 @@ class Bot_Listener(object):
 
         if self.request_exit.is_set()==False:
             self.catch_up_IDs()
-            self.log(u"Bot Listener for \""+self.name+u"\" is now active.")
+            self.log(f"Bot Listener for \"{self.name}\" is now active.")
             self.active_UI_signaller.SEND_EVENT("set_bot_name",self.name)
             self.is_ready.set()
 
@@ -1134,7 +1134,7 @@ class User_Message_Handler(object):
         self.bot_handle=Telegram_Bot(input_token,input_allowed_TLS_algorithms)
 
         if self.allowed_root==u"*":
-            self.set_last_folder(input_path_system32[0].upper()+u":\\")
+            self.set_last_folder(f"{input_path_system32[0].upper()}:\\")
         else:
             self.set_last_folder(self.allowed_root)
             self.blacklisted_paths=input_blacklisted_paths
@@ -1164,7 +1164,7 @@ class User_Message_Handler(object):
 
     def log(self,input_text):
         if self.active_logger is not None:
-            self.active_logger.LOG("MSGHNDLR",u"<"+self.account_username+u"> "+input_text)
+            self.active_logger.LOG("MSGHNDLR",f"<{self.account_username}> {input_text}")
         return
 
     def sendmsg(self,sender_id,message_text):
@@ -1230,7 +1230,7 @@ class User_Message_Handler(object):
             return input_path
         if len(retval)>2 and len(input_path)>1 and input_path[1]==":" and retval.lower().startswith("unc\\")==True:
             retval=retval[-len(input_path):]
-            retval=input_path[0].upper()+":"+retval[2:]
+            retval=f"{input_path[0].upper()}:{retval[2:]}"
         return retval
 
     def usable_path(self,newpath):
@@ -1271,7 +1271,7 @@ class User_Message_Handler(object):
         global BOT_LISTENER_THREAD_HEARTBEAT_SECONDS
         global USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS
 
-        self.log(u"User Message Handler started, home path is \""+self.allowed_root+u"\", allow writing: "+str(self.allow_writing).upper()+u".")
+        self.log(f"User Message Handler started, home path is \"{self.allowed_root}\", allow writing: {str(self.allow_writing).upper()}.")
 
         while self.request_exit.is_set()==False:
             time.sleep(USER_MESSAGE_HANDLER_THREAD_HEARTBEAT_SECONDS)
@@ -1281,7 +1281,7 @@ class User_Message_Handler(object):
                 total_new_messages=len(new_messages)
                 if total_new_messages>0:
                     self.processing_messages.set()
-                    self.log(str(total_new_messages)+u" new message(s) received.")
+                    self.log(f"{str(total_new_messages)} new message(s) received.")
                     self.process_messages(new_messages)
                     self.processing_messages.clear()
 
@@ -1385,7 +1385,7 @@ class User_Message_Handler(object):
                                     if fileperformer!=u"" and filetitle==u"":
                                         newname=fileperformer
                                     if fileperformer!=u"" and filetitle!=u"":
-                                        newname=fileperformer+u" - "+filetitle
+                                        newname=f"{fileperformer} - {filetitle}"
                                     if fileperformer==u"" and filetitle!=u"":
                                         newname=filetitle
                             except:
@@ -1395,7 +1395,7 @@ class User_Message_Handler(object):
                                 fileext=u"unknown"
                             if newname!=u"":
                                 newname+=u"-"
-                            newname+=str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))+u"."+fileext
+                            newname=f"{newname}{str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))}.{fileext}"
                             file_name=newname
                             self.process_bot_file(sender_id,m[u"audio"][u"file_id"],file_name,m[u"audio"][u"file_size"])
                         else:
@@ -1411,27 +1411,27 @@ class User_Message_Handler(object):
         if filesize<=TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES:
             foldername=self.get_last_folder()
             complete_put_path=foldername+filename
-            self.sendmsg(sender_id,u"Putting file \""+filename+u"\" at \""+foldername+u"\"...")
-            self.log(u"Receiving file \""+complete_put_path+u"\"...")
+            self.sendmsg(sender_id,f"Putting file \"{filename}\" at \"{foldername}\"...")
+            self.log(f"Receiving file \"{complete_put_path}\"...")
             if os.path.exists(complete_put_path)==False:
                 result=self.bot_handle.Get_File(file_id,complete_put_path)
                 if result=="":
-                    self.sendmsg(sender_id,u"Finished putting file \""+complete_put_path+u"\".")
+                    self.sendmsg(sender_id,f"Finished putting file \"{complete_put_path}\".")
                     self.log(u"File download complete.")
                 elif result=="Bot is stopped.":
                     return
                 else:
-                    self.sendmsg(sender_id,u"File \""+filename+u"\" could not be placed.")
+                    self.sendmsg(sender_id,f"File \"{filename}\" could not be placed.")
                     self.log(u"File download aborted due to unknown issue.")
             else:
                 if os.path.isfile(complete_put_path)==True:
-                    self.sendmsg(sender_id,u"File \""+filename+u"\" already exists at the location.")
+                    self.sendmsg(sender_id,f"File \"{filename}\" already exists at the location.")
                     self.log(u"File download aborted due to existing instance.")
                 else:
-                    self.sendmsg(sender_id,u"A folder with the name \""+filename+u"\" already exists at the location.")
+                    self.sendmsg(sender_id,f"A folder with the name \"{filename}\" already exists at the location.")
                     self.log(u"File download aborted due to conflict with existing folder.")
         else:
-            self.sendmsg(sender_id,u"File \""+filename+u"\" could not be obtained because bots are limited to file downloads of max. "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".")
+            self.sendmsg(sender_id,f"File \"{filename}\" could not be obtained because bots are limited to file downloads of max. {readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)}.")
             self.log(u"File download aborted due to size exceeding limit.")
         return
 
@@ -1443,7 +1443,7 @@ class User_Message_Handler(object):
         current_message=u""
 
         for file_listing in input_list:
-            new_entry=file_listing.strip()+u"\n"
+            new_entry=f"{file_listing.strip()}\n"
             if len(new_entry)+len(current_message)<=TELEGRAM_API_MAX_IM_SIZE_BYTES+1:
                 current_message+=new_entry
             else:
@@ -1479,25 +1479,25 @@ class User_Message_Handler(object):
                 if os.path.isfile(path):
                     if folders_only==False:
                         if name.lower().find(search)!=-1 or search==u"":
-                            filelist+=[name+u" [Size: "+readable_size(os.path.getsize(path))+u"]"]
+                            filelist+=[f"{name} [Size: {readable_size(os.path.getsize(path))}]"]
                 else:
                     if name.lower().find(search)!=-1 or search==u"":
                         folderlist+=[name]
 
             if len(folderlist)>0:
-                response+=u"<FOLDERS:>\n"
+                response=f"{response}<FOLDERS:>\n"
 
             for folder in folderlist:
-                response+=u"\n"+folder
+                response=f"{response}\n{folder}"
 
             if len(folderlist)>0:
-                response+=u"\n\n"
+                response=f"{response}\n\n"
 
             if len(filelist)>0:
-                response+=u"<FILES:>\n"
+                response=f"{response}<FILES:>\n"
 
             for filename in filelist:
-                response+=u"\n"+filename
+                response=f"{response}\n{filename}"
         except:
             response=u"<BAD_PATH>"
 
@@ -1517,10 +1517,10 @@ class User_Message_Handler(object):
         response=u""
 
         if self.allowed_root!=u"*":
-            response=u"Root folder path is \""+self.allowed_root+u"\"."
+            response=f"Root folder path is \"{self.allowed_root}\"."
         else:
             response=u"This user is allowed to access all host system drives."
-        self.log(u"Root folder path requested, which is \""+self.allowed_root+u"\".")
+        self.log(f"Root folder path requested, which is \"{self.allowed_root}\".")
 
         return response
 
@@ -1553,7 +1553,7 @@ class User_Message_Handler(object):
         else:
             folders_only=False
 
-        self.log(u"Listing requested for path \""+command_context["args"]+u"\" with search string \""+extra_search+u"\", folders only="+str(folders_only).upper()+u"...")
+        self.log(f"Listing requested for path \"{command_context['args']}\" with search string \"{extra_search}\", folders only={str(folders_only).upper()}...")
 
         if command_context["args"]==u"":
             use_folder=self.get_last_folder()
@@ -1565,7 +1565,7 @@ class User_Message_Handler(object):
         else:
             dirlist=u""
             response=u"<Path is inaccessible.>"
-            self.log(u"Folder path \""+command_context["args"]+u"\" was inaccessible for listing.")
+            self.log(f"Folder path \"{command_context['args']}\" was inaccessible for listing.")
 
         if dirlist!=u"<BAD_PATH>":
             segment_list=self.segment_file_list_string(dirlist)
@@ -1573,19 +1573,19 @@ class User_Message_Handler(object):
                 for segment in segment_list:
                     if self.sendmsg(command_context["sender_id"],segment)==False:
                         response=u"<Listing interrupted.>"
-                        self.log(u"Listing for folder path \""+command_context["args"]+u"\" was interrupted.")
+                        self.log(f"Listing for folder path \"{command_context['args']}\" was interrupted.")
                         break
                     if self.request_exit.is_set()==True:
                         break
             else:
                 response=u"<Folder is empty.>"
-                self.log(u"Folder path \""+command_context["args"]+u"\" was empty.")
+                self.log(f"Folder path \"{command_context['args']}\" was empty.")
             if response==u"":
                 response=u"<Listing finished.>"
-                self.log(u"Folder path \""+command_context["args"]+u"\" listing completed.")
+                self.log(f"Folder path \"{command_context['args']}\" listing completed.")
         else:
             response=u"<Path is inaccessible.>"
-            self.log(u"Folder path \""+command_context["args"]+u"\" was inaccessible for listing.")
+            self.log(f"Folder path \"{command_context['args']}\" was inaccessible for listing.")
 
         return response
 
@@ -1598,15 +1598,15 @@ class User_Message_Handler(object):
                 newpath=self.proper_caps_path(newpath)
                 newpath=terminate_with_backslash(newpath)
                 self.set_last_folder(newpath)
-                response=u"Current folder changed to \""+newpath+u"\"."
-                self.log(u"Current folder was changed to \""+newpath+u"\".")
+                response=f"Current folder changed to \"{newpath}\"."
+                self.log(f"Current folder was changed to \"{newpath}\".")
             else:
                 response=u"Path could not be accessed."
-                self.log(u"Path provided \""+newpath+u"\" could not be accessed.")
+                self.log(f"Path provided \"{newpath}\" could not be accessed.")
         else:
             newpath=self.get_last_folder()
-            response=u"Current folder is \""+newpath+u"\"."
-            self.log(u"Queried current folder, which is \""+newpath+u"\".")
+            response=f"Current folder is \"{newpath}\"."
+            self.log(f"Queried current folder, which is \"{newpath}\".")
 
         return response
 
@@ -1619,28 +1619,28 @@ class User_Message_Handler(object):
             newpath=self.relative_to_absolute_path(command_context["args"],True)
             if self.usable_path(newpath)==True:
                 newpath=self.proper_caps_path(newpath)
-                self.log(u"Requested get file \""+newpath+u"\". Sending...")
+                self.log(f"Requested get file \"{newpath}\". Sending...")
                 self.sendmsg(command_context["sender_id"],u"Getting file, please wait...")
                 result=self.bot_handle.Send_File(command_context["chat_id"],newpath)
                 if result=="":
-                    self.log(u"File \""+newpath+u"\" sent.")
+                    self.log(u"File \"{newpath}\" sent.")
                 elif result=="Bot is stopped.":
                     return u""
                 elif result=="File too big.":
-                    response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                    self.log(u"Requested file \""+newpath+u"\" too large to get.")
+                    response=f"Bots cannot upload files larger than {str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))} to the chat."
+                    self.log(f"Requested file \"{newpath}\" too large to get.")
                 elif result=="Empty file.":
                     response=u"File is empty."
-                    self.log(u"Get file \""+newpath+u"\" failed because the file is empty.")
+                    self.log(f"Get file \"{newpath}\" failed because the file is empty.")
                 elif result=="Upload error.":
                     response=u"Problem getting file."
-                    self.log(u"Get File upload error for \""+newpath+u"\".")
+                    self.log(f"Get File upload error for \"{newpath}\".")
                 elif result=="Access error.":
                     response=u"Problem reading the file."
-                    self.log(u"Get File access error for \""+newpath+u"\".")
+                    self.log(f"Get File access error for \"{newpath}\".")
             else:
                 response=u"File not found or inaccessible."
-                self.log(u"Get file \""+newpath+u"\" was not found.")
+                self.log(f"Get file \"{newpath}\" was not found.")
         else:
             response=u"A file name or path must be provided."
             self.log(u"Attempted to use get without a file name or path.")
@@ -1669,28 +1669,28 @@ class User_Message_Handler(object):
                     end=newpath.rfind(u"\\")
                     if end!=-1:
                         foldername=terminate_with_backslash(newpath[:end])
-                        self.log(u"Requested rename \""+newpath+u"\" to \""+newname+u"\".")
-                        newtarget=foldername+newname
+                        self.log(f"Requested rename \"{newpath}\" to \"{newname}\".")
+                        newtarget=f"{foldername}{newname}"
                         if os.path.exists(newtarget)==False:
                             try:
                                 os.rename(newpath,newtarget)
-                                response=u"Renamed \""+newpath+u"\" to \""+newname+u"\"."
-                                self.log(u"Renamed \""+newpath+u"\" to \""+newname+u"\".")
+                                response=f"Renamed \"{newpath}\" to \"{newname}\"."
+                                self.log(f"Renamed \"{newpath}\" to \"{newname}\".")
                             except:
                                 response=u"Problem renaming."
-                                self.log(u"File/folder \""+newpath+u"\" rename error.")
+                                self.log(f"File/folder \"{newpath}\" rename error.")
                         else:
                             response=u"A file or folder with the new name already exists."
-                            self.log(u"File/folder rename of \""+newpath+u"\" failed because the new target \""+newtarget+u"\" already exists.")
+                            self.log(f"File/folder rename of \"{newpath}\" failed because the new target \"{newtarget}\" already exists.")
                     else:
                         response=u"Problem with path."
-                        self.log(u"File/folder rename \""+newpath+u"\" path error.")
+                        self.log(f"File/folder rename \"{newpath}\" path error.")
                 else:
                     response=u"File/folder not found or inaccessible."
-                    self.log(u"File/folder to rename \""+newpath+u"\" not found.")
+                    self.log(f"File/folder to rename \"{newpath}\" not found.")
             else:
                 response=u"The new name must not be a path or contain invalid characters."
-                self.log(u"Attempted to rename \""+command_args+u"\" to a new name containing invalid characters.")
+                self.log(f"Attempted to rename \"{command_args}\" to a new name containing invalid characters.")
         else:
             response=u"A name or path and a new name preceded by \"?to:\" must be provided."
             self.log(u"Attempted to rename without specifying a name or path.")
@@ -1708,35 +1708,35 @@ class User_Message_Handler(object):
                 newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
-                    self.log(u"Requested eat file \""+newpath+u"\". Sending...")
+                    self.log(f"Requested eat file \"{newpath}\". Sending...")
                     self.sendmsg(command_context["sender_id"],u"Eating file, please wait...")
                     result=self.bot_handle.Send_File(command_context["chat_id"],newpath)
                     if result=="":
-                        self.log(u"File \""+newpath+u"\" sent. Deleting...")
+                        self.log(f"File \"{newpath}\" sent. Deleting...")
                         try:
                             os.remove(newpath)
                             response=u"File deleted."
-                            self.log(u"File \""+newpath+u"\" deleted.")
+                            self.log(f"File \"{newpath}\" deleted.")
                         except:
                             response=u"Problem deleting file."
-                            self.log(u"File delete error for \""+newpath+u"\".")
+                            self.log(f"File delete error for \"{newpath}\".")
                     elif result=="Bot is stopped.":
                         return u""
                     elif result=="File too big.":
-                        response=u"Bots cannot upload files larger than "+str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))+u" to the chat."
-                        self.log(u"Requested file \""+newpath+u"\" too large to get.")
+                        response=f"Bots cannot upload files larger than {str(readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES))} to the chat."
+                        self.log(f"Requested file \"{newpath}\" too large to get.")
                     elif result=="Empty file.":
                         response=u"File is empty."
-                        self.log(u"Get file \""+newpath+u"\" failed because the file is empty.")
+                        self.log(f"Get file \"{newpath}\" failed because the file is empty.")
                     elif result=="Upload error.":
                         response=u"Problem getting file."
-                        self.log(u"Get File upload error for \""+newpath+u"\".")
+                        self.log(f"Get File upload error for \"{newpath}\".")
                     elif result=="Access error.":
                         response=u"Problem reading the file."
-                        self.log(u"Get File access error for \""+newpath+u"\".")
+                        self.log(f"Get File access error for \"{newpath}\".")
                 else:
                     response=u"File not found or inaccessible."
-                    self.log(u"File to eat at \""+newpath+u"\" not found.")
+                    self.log(f"File to eat at \"{newpath}\" not found.")
             else:
                 response=u"A file name or path must be provided."
                 self.log(u"Attempted to eat file without specifying a name or path.")
@@ -1755,22 +1755,22 @@ class User_Message_Handler(object):
                 newpath=self.relative_to_absolute_path(command_context["args"],True)
                 if self.usable_path(newpath)==True:
                     newpath=self.proper_caps_path(newpath)
-                    self.log(u"Requested delete file \""+newpath+u"\".")
+                    self.log(f"Requested delete file \"{newpath}\".")
                     try:
                         self.sendmsg(command_context["sender_id"],"Deleting file...")
                         os.remove(newpath)
                         response=u"File deleted."
-                        self.log(u"File \""+newpath+u"\" deleted.")
+                        self.log(f"File \"{newpath}\" deleted.")
                     except:
                         if os.path.isdir(newpath)==True:
                             response=u"Item at location is a folder, not a file."
-                            self.log(u"File delete requested at \""+newpath+u"\" but item is a directory.")
+                            self.log(f"File delete requested at \"{newpath}\" but item is a directory.")
                         else:
                             response=u"Problem deleting file."
-                            self.log(u"File \""+newpath+u"\" delete error.")
+                            self.log(f"File \"{newpath}\" delete error.")
                 else:
                     response=u"File not found or inaccessible."
-                    self.log(u"File to delete \""+newpath+u"\" not found.")
+                    self.log(f"File to delete \"{newpath}\" not found.")
             else:
                 response=u"A file name or path must be provided."
                 self.log(u"Attempted to delete file without specifying a name or path.")
@@ -1795,16 +1795,16 @@ class User_Message_Handler(object):
                     try:
                         os.mkdir(newpath)
                         response=u"Folder created."
-                        self.log(u"Folder created at \""+newpath+u"\".")
+                        self.log(f"Folder created at \"{newpath}\".")
                     except:
                         response=u"Problem creating folder."
-                        self.log(u"Folder create error at \""+newpath+u"\".")
+                        self.log(f"Folder create error at \"{newpath}\".")
                 else:
                     response=u"Folder already exists."
-                    self.log(u"Attempted to create already existing folder at \""+newpath+u"\".")
+                    self.log(f"Attempted to create already existing folder at \"{newpath}\".")
             else:
                 response=u"Path is not usable."
-                self.log(u"Attempted to create folder at unusable path \""+newpath+u"\".")
+                self.log(f"Attempted to create folder at unusable path \"{newpath}\".")
         else:
             response=u"A folder name or path must be provided."
             self.log(u"Attempted to create folder without specifying a name or path.")
@@ -1826,7 +1826,7 @@ class User_Message_Handler(object):
                         upper_folder=upper_folder[:upper_folder.rfind(u"\\")+1]
                     if self.usable_dir(upper_folder)==True:
                         newpath=self.proper_caps_path(newpath)
-                        self.log(u"Requested delete folder \""+newpath+u"\"...")
+                        self.log(f"Requested delete folder \"{newpath}\"...")
                         try:
                             self.sendmsg(command_context["sender_id"],u"Deleting folder...")
                             shutil.rmtree(newpath)
@@ -1834,18 +1834,18 @@ class User_Message_Handler(object):
                             newpath=terminate_with_backslash(newpath)
                             if self.get_last_folder().lower().endswith(newpath.lower())==True:
                                 self.set_last_folder(upper_folder)
-                                moved_up=u" Current folder is now \""+self.proper_caps_path(upper_folder)+u"\"."
-                            response=u"Folder deleted."+moved_up
-                            self.log(u"Folder deleted at \""+newpath+u"\"."+moved_up)
+                                moved_up=f" Current folder is now \"{self.proper_caps_path(upper_folder)}\"."
+                            response=f"Folder deleted.{moved_up}"
+                            self.log(f"Folder deleted at \"{newpath}\".{moved_up}")
                         except:
                             response=u"Problem deleting folder."
-                            self.log(u"Folder delete error at \""+newpath+u"\".")
+                            self.log(f"Folder delete error at \"{newpath}\".")
                     else:
                         response=u"No upper folder to switch to after removal."
-                        self.log(u"Attempted to delete \""+newpath+u"\" at top folder.")
+                        self.log(f"Attempted to delete \"{newpath}\" at top folder.")
                 else:
-                    response=u"Folder \""+newpath+u"\" not found or inaccessible."
-                    self.log(u"Folder to delete not found at \""+newpath+u"\".")
+                    response=f"Folder \"{newpath}\" not found or inaccessible."
+                    self.log(f"Folder to delete not found at \"{newpath}\".")
             else:
                 response=u"A folder name or path must be provided."
                 self.log(u"No folder name or path provided for deletion.")
@@ -1864,8 +1864,8 @@ class User_Message_Handler(object):
             newpath=newpath[:newpath.rfind(u"\\")+1]
             if self.allowed_path(newpath)==True:
                 self.set_last_folder(newpath)
-                response=u"Current folder is now \""+newpath+u"\"."
-                self.log(u"Current folder changed to \""+newpath+u"\".")
+                response=f"Current folder is now \"{newpath}\"."
+                self.log(f"Current folder changed to \"{newpath}\".")
             else:
                 response=u"Already at top folder."
                 self.log(u"Attempted to go up while at top folder.")
@@ -1886,19 +1886,19 @@ class User_Message_Handler(object):
                 zip_response=self.active_7zip_task_handler.NEW_TASK(newpath,self.account_username)
                 if zip_response["result"]=="CREATED":
                     response=u"Issued zip command."
-                    self.log(u"Zip command launched on \""+zip_response["full_target"]+u"\".")
+                    self.log(f"Zip command launched on \"{zip_response['full_target']}\".")
                 elif zip_response["result"]=="EXISTS":
-                    response=u"An archive \""+zip_response["full_target"]+u".7z\" already exists."
-                    self.log(u"Zip \""+command_context["args"]+u"\" failed because target archive \""+zip_response["full_target"]+u".7z\" already exists.")
+                    response=f"An archive \"{zip_response['full_target']}.7z\" already exists."
+                    self.log(f"Zip \"{command_context['args']}\" failed because target archive \"{zip_response['full_target']}.7z\" already exists.")
                 elif zip_response["result"]=="ERROR":
                     response=u"Problem running command."
-                    self.log(u"Zip \""+command_context["args"]+u"\" command could not be run.")
+                    self.log(f"Zip \"{command_context['args']}\" command could not be run.")
                 elif zip_response["result"]=="MAXREACHED":
                     response=u"Maximum concurrent archival tasks reached."
-                    self.log(u"Zip \""+command_context["args"]+u"\" rejected due to max concurrent tasks per user limit.")
+                    self.log(f"Zip \"{command_context['args']}\" rejected due to max concurrent tasks per user limit.")
             else:
                 response=u"File not found or inaccessible."
-                self.log(u"Zip \""+command_context["args"]+u"\" file not found or inaccessible.")
+                self.log(f"Zip \"{command_context['args']}\" file not found or inaccessible.")
         else:
             response=u"A file or folder name or path must be provided."
             self.log(u"Attempted to zip without a name or path.")
@@ -1912,12 +1912,12 @@ class User_Message_Handler(object):
 
         for taskdata in tasks_7zip:
             if taskdata["user"]==self.account_username:
-                response+=u">ARCHIVING \""+self.proper_caps_path(taskdata["target"])+u"\"\n"
+                response=f"{response}>ARCHIVING \"{self.proper_caps_path(taskdata['target'])}\"\n"
 
         if response==u"":
             response=u"No archival tasks running."
         else:
-            response=u"Ongoing archival tasks:\n\n"+response
+            response=f"Ongoing archival tasks:\n\n{response}"
 
         self.log(u"Requested list of running 7-ZIP archival tasks for user.")
 
@@ -1943,7 +1943,7 @@ class User_Message_Handler(object):
             self.lock_status.set()
             self.log(u"User Message Handler was locked with a password.")
         else:
-            response=u"Lock password must be between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+u" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+u" characters long."
+            response=f"Lock password must be between {str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)} and {str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)} characters long."
             self.log(u"Attempted to lock the bot with a password of invalid length.")
 
         return response
@@ -1961,7 +1961,7 @@ class User_Message_Handler(object):
         response+=u"/cd [PATH]: change path(eg: /cd c:\windows); no argument returns current path\n"
         response+=u"/dir [PATH] [?f:<filter>] [?d]: list files/folders; filter results(/dir c:\windows ?f:.exe); use ?d for listing directories only; no arguments lists current folder\n"
         if self.allow_writing==True:
-            response+=u"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. "+str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())+u" simultaneous tasks\n"
+            response+=f"/zip <PATH[FILE]>: make a 7-ZIP archive of a file or folder; extension will be .7z.TMP until finished; max. {str(self.active_7zip_task_handler.GET_MAX_TASKS_PER_USER())} simultaneous tasks\n"
             response+=u"/listzips: list all running 7-ZIP archival tasks\n"
             response+=u"/stopzips: stop all running 7-ZIP archival tasks\n"
             response+=u"/ren [FILE | FOLDER] ?to:[NEWNAME]: rename a file or folder\n"
@@ -1972,12 +1972,12 @@ class User_Message_Handler(object):
             response+=u"/del <[PATH]FILE>: delete the file at the location\n"
             response+=u"/mkdir <[PATH]FOLDER>: create the folder at the location\n"
             response+=u"/rmdir <[PATH]FOLDER>: delete the folder at the location\n"
-        response+=u"/lock <PASSWORD>: lock the bot from responding to messages using a password between "+str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)+u" and "+str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)+u" characters long\n"
+        response+=f"/lock <PASSWORD>: lock the bot from responding to messages using a password between {str(BOT_LOCK_PASSWORD_CHARACTERS_MIN)} and {str(BOT_LOCK_PASSWORD_CHARACTERS_MAX)} characters long\n"
         response+=u"/unlock <PASSWORD>: unlock the bot\n"
         response+=u"\nSlashes work both ways in paths (/cd c:/windows, /cd c:\windows)\n\n"
-        response+=u"File size limit for getting files from host system: "+readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES)+u"."
+        response+=f"File size limit for getting files from host system: {readable_size(TELEGRAM_API_MAX_UPLOAD_ALLOWED_FILESIZE_BYTES)}."
         if self.allow_writing==True:
-            response+=u"\nFile size limit for putting files on host system: "+readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)+u".\n"
+            response+=f"\nFile size limit for putting files on host system: {readable_size(TELEGRAM_API_MAX_DOWNLOAD_ALLOWED_FILESIZE_BYTES)}.\n"
             response+=u"\nNOTE: All commands that delete files or folders must end with \" ?confirm\"."
         self.log(u"Help requested.")
 
@@ -2145,14 +2145,14 @@ class User_Console(object):
         stats_out=u""
         for user_handler_instance in self.user_handler_list:
             if user_handler_instance.account_username.lower() in input_arguments or input_arguments==[]:
-                stats_out+=u"\nMessage handler for user \""+user_handler_instance.account_username+u"\":\n"+\
-                         u"Home path=\""+user_handler_instance.allowed_root+u"\"\n"+\
-                         u"Write permissions: "+str(user_handler_instance.allow_writing).upper()+u"\n"+\
-                         u"Current folder=\""+user_handler_instance.get_last_folder()+u"\"\n"+\
-                         u"Locked: "+str(user_handler_instance.lock_status.is_set()).upper()+u"\n"+\
-                         u"Listening: "+str(user_handler_instance.listen_flag.is_set()).upper()+u"\n"
+                stats_out+=f"\nMessage handler for user \"{user_handler_instance.account_username}\":\n"+\
+                         f"Home path=\"{user_handler_instance.allowed_root}\"\n"+\
+                         f"Write permissions: {str(user_handler_instance.allow_writing).upper()}\n"+\
+                         f"Current folder=\"{user_handler_instance.get_last_folder()}\"\n"+\
+                         f"Locked: {str(user_handler_instance.lock_status.is_set()).upper()}\n"+\
+                         f"Listening: {str(user_handler_instance.listen_flag.is_set()).upper()}\n"
         if stats_out!=u"":
-            stats_out=u"USER STATS:\n"+stats_out
+            stats_out=f"USER STATS:\n{stats_out}"
             self.log(stats_out)
         else:
             self.log(u"No matching users were found.")
@@ -2161,9 +2161,9 @@ class User_Console(object):
     def performcommand_listusers(self,input_arguments):
         list_out=u""
         for user_handler_instance in self.user_handler_list:
-            list_out+=user_handler_instance.account_username+u", "
-        list_out=list_out[:-2]+u"."
-        self.log(u"Allowed user(s): "+list_out)
+            list_out=f"{list_out}{user_handler_instance.account_username}, "
+        list_out=f"{list_out[:-2]}."
+        self.log(f"Allowed user(s): {list_out}")
         return True
 
     def performcommand_unlockusers(self,input_arguments):
@@ -2194,16 +2194,16 @@ class User_Console(object):
         task_data_out=u""
         for username in user_task_dict:
             if username.lower() in input_arguments or input_arguments==[]:
-                task_data_out+=u"USER \""+username+u"\":\n"
+                task_data_out+=f"USER \"{username}\":\n"
                 for entry in user_task_dict[username]:
-                    task_data_out+=u">TARGET: \""+entry["target"]+u"\" BATCH PID: "+str(entry["pid"])+u"\n"
+                    task_data_out+=f">TARGET: \"{entry['target']}\" BATCH PID: {str(entry['pid'])}\n"
                 task_data_out+=u"\n"
         if task_data_out==u"":
             self.log(u"Found no 7-ZIP tasks running.")
         else:
             if task_data_out.endswith(u"\n")==True:
                 task_data_out=task_data_out[:-1]
-            task_data_out=u"RUNNING 7-ZIP ARCHIVAL TASK(S):\n"+task_data_out
+            task_data_out=f"RUNNING 7-ZIP ARCHIVAL TASK(S):\n{task_data_out}"
             self.log(task_data_out)
         return True
 
@@ -2303,7 +2303,7 @@ class User_Console(object):
             user_handler_instance.START()
             user_handler_instance.LISTEN(True)
 
-        self.log(u"User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. "+str(UI_COMMAND_HISTORY_MAX)+u" history).")
+        self.log(f"User Console activated.\nType \"help\" in the console for available commands.\nUse the up and down arrows to scroll through previous successful commands(max. {str(UI_COMMAND_HISTORY_MAX)} history).")
         self.active_UI_signaller.SEND_EVENT("attach_console",self)
 
         if self.user_handlers_running()==0:
@@ -2393,11 +2393,12 @@ class UI(object):
             if msg_string.startswith(entry):
                 return
 
-        sys.stderr.write(msg_string+u"\n")
+        sys.stderr.write(f"{msg_string}\n")
         return
 
     def run_UI(self):
         self.UI_app=QApplication([])
+        self.UI_app.setAttribute(Qt.AA_DisableWindowContextHelpButton,True)
         self.UI_app.setStyle("fusion")
         self.UI_window=Main_Window(self.colorscheme,self.fonts,self.UI_scaling_modifier,self.icons_b64,self.is_ready,self.is_exiting,self.has_quit,self.UI_signaller,self.start_minimized,self.active_logger)
         self.UI_window.show()
@@ -2474,7 +2475,7 @@ class Main_Window(QMainWindow):
                     self.font_cache[fontname].setStrikeOut(True)
 
         self.setFixedSize(940*self.UI_scale,598*self.UI_scale)
-        self.setWindowTitle(u"FileBot   v"+str(__version__)+u"   by "+str(__author__))
+        self.setWindowTitle(f"FileBot   v{str(__version__)}   by {str(__author__)}")
         self.setWindowFlags(self.windowFlags()|Qt.MSWindowsFixedSizeDialogHint)
 
         self.signal_response_calls={"logger_new_entry":self.signal_logger_new_entry,
@@ -2523,12 +2524,13 @@ class Main_Window(QMainWindow):
         del input_icons_b64
         input_icons_b64=None
 
+        self.setAttribute(Qt.WA_DeleteOnClose,True)
         self.setWindowIcon(self.icon_cache["default"])
 
         colors_window_text=input_colorscheme["window_text"]
         colors_window_background=input_colorscheme["window_background"]
-        colors_selection_text=input_colorscheme["selection_text"]
-        colors_selection_background=input_colorscheme["selection_background"]
+        self.colors_selection_text=input_colorscheme["selection_text"]
+        self.colors_selection_background=input_colorscheme["selection_background"]
         colors_input_text=input_colorscheme["input_text"]
         colors_background_IO=input_colorscheme["background_IO"]
         colors_background_IO_disabled=input_colorscheme["background_IO_disabled"]
@@ -2565,12 +2567,13 @@ class Main_Window(QMainWindow):
         self.timer_clipboard.timeout.connect(self.clipboard_insert)
         self.timer_clipboard.setSingleShot(True)
 
-        selection_colors="selection-color:#"+colors_selection_text+"; selection-background-color:#"+colors_selection_background+";"
-        window_colors="color:#"+colors_window_text+"; background-color:#"+colors_window_background+";"
+        selection_colors=f"selection-color:#{self.colors_selection_text}; selection-background-color:#{self.colors_selection_background};"
+        self.window_colors=f"color:#{colors_window_text}; background-color:#{colors_window_background};"
 
         self.options_macros={}
         self.tray_menu=QMenu(self)
-        self.tray_menu.setStyleSheet("QMenu {"+window_colors+"} QMenu::item:selected {color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";}")
+        self.tray_menu.setAttribute(Qt.WA_DeleteOnClose,True)
+        self.tray_menu.setStyleSheet("QMenu {"+self.window_colors+"} QMenu::item:selected {color:#"+self.colors_selection_text+"; background-color:#"+self.colors_selection_background+";}")
         self.options_macros["restore"]=self.tray_menu.addAction(u"Restore")
         self.options_macros["restore"].triggered.connect(self.traymenu_restore_onselect)
         self.options_macros["restore"].setFont(self.font_cache["general"])
@@ -2585,7 +2588,7 @@ class Main_Window(QMainWindow):
 
         self.label_botname=QGroupBox(self)
         self.label_botname.setGeometry(-10*self.UI_scale,-100*self.UI_scale,self.width()+10*self.UI_scale,self.height()+100*self.UI_scale)
-        self.label_botname.setStyleSheet("QGroupBox {"+window_colors+"}")
+        self.label_botname.setStyleSheet("QGroupBox {"+self.window_colors+"}")
 
         self.label_botname=QLabel(self)
         self.label_botname.setText(u"Bot name:")
@@ -2634,7 +2637,7 @@ class Main_Window(QMainWindow):
         self.textbox_output.setModel(self.textbox_output_model)
         self.textbox_output.setFont(self.font_cache["log"])
         self.textbox_output.setGeometry(9*self.UI_scale,24*self.UI_scale,922*self.UI_scale,524*self.UI_scale)
-        self.textbox_output.setStyleSheet("QListView::item:selected {border-top:"+str(int(1*self.UI_scale))+"px solid #"+colors_output_border+"; color:#"+colors_selection_text+"; background-color:#"+colors_selection_background+";} QListView::item {border-top:"+str(int(1*self.UI_scale))+"px solid #"+colors_output_border+";} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
+        self.textbox_output.setStyleSheet("QListView::item:selected {border-top:"+str(int(1*self.UI_scale))+"px solid #"+colors_output_border+"; color:#"+self.colors_selection_text+"; background-color:#"+self.colors_selection_background+";} QListView::item {border-top:"+str(int(1*self.UI_scale))+"px solid #"+colors_output_border+";} QListView::enabled {background-color:#"+colors_background_IO+"; "+selection_colors+"} QListView::disabled {background-color:#"+colors_background_IO_disabled+"; "+selection_colors+"}")
         self.textbox_output.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.textbox_output.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textbox_output.setAcceptDrops(False)
@@ -2662,13 +2665,15 @@ class Main_Window(QMainWindow):
         self.input_commandfield.setFont(self.font_cache["log"])
         self.input_commandfield.setMaxLength(147)
         self.input_commandfield.setAcceptDrops(False)
+        self.input_commandfield.setContextMenuPolicy(Qt.CustomContextMenu)
         self.input_commandfield.returnPressed.connect(self.input_commandfield_onsend)
+        self.input_commandfield.customContextMenuRequested.connect(self.input_commandfield_oncontextmenu)
         self.input_commandfield.installEventFilter(self)
         self.input_commandfield.setStyleSheet("QLineEdit::enabled {background-color:#"+colors_background_IO+"; color:#"+colors_input_text+"; "+selection_colors+"} QLineEdit::disabled {background-color:#"+colors_background_IO_disabled+"; color:#"+colors_input_text+"; "+selection_colors+"}")
 
         for element in self.output_colors:
             newcolor=QColor()
-            newcolor.setNamedColor("#"+self.output_colors[element])
+            newcolor.setNamedColor(f"#{self.output_colors[element]}")
             self.output_colors[element]=newcolor
 
         self.set_UI_lock(True)
@@ -2707,6 +2712,11 @@ class Main_Window(QMainWindow):
         self.clipboard_queue=u""
         self.lock_clipboard.release()
         return
+    def clipboard_get_text(self):
+        self.lock_clipboard.acquire()
+        clipboard_text=self.active_clipboard.text()
+        self.lock_clipboard.release()
+        return clipboard_text
 
     def queue_clipboard_insert(self,input_text):
         if input_text==u"":
@@ -2763,7 +2773,7 @@ class Main_Window(QMainWindow):
                                 clipboard_data=u""
                                 cache_model=self.textbox_output.model()
                                 for row in rows:
-                                    clipboard_data+=cache_model.itemData(row)[0]+u"\n"
+                                    clipboard_data=f"{clipboard_data}{cache_model.itemData(row)[0]}\n"
                                 self.queue_clipboard_insert(clipboard_data)
                         return True
 
@@ -2817,9 +2827,9 @@ class Main_Window(QMainWindow):
     def update_tray_icon(self):
         global __version__
 
-        tray_text_new=u"FileBot v"+str(__version__)+u"\nBot name: "
+        tray_text_new=f"FileBot v{str(__version__)}\nBot name: "
         if self.label_botname_value.text()!=u"<not retrieved>":
-            tray_text_new+=u"\""+self.label_botname_value.text()+u"\"\nStatus: "
+            tray_text_new+=f"\"{self.label_botname_value.text()}\"\nStatus: "
         else:
             tray_text_new+=u"<not retrieved>\n"
 
@@ -2889,6 +2899,85 @@ class Main_Window(QMainWindow):
         self.send_console_command(clean_text)
         return
 
+    def input_commandfield_oncontextmenu(self):
+        menu=QMenu(self)
+        menu.setAttribute(Qt.WA_DeleteOnClose,True)
+        menu.setStyleSheet("QMenu {"+self.window_colors+"} QMenu::item:selected {color:#"+self.colors_selection_text+"; background-color:#"+self.colors_selection_background+";}")
+        item_text_length=len(self.input_commandfield.text())
+        if item_text_length>0:
+            menu_action=menu.addAction("Select &All")
+            menu_action.setFont(self.font_cache["general"])
+            menu_action.setShortcut(QKeySequence(Qt.Key_A))
+            menu_action.triggered.connect(lambda:self.input_commandfield.selectAll())
+            if self.input_commandfield.hasSelectedText()==True:
+                menu.addSeparator()
+                menu_action=menu.addAction("&Copy Selection")
+                menu_action.setFont(self.font_cache["general"])
+                menu_action.setShortcut(QKeySequence(Qt.Key_C))
+                menu_action.triggered.connect(lambda:self.queue_clipboard_insert(self.input_commandfield.selectedText()))
+                menu_action=menu.addAction("Cu&t Selection")
+                menu_action.setFont(self.font_cache["general"])
+                menu_action.setShortcut(QKeySequence(Qt.Key_T))
+                menu_action.triggered.connect(self.input_commandfield_cut_selection)
+                menu_action=menu.addAction("&Delete Selection")
+                menu_action.setFont(self.font_cache["general"])
+                menu_action.triggered.connect(self.input_commandfield_delete_selection)
+                menu_action.setShortcut(QKeySequence(Qt.Key_D))
+                menu.addSeparator()
+                menu_action=menu.addAction("D&eselect")
+                menu_action.setFont(self.font_cache["general"])
+                menu_action.triggered.connect(lambda:self.input_commandfield.deselect())
+                menu_action.setShortcut(QKeySequence(Qt.Key_E))
+        if len(self.clipboard_get_text())>0:
+            if self.input_commandfield.hasSelectedText()==True:
+                menu_action=menu.addAction("&Paste Over Selection")
+                menu_action.setFont(self.font_cache["general"])
+                menu_action.triggered.connect(self.input_commandfield_paste_over_selection)
+            else:
+                menu_action=menu.addAction("&Paste")
+                menu_action.setFont(self.font_cache["general"])
+                menu_action.triggered.connect(self.input_commandfield_paste)
+            menu_action.setShortcut(QKeySequence(Qt.Key_P))
+        if item_text_length>0:
+            menu.addSeparator()
+            menu_action=menu.addAction("Clea&r")
+            menu_action.setShortcut(QKeySequence(Qt.Key_R))
+            menu_action.triggered.connect(lambda:self.input_commandfield.clear())
+            
+        if len(menu.actions())>0:
+            menu.exec_(QCursor.pos())
+            
+        while len(menu.actions())>0:
+            action=menu.actions()[0]
+            menu.removeAction(action)
+        self.input_commandfield.setFocus()
+        return
+
+    def input_commandfield_cut_selection(self):
+        self.queue_clipboard_insert(self.input_commandfield.selectedText())
+        old_position=self.input_commandfield.cursorPosition()
+        self.input_commandfield.setText(f"{self.input_commandfield.text()[:self.input_commandfield.selectionStart()]}{self.input_commandfield.text()[self.input_commandfield.selectionEnd():]}")
+        self.input_commandfield.setCursorPosition(old_position)
+        return
+
+    def input_commandfield_delete_selection(self):
+        old_selection_start=self.input_commandfield.selectionStart()
+        self.input_commandfield.setText(f"{self.input_commandfield.text()[:self.input_commandfield.selectionStart()]}{self.input_commandfield.text()[self.input_commandfield.selectionEnd():]}")
+        self.input_commandfield.setCursorPosition(old_selection_start)
+        return
+
+    def input_commandfield_paste_over_selection(self):
+        old_selection_start=self.input_commandfield.selectionStart()
+        self.input_commandfield.setText(f"{self.input_commandfield.text()[:self.input_commandfield.selectionStart()]}{self.clipboard_get_text()}{self.input_commandfield.text()[self.input_commandfield.selectionEnd():]}")
+        self.input_commandfield.setCursorPosition(old_selection_start+len(self.clipboard_get_text()))
+        return
+
+    def input_commandfield_paste(self):
+        old_position=self.input_commandfield.cursorPosition()
+        self.input_commandfield.setText(f"{self.input_commandfield.text()[:self.input_commandfield.cursorPosition()]}{self.clipboard_get_text()}{self.input_commandfield.text()[self.input_commandfield.cursorPosition():]}")
+        self.input_commandfield.setCursorPosition(old_position+len(self.clipboard_get_text()))
+        return
+
     def send_console_command(self,input_command):
         if self.console is None:
             return
@@ -2927,7 +3016,7 @@ class Main_Window(QMainWindow):
         if event_type in self.signal_response_calls:
             self.signal_response_calls[event_type](event["data"])
         else:
-            self.log(u"ERROR: Received unsupported signal event type: \""+event_type+u"\".")
+            self.log(f"ERROR: Received unsupported signal event type: \"{event_type}\".")
         return
 
     def signal_logger_new_entry(self,event_data):
@@ -3162,8 +3251,8 @@ class FileBot(object):
         self.logger.ACTIVATE()
 
         self.log(u"==================================== FileBot ====================================")
-        self.log(u"Author: "+str(__author__))
-        self.log(u"Version: "+str(__version__))
+        self.log(f"Author: {str(__author__)}")
+        self.log(f"Version: {str(__version__)}")
         self.log(u"=================================================================================")
         self.log(u"7-ZIP (C) Igor Pavlov; distributed under GNU LGPL license; https://www.7-zip.org/\n")
         self.log(u"\n\nREQUIREMENTS:\n"+\
@@ -3177,9 +3266,9 @@ class FileBot(object):
             u"EXAMPLE ENTRIES:\n"+\
             u"JohnDoe|C:\\MySharedFiles\n"+\
             u"TrustedUser|>*\n\n"+\
-            u"A maximum of "+str(self.bot_user_limit)+u" users are supported.\n\n"+self.startup_message_additional_text+u"\n")
+            f"A maximum of {str(self.bot_user_limit)} users are supported.\n\n{self.startup_message_additional_text}\n")
 
-        self.log(u"Process ID is "+str(self.process_id)+u". CPU architecture is "+self.cpu_architecture+u"-bit.")
+        self.log(f"Process ID is {str(self.process_id)}. CPU architecture is {self.cpu_architecture}-bit.")
 
         fatal_error=False
         collect_bot_token=""
@@ -3228,18 +3317,18 @@ class FileBot(object):
                     if len(collect_allowed_users)==self.bot_user_limit:
                         break
                 else:
-                    self.log(u"WARNING: "+new_user["error_message"])
+                    self.log(f"WARNING: {new_user['error_message']}")
 
             collect_user_file_entries=[]
             if len(collect_allowed_users)>0:
-                self.log(u"Number of users to listen for: "+str(len(collect_allowed_users))+u".")
+                self.log(f"Number of users to listen for: {str(len(collect_allowed_users))}.")
             else:
                 self.log(u"ERROR: There were no valid user entries to add.")
                 fatal_error=True
 
         if fatal_error==False:
             try:
-                active_7ZIP_handler=Task_Handler_7ZIP(self.path_system32,self.working_dir,Get_B64_Resource("binaries/7zipx"+self.cpu_architecture),self.max_7zip_tasks_per_user,self.logger)
+                active_7ZIP_handler=Task_Handler_7ZIP(self.path_system32,self.working_dir,Get_B64_Resource(f"binaries/7zipx{self.cpu_architecture}"),self.max_7zip_tasks_per_user,self.logger)
             except:
                 self.log(u"The 7-ZIP binary could not be written. Make sure you have write permissions to the application folder.")
                 fatal_error=True
@@ -3262,7 +3351,7 @@ class FileBot(object):
                         self.log(u"Initial time synchronization failed. Will keep trying...")
 
             if sync_result["success"]==True:
-                self.log(u"Initial time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
+                self.log(f"Initial time synchronization complete. Local clock bias is {sync_result['time_difference']} second(s).")
 
                 user_handle_instances=[]
 
@@ -3424,7 +3513,7 @@ class FileBot(object):
                 raise ValueError(u"Home path format is invalid.")
 
         except:
-            return {"error_message":u"User entry \""+input_string+u"\" was not validly formatted: "+str(sys.exc_info()[0])+u" "+str(sys.exc_info()[1]),"username":u"","home":u"","allow_write":False}
+            return {"error_message":f"User entry \"{input_string}\" was not validly formatted: {str(sys.exc_info()[0])} {str(sys.exc_info()[1])}","username":u"","home":u"","allow_write":False}
 
         return retval
 
@@ -3494,7 +3583,7 @@ class FileBot(object):
                         kea_ok=True
     
                 if digest_ok==True and auth_ok==True and symmetric_ok==True and kea_ok==True:
-                    cipherstring+=":"+ciphername
+                    cipherstring=f"{cipherstring}:{ciphername}"
     
         if cipherstring.startswith(":")==True:
             cipherstring=cipherstring[1:]
@@ -3528,7 +3617,7 @@ class FileBot(object):
                 self.log(u"Performing time synchronization via Internet...")
                 sync_result=self.active_time_provider.SYNC()
                 if sync_result["success"]==True:
-                    self.log(u"Time synchronization complete. Local clock bias is "+sync_result["time_difference"]+u" second(s).")
+                    self.log(u"Time synchronization complete. Local clock bias is {sync_result['time_difference']} second(s).")
                 else:
                     self.log(u"Time synchronization failed.")
                 self.request_sync_time.clear()
@@ -3543,7 +3632,7 @@ MAIN
 
 
 if Versions_Str_Equal_Or_Less(PYQT5_MAX_SUPPORTED_COMPILE_VERSION,PYQT_VERSION_STR)==False:
-    sys.stderr.write(u"WARNING: PyQt5 version("+PYQT_VERSION_STR+u") is higher than the maximum supported version for compiling("+PYQT5_MAX_SUPPORTED_COMPILE_VERSION+u"). The application may run off source code but will fail to compile.\n")
+    sys.stderr.write(f"WARNING: PyQt5 version({PYQT_VERSION_STR}) is higher than the maximum supported version for compiling({PYQT5_MAX_SUPPORTED_COMPILE_VERSION}). The application may run off source code but will fail to compile.\n")
     sys.stderr.flush()
 
 environment_info=Get_Runtime_Environment()
