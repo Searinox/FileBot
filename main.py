@@ -1,4 +1,4 @@
-__version__="1.95"
+__version__="1.96"
 __author__="Searinox Navras"
 
 
