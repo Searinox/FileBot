@@ -3643,7 +3643,7 @@ class FileBot(object):
                 self.log("Performing time synchronization via Internet...")
                 sync_result=self.active_time_provider.SYNC()
                 if sync_result["success"]==True:
-                    self.log("Time synchronization complete. Local clock bias is {sync_result['time_difference']} second(s).")
+                    self.log(f"Time synchronization complete. Local clock bias is {sync_result['time_difference']} second(s).")
                 else:
                     self.log("Time synchronization failed.")
                 self.request_sync_time.clear()
