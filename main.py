@@ -188,8 +188,6 @@ OBJS
 
 class ShellProcess(object):
     def __init__(self,input_path_system32,input_command):
-        input_path_system32=input_path_system32
-
         result=win32process.CreateProcess(None,f"\"{input_path_system32}cmd.exe\" /c \"{input_command} \"",None,None,0,win32process.CREATE_NO_WINDOW|win32process.CREATE_UNICODE_ENVIRONMENT,None,None,win32process.STARTUPINFO())
         if result:
             self.process_handle=result[0]
@@ -3209,7 +3207,7 @@ class Main_Window(QMainWindow):
 class FileBot(object):
     user_token_max_length_bytes=256
     user_entry_line_max_length_bytes=768
-    banned_TLS_algorithms=["ANY","SHA1","DHE","CHACHA20-POLY1305","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
+    banned_TLS_algorithms=["ANY","SHA1","DHE","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
 
     def __init__(self,input_working_dir,input_max_7zip_tasks_per_user,input_color_scheme,input_fonts,input_UI_scale_modifier,input_start_minimized,input_log_to_stdout,input_startup_message_additional_text=""):
         global __author__
