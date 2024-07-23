@@ -1,4 +1,4 @@
-__version__="1.96"
+__version__="1.961"
 __author__="Searinox Navras"
 
 
@@ -3054,7 +3054,7 @@ class Main_Window(QMainWindow):
         self.update_UI_usability()
         return
 
-    def signal_detach_console(self,event_data):
+    def signal_detach_console(self,_):
         if self.console is not None:
             self.notify_console_minimized(False)
             self.console=None
@@ -3062,7 +3062,7 @@ class Main_Window(QMainWindow):
             self.update_UI_usability()
         return
 
-    def signal_close(self,event_data):
+    def signal_close(self,_):
         self.queue_close_event()
         return
 
@@ -3102,8 +3102,9 @@ class Main_Window(QMainWindow):
         self.label_clock_bias_value.setText(event_data)
         return
 
-    def signal_commandfield_failed(self,event_data):
+    def signal_commandfield_failed(self,_):
         if self.console is not None:
+            self.command_history_index=len(self.command_history)
             do_enable=not self.UI_lockstate
             self.input_commandfield.setEnabled(do_enable and not self.close_standby)
             if do_enable==True:
@@ -3111,7 +3112,7 @@ class Main_Window(QMainWindow):
                 self.input_commandfield.setFocus()
         return
 
-    def signal_commandfield_accepted(self,event_data):
+    def signal_commandfield_accepted(self,_):
         global UI_COMMAND_HISTORY_MAX
 
         add_command=len(self.command_history)==0
@@ -3129,7 +3130,7 @@ class Main_Window(QMainWindow):
         self.input_commandfield.setFocus()
         return
 
-    def signal_close_standby(self,event_data):
+    def signal_close_standby(self,_):
         self.close_standby=True
         self.textbox_output.setEnabled(True)
         self.input_commandfield.setEnabled(False)
