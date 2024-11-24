@@ -1,4 +1,4 @@
-__version__="1.961"
+__version__="1.962"
 __author__="Searinox Navras"
 
 
@@ -320,10 +320,11 @@ class Logger(object):
 
 
 class Time_Provider(object):
-    def __init__(self,input_allowed_TLS_algorithms):
+    def __init__(self,input_allowed_TLS_algorithms,time_API_instances):
         global WEB_REQUEST_CONNECT_TIMEOUT_SECONDS
 
         self.request_pool=Make_TLS_Connection_Pool(input_allowed_TLS_algorithms)
+        self.time_API_instances=time_API_instances
         self.request_timeout=urllib3.Timeout(connect=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS,read=WEB_REQUEST_CONNECT_TIMEOUT_SECONDS)
         self.origin_time=datetime.datetime(1970,1,1)
         self.lock_time_delta=threading.Lock()
@@ -373,16 +374,32 @@ class Time_Provider(object):
         return {"success":success,"time_difference":time_difference}
 
     def retrieve_current_UTC_internet_time(self):
-        response=self.request_pool.request(method="GET",url="https://worldtimeapi.org/api/timezone/Etc/UTC.txt",preload_content=True,chunked=False,timeout=self.request_timeout)
-        if response.status==200:
-            timestr=str(response.data,"utf8")
-        else:
+        time_obtained=False
+        
+        for time_API in self.time_API_instances:
+            try:
+                response=self.request_pool.request(method="GET",url=time_API["url"],preload_content=True,chunked=False,timeout=self.request_timeout)
+                if response.status!=200:
+                    continue
+                    
+                timestr=str(response.data,"utf8")
+                quot1=timestr.find(time_API["start"])
+                quot1+=len(time_API["start"])
+                quot2=quot1+timestr[quot1:].find(time_API["end"])
+                quot2+=len(time_API["end"])
+                timestr=timestr[quot1:quot2-1].strip()
+                declen=len(timestr)-timestr.find(".")-1
+                if declen>4:
+                    timestr=timestr[:-declen+4]
+
+                time_obtained=True
+                break
+            except:
+                continue
+        
+        if time_obtained==False:
             raise Exception("Could not get time.")
-        quot1=timestr.find("\ndatetime: ")
-        quot1+=len("\ndatetime: ")
-        quot2=quot1+timestr[quot1+1:].find("+")
-        quot2+=1
-        timestr=timestr[quot1:quot2-3]
+        
         return (datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")-self.origin_time).total_seconds()
 
     def update_server_time_from_internet(self):
@@ -3209,7 +3226,9 @@ class FileBot(object):
     user_token_max_length_bytes=256
     user_entry_line_max_length_bytes=768
     banned_TLS_algorithms=["ANY","SHA1","DHE","AES-128-CBC","AES-256-CBC","AES-128-GCM","SHA256"]
-
+    time_API_instances=[{"url":"https://worldtimeapi.org/api/timezone/Etc/UTC.txt","start":"\ndatetime: ","end":"+"},
+                        {"url":"https://timeapi.io/api/timezone/zone?timeZone=Etc%2FUTC","start":"\"currentLocalTime\":\"","end":"\""}]
+    
     def __init__(self,input_working_dir,input_max_7zip_tasks_per_user,input_color_scheme,input_fonts,input_UI_scale_modifier,input_start_minimized,input_log_to_stdout,input_startup_message_additional_text=""):
         global __author__
         global __version__
@@ -3359,7 +3378,7 @@ class FileBot(object):
                 fatal_error=True
 
         if fatal_error==False:
-            self.active_time_provider=Time_Provider(self.allowed_TLS_algorithms)
+            self.active_time_provider=Time_Provider(self.allowed_TLS_algorithms,FileBot.time_API_instances)
             self.active_time_provider.ADD_SUBSCRIBER(UI_Signal)
 
             self.log("Starting 7-ZIP Task Handler...")
