@@ -1,4 +1,4 @@
-__version__="1.962"
+__version__="1.963"
 __author__="Searinox Navras"
 
 
@@ -88,7 +88,7 @@ COLOR_SCHEME={"window_text":"000000",
               "status_username":"0000B0",
               "status_ok":"009000",
               "status_warn":"907F00",
-              "status_error":"900000",
+              "status_error":"903030",
               "output_border":"282828",
               "output":{"<DEFAULT>":"FFFFFF",
                         "MAINTHRD":"A0FFFF",
@@ -381,26 +381,33 @@ class Time_Provider(object):
                 response=self.request_pool.request(method="GET",url=time_API["url"],preload_content=True,chunked=False,timeout=self.request_timeout)
                 if response.status!=200:
                     continue
-                    
+
                 timestr=str(response.data,"utf8")
                 quot1=timestr.find(time_API["start"])
                 quot1+=len(time_API["start"])
                 quot2=quot1+timestr[quot1:].find(time_API["end"])
                 quot2+=len(time_API["end"])
                 timestr=timestr[quot1:quot2-1].strip()
-                declen=len(timestr)-timestr.find(".")-1
-                if declen>4:
-                    timestr=timestr[:-declen+4]
+                decpoint=timestr.find(".")
+                if decpoint>-1:
+                    declen=len(timestr)-decpoint-1
+                    if declen>4:
+                        timestr=timestr[:-declen+4]
+                else:
+                    timestr=f"{timestr}.0"
 
                 time_obtained=True
                 break
             except:
-                continue
+                pass
         
         if time_obtained==False:
             raise Exception("Could not get time.")
         
-        return (datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")-self.origin_time).total_seconds()
+        timestr.replace(" ","T")
+        current_time=datetime.datetime.strptime(timestr,"%Y-%m-%dT%H:%M:%S.%f")
+        
+        return (current_time-self.origin_time).total_seconds()
 
     def update_server_time_from_internet(self):
         update_success=False
