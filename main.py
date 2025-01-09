@@ -1,4 +1,4 @@
-__version__="1.963"
+__version__="1.964"
 __author__="Searinox Navras"
 
 
@@ -1645,7 +1645,7 @@ class User_Message_Handler(object):
                 self.sendmsg(command_context["sender_id"],"Getting file, please wait...")
                 result=self.bot_handle.Send_File(command_context["chat_id"],newpath)
                 if result=="":
-                    self.log("File \"{newpath}\" sent.")
+                    self.log(f"File \"{newpath}\" sent.")
                 elif result=="Bot is stopped.":
                     return ""
                 elif result=="File too big.":
